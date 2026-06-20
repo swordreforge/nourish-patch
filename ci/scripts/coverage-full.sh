@@ -3,15 +3,13 @@
 #
 # Usage: coverage-full.sh <entry-path>     e.g. coverage-full.sh compositor.loader
 #
-# Model (matches the "dead code shows, tested code reads true %" intent):
-#   1. INSTRUMENT + RUN: `--all-targets` builds (and thus instruments) every target — lib,
-#      bins, tests, examples — so LLVM source-based coverage embeds a region for every line.
-#      Functions never executed (otherwise-dead / feature-gated code) are linked into the
-#      coverage map and therefore reported at zero counts; the unit tests add real hit
-#      counts in the same run. (cargo-llvm-cov removed the separate `--no-run` baseline
-#      phase: `--no-run` is deprecated and may not be combined with `--no-report`.)
-#   2. MERGE -> lcov: `cargo llvm-cov report` renders the accumulated profile to one lcov,
-#      where dead code reads 0% and tested code reads its true percentage.
+# One canonical cargo-llvm-cov run does it all: `--all-targets` builds (and thus instruments)
+# every target — lib, bins, tests, examples — so LLVM source-based coverage embeds a region
+# for every line. Functions never executed (otherwise-dead / feature-gated code) are linked
+# into the coverage map and reported at zero counts; the unit tests add real hit counts in
+# the same pass; `--lcov --output-path` writes the merged lcov directly.
+# (The old `--no-run` baseline phase is gone: it's deprecated and can't combine with
+# `--no-report`, and the single-command form already covers untested code via `--all-targets`.)
 #
 # Per-entry lcov is written to  $REPO_ROOT/.ci-coverage/<slug>.lcov  (slug = entry with
 # '/' and '.' turned into '_'). merge-coverage.sh later fuses all entries into one report.
@@ -51,10 +49,7 @@ cd "$REPO_ROOT/$entry"
 log "[$entry] clean coverage profile"
 cargo llvm-cov clean --workspace
 
-log "[$entry] phase 1: instrument all targets + run unit tests"
-cargo llvm-cov --no-report --all-targets "${feature_args[@]}"
-
-log "[$entry] phase 2: merge -> $out"
-cargo llvm-cov report --lcov --output-path "$out"
+log "[$entry] instrument all targets, run tests, write lcov -> $out"
+cargo llvm-cov --all-targets "${feature_args[@]}" --lcov --output-path "$out"
 
 log "[$entry] coverage lcov written: $out"
