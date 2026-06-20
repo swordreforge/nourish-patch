@@ -17,7 +17,7 @@ RUN --mount=type=cache,target=/var/cache/dnf \
       gcc gcc-c++ make \
       nodejs npm \
       python3 python3-pip \
-      lcov llvm llvm-tools \
+      lcov llvm \
       sccache jq \
     && dnf clean all
 
