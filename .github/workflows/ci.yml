@@ -13,6 +13,12 @@ env:
   # Keep the sccache + cargo dirs inside the workspace so actions/cache can persist them.
   SCCACHE_DIR: ${{ github.workspace }}/.sccache
   CARGO_HOME: ${{ github.workspace }}/.cargo-home
+  # CI doesn't need debug symbols — drop them entirely. This cuts target/ size the most,
+  # keeping the big workspaces (bevy/wgpu/ffmpeg) well under the runner's ~14 GB. Safe:
+  # coverage reads the instrumentation coverage map (not DWARF), and test pass/fail is
+  # unchanged — only a *failing* test's backtrace loses source line numbers (function
+  # names still show). Set to line-tables-only if you ever need those lines back.
+  CARGO_PROFILE_DEV_DEBUG: "0"
 
 jobs:
   # Enumerate workspace entries (Cargo.toml + link.json) into a JSON matrix. Rename-proof.
