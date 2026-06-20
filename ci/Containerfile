@@ -52,8 +52,8 @@ RUN --mount=type=cache,target=/var/cache/dnf \
 ENV RUSTUP_HOME=/opt/rustup \
     CARGO_HOME=/opt/cargo \
     PATH=/opt/cargo/bin:/usr/bin:/bin
-RUN rustup-init -y --no-modify-path --default-toolchain stable \
-      --component rustfmt clippy llvm-tools-preview \
+RUN rustup-init -y --no-modify-path --profile minimal --default-toolchain stable \
+    && rustup component add rustfmt clippy llvm-tools \
     && rustc --version && cargo --version
 
 # --- CI tooling -----------------------------------------------------------------------
