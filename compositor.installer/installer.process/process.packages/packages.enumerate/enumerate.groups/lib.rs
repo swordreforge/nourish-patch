@@ -38,12 +38,16 @@ pub fn groups(gpu: Gpu) -> Vec<PackageGroup> {
             title: "y5 runtime libraries (required)",
             description: "Exact shared libs the prebuilt compositor links/dlopens: \
                           Wayland, input/seat/udev, GBM/DRM, pixman, Vulkan/EGL loader \
-                          + generic Mesa driver, PAM, dbus, PulseAudio",
+                          + generic Mesa driver, PAM, dbus, PulseAudio, FFmpeg",
             packages: vec![
                 // Directly linked (ELF NEEDED).
                 "pam", "dbus-libs", "pulseaudio-libs", "systemd-libs",
                 "libinput", "libseat", "libxkbcommon", "pixman",
                 "mesa-libgbm", "libdrm", "libdisplay-info",
+                // FFmpeg 8.x runtime libs — screen capture / video encode, linked by
+                // capture.vaapi (Fedora ships these as the libre `-free` build).
+                "libavutil-free", "libavcodec-free", "libavformat-free",
+                "libavfilter-free", "libswscale-free",
                 // dlopen'd Wayland libs.
                 "libwayland-client", "libwayland-server", "mesa-libwayland-egl",
                 // dlopen'd render stack: loaders + dispatch + generic Mesa driver
@@ -119,6 +123,7 @@ pub fn groups(gpu: Gpu) -> Vec<PackageGroup> {
                 "libglvnd-devel", "libX11-devel", "libxcb-devel", "xcb-util-cursor-devel",
                 "protobuf", "protobuf-devel", "protobuf-compiler",
                 "dbus-devel", "pulseaudio-libs-devel", "openssl-devel",
+                "ffmpeg-free-devel",
                 "webkit2gtk4.1-devel", "libsoup3-devel", "gtk3-devel",
                 "librsvg2-devel", "libappindicator-gtk3-devel", "patchelf",
             ],

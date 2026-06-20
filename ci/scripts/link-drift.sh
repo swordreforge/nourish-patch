@@ -28,9 +28,12 @@ done < <("$(dirname "${BASH_SOURCE[0]}")/discover-workspaces.sh" --lines)
 
 log "re-linked $checked entr(ies); checking for drift"
 
-if ! git diff --quiet -- '*/Cargo.toml' 'Cargo.toml'; then
+# Whole-tree diff: this job only runs workspace.link.js (which edits nothing but the
+# generated Cargo.toml blocks) on a clean checkout, so any change here IS link drift.
+# Avoids a literal '*/Cargo.toml' git pathspec, which older git versions reject.
+if ! git diff --quiet; then
     echo "::link-drift:: GENERATED WORKSPACE LINKS are stale. Run ./link.all.sh and commit:" >&2
-    git --no-pager diff -- '*/Cargo.toml' 'Cargo.toml' >&2
+    git --no-pager diff >&2
     exit 1
 fi
 

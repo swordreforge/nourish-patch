@@ -6,7 +6,7 @@
 # Sources (all optional):
 #   .ci-coverage/coverage.txt        total coverage line
 #   .ci-report/tests.txt             per-entry test status (one "entry: PASS|FAIL" per line)
-#   .ci-report/lint.txt              fmt/clippy summary
+#   .ci-report/lint.txt              clippy summary
 #   .ci-report/link-drift.txt        "OK" / failure detail
 #   .ci-report/doc-suggestions.md    LLM doc suggestions
 #
@@ -22,7 +22,7 @@ branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
 coverage="$(read_or .ci-coverage/coverage.txt 'Coverage: n/a')"
 
 cat <<EOF
-## 🚀 Promotion report — \`$branch\` → \`master\`
+## 🚀 Promotion report — \`$branch\` → \`${PROMOTION_TARGET:-upstream}\`
 
 **Commit:** \`$sha\`
 **$coverage**

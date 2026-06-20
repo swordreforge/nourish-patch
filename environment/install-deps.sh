@@ -11,14 +11,15 @@ sudo dnf install -y \
     libdisplay-info-devel systemd-devel
 
 
-# Graphics stack (Intel/VA-API for bare-metal)
+# Graphics stack (Intel/VA-API for bare-metal) + ffmpeg 8.x (screen capture / video encode)
 sudo dnf install -y \
     mesa-libEGL-devel \
     mesa-libGL-devel \
     mesa-libgbm-devel \
     libva-intel-driver \
     intel-media-driver \
-    libglvnd-devel
+    libglvnd-devel \
+    ffmpeg-free-devel
 
 # Compiler toolchain (default system linker; mold no longer used)
 sudo dnf install -y clang

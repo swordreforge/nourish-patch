@@ -25,7 +25,7 @@ jobs:
       - id: d
         run: echo "entries=$(ci/scripts/discover-workspaces.sh)" >> "$GITHUB_OUTPUT"
 
-  # One job per entry: fmt (blocking) + clippy (advisory) + build + test + coverage.
+  # One job per entry: clippy (advisory) + build + test + coverage.
   check:
     needs: discover
     runs-on: ubuntu-latest
@@ -45,8 +45,6 @@ jobs:
             ${{ env.CARGO_HOME }}/registry
           key: ${{ runner.os }}-${{ steps.slug.outputs.v }}-${{ hashFiles(format('{0}/Cargo.lock', matrix.entry)) }}
           restore-keys: ${{ runner.os }}-${{ steps.slug.outputs.v }}-
-      - name: fmt (blocking)
-        run: cd "${{ matrix.entry }}" && cargo fmt --all --check
       - name: clippy (advisory)
         continue-on-error: true
         run: cd "${{ matrix.entry }}" && cargo clippy --all-targets

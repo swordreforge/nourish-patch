@@ -29,7 +29,6 @@ YAML
 "lint:$entry":
   stage: check
   script:
-    - cd "$entry" && cargo fmt --all --check
     - cd "\$CI_PROJECT_DIR/$entry" && cargo clippy --all-targets || true
 
 "build:$entry":

@@ -30,10 +30,13 @@ RUN --mount=type=cache,target=/var/cache/dnf \
       pam-devel dbus-devel pulseaudio-libs-devel \
     && dnf clean all
 
-# --- Graphics stack devel (link-time) + protobuf --------------------------------------
+# --- Graphics stack devel (link-time) + ffmpeg 8.x + protobuf -------------------------
+# ffmpeg-free-devel provides the libav{util,codec,format,filter}/swscale headers + link
+# libs that capture.vaapi/build.rs pkg-config-probes (screen capture / video encode).
 RUN --mount=type=cache,target=/var/cache/dnf \
     dnf -y install \
       mesa-libEGL-devel mesa-libGL-devel libglvnd-devel \
+      ffmpeg-free-devel \
       protobuf protobuf-devel protobuf-compiler \
     && dnf clean all
 

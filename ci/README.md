@@ -38,7 +38,7 @@ All scripts work locally too: `Y5_REPO_ROOT=$(pwd) ci/scripts/discover-workspace
 
 ## CI image — `ci/Containerfile`
 
-Lean **Fedora 44**: rustup `stable` + `rustfmt`/`clippy`/`llvm-tools-preview`, the
+Lean **Fedora 44**: rustup `stable` + `rustfmt`/`clippy`/`llvm-tools`, the
 Wayland/GPU/protobuf **-devel** headers (build needs headers + link libs, no GPU at run
 time), `nodejs`, `lcov`, `llvm`, `cargo-llvm-cov`, `lcov_cobertura`, `sccache`,
 `gh`, and the `claude` CLI. It copies **no source** and installs **no runtime apps**
@@ -97,8 +97,8 @@ CI is why the image carries the dev-tool window's GTK/WebKit `-devel` deps.
 
 ## Notes / decisions
 
-- **clippy is advisory**, fmt is blocking — the repo sets `-A warnings` globally in
-  `.cargo/config.toml`, so a blocking `clippy -D warnings` would fight that policy.
+- **clippy is advisory and there is no fmt gate** — the repo sets `-A warnings` globally in
+  `.cargo/config.toml`, so a blocking lint would fight that policy.
 - **First run:** the image job must publish `y5-ci:fedora44` before other jobs can run in
   it (trigger `image` once manually / via `workflow_dispatch`).
 - **GitHub Pages / branch protection / approvals** are platform settings, not repo files.

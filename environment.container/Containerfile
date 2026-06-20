@@ -47,7 +47,8 @@ RUN --mount=type=cache,target=/var/cache/dnf \
     mesa-libEGL \
     mesa-libEGL-devel \
     mesa-libgbm-devel \
-    vulkan-loader
+    vulkan-loader \
+    ffmpeg-free-devel
 
 #    dnf -y update && \
 # --- [ Category: XWayland & X11 Compatibility ] ---
