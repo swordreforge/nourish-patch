@@ -13,11 +13,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 cd "$REPO_ROOT"
 command -v node >/dev/null 2>&1 || die "node is required for the link-drift check"
 
-# CI containers check out the repo as a different uid than the container user, so git
-# treats the work tree as untrusted and refuses it ("dubious ownership", which can surface
-# as "not a git repository"). Trust it explicitly. Harmless / idempotent locally.
-git config --global --add safe.directory "$REPO_ROOT" 2>/dev/null || true
-
 marker='# --- GENERATED WORKSPACE LINKS START ---'
 checked=0
 
