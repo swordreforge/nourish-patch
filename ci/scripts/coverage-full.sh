@@ -17,7 +17,7 @@
 # '/' and '.' turned into '_'). merge-coverage.sh later fuses all entries into one report.
 #
 # Feature axis: the entry that owns the y5_compositor [[bin]] is additionally built with
-# --features udev_release so the DRM/KMS backend code is instrumented too. Override the
+# --features backend-native so the DRM/KMS backend code is instrumented too. Override the
 # whole feature set with Y5_COV_FEATURES if needed.
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
@@ -32,7 +32,7 @@ outdir="$REPO_ROOT/.ci-coverage"
 mkdir -p "$outdir"
 out="$outdir/$slug.lcov"
 
-# Feature args: udev_release for the entry that holds the y5_compositor bin.
+# Feature args: backend-native (the udev/DRM backend) for the entry that holds the bin.
 feature_args=()
 if [ -n "${Y5_COV_FEATURES:-}" ]; then
     # shellcheck disable=SC2206
@@ -41,8 +41,8 @@ else
     bin_dir="$(y5_bin_crate_dir)"
     bin_ws="$(y5_workspace_root_of "$REPO_ROOT/$bin_dir")"
     if [ "$bin_ws" = "$REPO_ROOT/$entry" ]; then
-        feature_args=(--features udev_release)
-        log "$entry owns y5_compositor -> instrumenting udev_release backend too"
+        feature_args=(--features backend-native)
+        log "$entry owns y5_compositor -> instrumenting the backend-native (udev/DRM) backend too"
     fi
 fi
 
