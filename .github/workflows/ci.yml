@@ -90,7 +90,10 @@ jobs:
           path: |
             ${{ env.SCCACHE_DIR }}
             ${{ env.CARGO_HOME }}/registry
-          key: ${{ runner.os }}-installer-bundle-${{ hashFiles('**/Cargo.lock') }}
+          # Keyed on the commit (no filesystem hash — hashFiles('**/Cargo.lock') fails the
+          # whole-tree walk in a container job). Each commit saves a fresh cache; restore-keys
+          # restores the most recent one so sccache + the registry stay warm across runs.
+          key: ${{ runner.os }}-installer-bundle-${{ github.sha }}
           restore-keys: ${{ runner.os }}-installer-bundle-
       - name: Build install bundle (installer + binaries + components)
         run: ci/scripts/package-installer.sh
