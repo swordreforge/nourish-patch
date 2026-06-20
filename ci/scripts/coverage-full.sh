@@ -3,14 +3,14 @@
 #
 # Usage: coverage-full.sh <entry-path>     e.g. coverage-full.sh compositor.loader
 #
-# Two-phase model (matches the "dry run finds everything, then unit tests merge" intent):
-#   1. BASELINE (no exec): build + instrument every target (--all-targets) without running
-#      anything. LLVM source-based coverage embeds a region for every instrumented line,
-#      so functions never executed — including otherwise-dead / feature-gated code — are
-#      present at zero counts instead of being omitted from the report.
-#   2. UNIT RUN: run the workspace's unit tests, accumulating real hit counts into the
-#      same profile directory.
-#   3. MERGE -> lcov: cargo-llvm-cov merges the baseline + unit profiles into one lcov,
+# Model (matches the "dead code shows, tested code reads true %" intent):
+#   1. INSTRUMENT + RUN: `--all-targets` builds (and thus instruments) every target — lib,
+#      bins, tests, examples — so LLVM source-based coverage embeds a region for every line.
+#      Functions never executed (otherwise-dead / feature-gated code) are linked into the
+#      coverage map and therefore reported at zero counts; the unit tests add real hit
+#      counts in the same run. (cargo-llvm-cov removed the separate `--no-run` baseline
+#      phase: `--no-run` is deprecated and may not be combined with `--no-report`.)
+#   2. MERGE -> lcov: `cargo llvm-cov report` renders the accumulated profile to one lcov,
 #      where dead code reads 0% and tested code reads its true percentage.
 #
 # Per-entry lcov is written to  $REPO_ROOT/.ci-coverage/<slug>.lcov  (slug = entry with
@@ -51,13 +51,10 @@ cd "$REPO_ROOT/$entry"
 log "[$entry] clean coverage profile"
 cargo llvm-cov clean --workspace
 
-log "[$entry] phase 1: baseline (instrument all targets, no exec)"
-cargo llvm-cov --no-report --no-run --all-targets "${feature_args[@]}"
-
-log "[$entry] phase 2: run unit tests"
+log "[$entry] phase 1: instrument all targets + run unit tests"
 cargo llvm-cov --no-report --all-targets "${feature_args[@]}"
 
-log "[$entry] phase 3: merge -> $out"
+log "[$entry] phase 2: merge -> $out"
 cargo llvm-cov report --lcov --output-path "$out"
 
 log "[$entry] coverage lcov written: $out"
