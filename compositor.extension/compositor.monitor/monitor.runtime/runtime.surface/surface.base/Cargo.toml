@@ -1,0 +1,13 @@
+[package]
+name = "compositor_monitor_runtime_surface_base"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+compositor_developer_debug_instance_record = { workspace = true }
+smithay = { workspace = true }
+wgpu = { workspace = true }
+gbm = { workspace = true }
+pollster = { workspace = true }
+thiserror = { workspace = true }
+compositor_y5_graphic_card_constant.workspace = true

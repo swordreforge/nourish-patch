@@ -1,0 +1,11 @@
+[package]
+name = "compositor_installer_process_config_parse_custom"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compositor_installer_process_config_parse_model = { path = "../parse.model" }
+compositor_installer_process_config_parse_prompt = { path = "../parse.prompt" }
+
+[lib]
+path = "lib.rs"

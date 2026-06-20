@@ -1,0 +1,14 @@
+[package]
+name = "compositor_support_smithay_state_layershell_dispatch"
+version = "0.0.1"
+edition = "2024"
+
+
+[dependencies]
+compositor_developer_debug_instance_record = { workspace = true }
+smithay = { workspace = true }
+compositor_support_smithay_dispatch_state_base.workspace = true
+compositor_support_smithay_state_layershell_types = { workspace = true }
+compositor_support_smithay_state_layershell_wire = { workspace = true }
+[lib]
+path = "lib.rs"

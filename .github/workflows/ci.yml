@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [upstream-integration, upstream]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+  # Keep the sccache + cargo dirs inside the workspace so actions/cache can persist them.
+  SCCACHE_DIR: ${{ github.workspace }}/.sccache
+  CARGO_HOME: ${{ github.workspace }}/.cargo-home
+
+jobs:
+  # Enumerate workspace entries (Cargo.toml + link.json) into a JSON matrix. Rename-proof.
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      entries: ${{ steps.d.outputs.entries }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: d
+        run: echo "entries=$(ci/scripts/discover-workspaces.sh)" >> "$GITHUB_OUTPUT"
+
+  # One job per entry: fmt (blocking) + clippy (advisory) + build + test + coverage.
+  check:
+    needs: discover
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    strategy:
+      fail-fast: false
+      matrix:
+        entry: ${{ fromJson(needs.discover.outputs.entries) }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: slug
+        run: echo "v=$(echo '${{ matrix.entry }}' | tr '/.' '__')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.SCCACHE_DIR }}
+            ${{ env.CARGO_HOME }}/registry
+          key: ${{ runner.os }}-${{ steps.slug.outputs.v }}-${{ hashFiles(format('{0}/Cargo.lock', matrix.entry)) }}
+          restore-keys: ${{ runner.os }}-${{ steps.slug.outputs.v }}-
+      - name: fmt (blocking)
+        run: cd "${{ matrix.entry }}" && cargo fmt --all --check
+      - name: clippy (advisory)
+        continue-on-error: true
+        run: cd "${{ matrix.entry }}" && cargo clippy --all-targets
+      - name: build
+        run: cd "${{ matrix.entry }}" && cargo build
+      - name: test
+        run: cd "${{ matrix.entry }}" && cargo test
+      - name: coverage (full, incl. dead code)
+        run: ci/scripts/coverage-full.sh "${{ matrix.entry }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cov-${{ steps.slug.outputs.v }}
+          path: .ci-coverage/*.lcov
+          if-no-files-found: warn
+
+  # Validate the y5_compositor udev_release build path once (the loader entry).
+  build-udev:
+    needs: discover
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    steps:
+      - uses: actions/checkout@v4
+      - run: environment/build.sh udev release
+
+  # Candidate release artifact: on a branch push (not PRs), build the full install bundle
+  # the Publish/Release jobs would ship — installer + binaries + every component — and keep
+  # it as a downloadable artifact. Lets `upstream-integration` be validated as a release
+  # candidate before it is merged into `upstream` (which actually publishes it).
+  installer-bundle:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build install bundle (installer + binaries + components)
+        run: ci/scripts/package-installer.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: install-bundle-${{ github.ref_name }}
+          path: |
+            dist/package.tar.gz
+            dist/SHA256SUMS
+
+  # Re-run workspace.link.js everywhere; fail if a committed GENERATED block is stale.
+  link-drift:
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    steps:
+      - uses: actions/checkout@v4
+      - run: ci/scripts/link-drift.sh
+
+  # Merge every entry's lcov into one report; comment coverage on PRs.
+  coverage:
+    needs: check
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cov-*
+          path: .ci-coverage
+          merge-multiple: true
+      - name: Merge + render coverage
+        run: |
+          ci/scripts/merge-coverage.sh
+          cat .ci-coverage/coverage-crates.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            .ci-coverage/coverage.lcov
+            .ci-coverage/cobertura.xml
+            .ci-coverage/coverage.svg
+            .ci-coverage/coverage-crates.md
+            .ci-coverage/html
+      - name: PR coverage comment (per-crate table)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file .ci-coverage/coverage-crates.md || true

@@ -1,0 +1,143 @@
+use crate::surface;
+use crate::three;
+use compositor_y5_lock_scene_element::element::LockSceneElement;
+use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::backend::renderer::{ImportAll, ImportDma, ImportMem, Renderer, Texture};
+use smithay::utils::{Physical, Point, Scale, Size};
+use compositor_orchestration_draw_dispatch_frame::SceneDispatch;
+use compositor_orchestration_draw_scene_element::element::PreImported;
+use compositor_orchestration_core_state_base::Loop;
+
+pub struct Scene<R: Renderer> {
+    pub Element: Vec<LockSceneElement<R>>,
+}
+
+/// GLES-built lock elements carried from `prepare()` into `scene()` (same split
+/// as the main scene path: the iced lock surface + bevy lock background render
+/// into GLES resources every frame).
+pub struct LockPrepared {
+    pub surfaces: Vec<compositor_monitor_compositor_iced_base::IcedRenderElement>,
+    pub three: Vec<compositor_support_bevy_core_compositor_base::BevyRenderElement>,
+    pub background_two: Option<compositor_background_two_draw_element::element::ParallaxBackground>,
+}
+
+/// GLES preparation phase for the lock scene.
+pub fn prepare(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physical>) -> LockPrepared {
+    compositor_y5_lock_scene_hook::hook::hook(state, renderer, size);
+
+    let surfaces = surface::scene(state, renderer, size);
+    let three = three::scene(state, renderer, size);
+
+    let compositor_orchestration_core_state_base::state::Status::Locked { pending, .. } = state.inner.status
+    else {
+        abort!();
+    };
+    // Render two background only when not pending, otherwise it's already
+    // rendered by the regular scene.
+    let background_two = if !pending {
+        compositor_background_two_draw_scene::scene::scene(state)
+    } else {
+        None
+    };
+
+    LockPrepared {
+        surfaces,
+        three,
+        background_two,
+    }
+}
+
+pub fn scene<R>(
+    state: &mut Loop,
+    renderer: &mut R,
+    size: Size<i32, Physical>,
+    prepared: LockPrepared,
+) -> Scene<R>
+where
+    R: Renderer + ImportAll + ImportDma + ImportMem + SceneDispatch,
+    R::TextureId: Texture + Clone + Send + 'static,
+{
+    let mut elements: Vec<LockSceneElement<R>> = Vec::new();
+
+    let compositor_orchestration_core_state_base::state::Status::Locked { pending, .. } = state.inner.status
+    else {
+        abort!();
+    };
+
+    if !pending {
+        let pointer = compositor_orchestration_seat_pointer_draw::scene::element(state, renderer, size);
+        elements.extend(pointer.into_iter().map(LockSceneElement::Pointer));
+    }
+
+    // iced/bevy: on renderers that prefer dmabuf (Vulkan), import their dmabuf
+    // into a renderer-native texture (PreImported); on GLES keep the welded
+    // Surface/Background3D elements. (Same as the main scene's stage-4 routing —
+    // without this the lock UI is blank on Vulkan.)
+    for e in prepared.surfaces {
+        if let Some(el) = iced_to_lock(renderer, e) {
+            elements.push(el);
+        }
+    }
+    for e in prepared.three {
+        if let Some(el) = bevy_to_lock(renderer, e) {
+            elements.push(el);
+        }
+    }
+    elements.extend(prepared.background_two.map(LockSceneElement::Background2D));
+
+    Scene { Element: elements }
+}
+
+fn iced_to_lock<R>(
+    renderer: &mut R,
+    e: compositor_monitor_compositor_iced_base::IcedRenderElement,
+) -> Option<LockSceneElement<R>>
+where
+    R: Renderer + ImportAll + ImportDma + ImportMem + SceneDispatch,
+    R::TextureId: Texture + Clone + Send + 'static,
+{
+    if !R::prefers_dmabuf() {
+        return Some(LockSceneElement::Surface(e));
+    }
+    match renderer.import_dmabuf(&e.dmabuf, None) {
+        Ok(texture) => Some(LockSceneElement::Texture(PreImported {
+            texture,
+            location: e.location,
+            size: e.size,
+            world_zoom: e.world_zoom,
+            id: e.id,
+            commit: e.commit_counter,
+        })),
+        Err(err) => {
+            error!("lock scene: import of iced dmabuf failed: {err}");
+            None
+        }
+    }
+}
+
+fn bevy_to_lock<R>(
+    renderer: &mut R,
+    e: compositor_support_bevy_core_compositor_base::BevyRenderElement,
+) -> Option<LockSceneElement<R>>
+where
+    R: Renderer + ImportAll + ImportDma + ImportMem + SceneDispatch,
+    R::TextureId: Texture + Clone + Send + 'static,
+{
+    if !R::prefers_dmabuf() {
+        return Some(LockSceneElement::Background3D(e));
+    }
+    match renderer.import_dmabuf(&e.dmabuf, None) {
+        Ok(texture) => Some(LockSceneElement::Texture(PreImported {
+            texture,
+            location: e.location,
+            size: e.size,
+            world_zoom: e.world_zoom,
+            id: e.id,
+            commit: e.commit_counter,
+        })),
+        Err(err) => {
+            error!("lock scene: import of bevy dmabuf failed: {err}");
+            None
+        }
+    }
+}

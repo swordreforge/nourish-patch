@@ -1,0 +1,91 @@
+//! Logical VkDevice creation with the compositor's required extensions and
+//! Vulkan 1.3 core features. Phase 4 Step 3 — real.
+//!
+//! Feature policy: timeline semaphores (1.2 core feature bit), dynamic
+//! rendering + synchronization2 (1.3 core feature bits). The promoted
+//! VK_KHR_timeline_semaphore extension is NOT requested — the core feature
+//! struct is the 1.3 way.
+
+use ash::vk;
+use smithay::backend::vulkan::PhysicalDevice;
+use std::ffi::CStr;
+
+/// Device extensions the render path requires (dmabuf import/export +
+/// modifiers + external semaphore fds for syncobj bridging).
+pub fn required_extensions() -> Vec<&'static CStr> {
+    vec![
+        ash::khr::external_memory_fd::NAME,
+        ash::ext::external_memory_dma_buf::NAME,
+        ash::ext::image_drm_format_modifier::NAME,
+        ash::khr::external_semaphore_fd::NAME,
+    ]
+}
+
+pub struct VulkanDevice {
+    pub device: ash::Device,
+    pub queue_family_index: u32,
+    /// The owning `ash::Instance`, retained so device-level extension loaders
+    /// (`ash::khr/ext::*::Device::new`) can be constructed — they need the
+    /// instance to resolve `vkGetDeviceProcAddr`.
+    pub instance: ash::Instance,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DeviceError {
+    #[error("no graphics queue family")]
+    NoGraphicsQueue,
+    #[error("missing required extension: {0}")]
+    MissingExtension(String),
+    #[error("vkCreateDevice failed: {0}")]
+    Create(String),
+}
+
+pub fn create(phd: &PhysicalDevice) -> Result<VulkanDevice, DeviceError> {
+    for ext in required_extensions() {
+        if !phd.has_device_extension(ext) {
+            return Err(DeviceError::MissingExtension(
+                ext.to_string_lossy().into_owned(),
+            ));
+        }
+    }
+
+    let instance = phd.instance().handle();
+    let queue_family_index = unsafe {
+        instance
+            .get_physical_device_queue_family_properties(phd.handle())
+            .iter()
+            .position(|q| q.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+            .ok_or(DeviceError::NoGraphicsQueue)? as u32
+    };
+
+    let priorities = [1.0f32];
+    let queue_info = vk::DeviceQueueCreateInfo::default()
+        .queue_family_index(queue_family_index)
+        .queue_priorities(&priorities);
+    let ext_ptrs: Vec<*const i8> = required_extensions().iter().map(|e| e.as_ptr()).collect();
+
+    let mut features12 =
+        vk::PhysicalDeviceVulkan12Features::default().timeline_semaphore(true);
+    let mut features13 = vk::PhysicalDeviceVulkan13Features::default()
+        .dynamic_rendering(true)
+        .synchronization2(true);
+
+    let create_info = vk::DeviceCreateInfo::default()
+        .queue_create_infos(std::slice::from_ref(&queue_info))
+        .enabled_extension_names(&ext_ptrs)
+        .push_next(&mut features12)
+        .push_next(&mut features13);
+
+    let device = unsafe {
+        instance
+            .create_device(phd.handle(), &create_info, None)
+            .map_err(|e| DeviceError::Create(format!("{e}")))?
+    };
+
+    info!("vulkan logical device created (queue family {queue_family_index})");
+    Ok(VulkanDevice {
+        device,
+        queue_family_index,
+        instance: instance.clone(),
+    })
+}

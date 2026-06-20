@@ -1,0 +1,16 @@
+[package]
+name = "compositor_installer_process_config_parse_base"
+version.workspace = true
+edition.workspace = true
+
+# Pure std — no external deps, so the installer builds without network and runs
+# with no runtime libraries on a fresh target.
+[dependencies]
+compositor_installer_process_config_parse_custom = { path = "../parse.custom" }
+compositor_installer_process_config_parse_matrix = { path = "../parse.matrix" }
+compositor_installer_process_config_parse_model = { path = "../parse.model" }
+compositor_installer_process_config_parse_preset = { path = "../parse.preset" }
+compositor_installer_process_config_parse_prompt = { path = "../parse.prompt" }
+
+[lib]
+path = "lib.rs"

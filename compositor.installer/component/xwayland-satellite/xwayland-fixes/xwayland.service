@@ -1,0 +1,22 @@
+[Unit]
+Description=X Wayland Satellite (y5, with --popup-fix)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/sleep 20
+# Flags:
+#   --force-scale 1            freeze effective scale at 1x (DPI-unaware X apps keep a
+#                              consistent physical size across integer/fractional scale changes).
+#                              NOTE: space-separated form only; "--force-scale=1" is rejected.
+#   --ignore-fractional-scale  use integer wl_output scale only; skip wp_fractional_scale.
+#   --popup-fix                keep borderless/CSD windows that register WM_DELETE_WINDOW as
+#                              xdg_toplevels instead of demoting them to xdg_popups (empty surface).
+#                              Required for Isaac Sim "move to external window" tear-off panels.
+ExecStart=/usr/bin/xwayland-satellite :12 --force-scale 1 --ignore-fractional-scale --popup-fix
+Restart=never
+#Environment="XDG_SESSION_ID=2"
+
+[Install]
+WantedBy=graphical-session.target

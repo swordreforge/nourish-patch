@@ -1,0 +1,72 @@
+syntax = "proto3";
+package y5.developer.logs;
+
+// Sent by a viewer to begin streaming. Reserved for future server-side filters.
+message StreamRequest {}
+
+// One structured log record.
+message LogRecord {
+  uint64 elapsed_micros = 1;  // since application start (dmesg-style)
+  uint32 level = 2;           // 0=error 1=warn 2=info 3=trace
+  string crate_name = 3;      // full crate name (filter tag)
+  string function = 4;        // module::function path (filter tag)
+  string message = 5;
+}
+
+// Request a one-shot diagnostics snapshot (Statistics tab Refresh).
+message StatsRequest {}
+
+message EnvFlag {
+  string key = 1;
+  string value = 2;
+}
+
+// A point-in-time snapshot of the compositor's diagnostics registry.
+message CompositorStats {
+  string renderer = 1;          // gles | vulkan | unknown
+  bool renderer_init_ok = 2;
+  string sync_mode = 3;         // synchronous | native KMS IN_FENCE | legacy
+  string output_name = 4;
+  string mode = 5;              // WxH@Hz
+  bool vrr_supported = 6;
+  bool vrr_enabled = 7;
+  bool hdr_enabled = 8;
+  uint64 frames_total = 9;
+  uint64 vblanks_total = 10;
+  float fps = 11;
+  float vblank_rate = 12;       // vblanks/sec
+  uint64 fence_synchronous = 13;
+  uint64 fence_kms_infence = 14;
+  uint64 fence_fallback = 15;
+  double uptime_secs = 16;
+  repeated EnvFlag env_flags = 17;
+  bool hdr_capable = 18;          // display advertises PQ HDR in EDID
+  string hdr_transfer = 19;       // SDR | PQ | HLG
+  float hdr_max_luminance = 20;   // cd/m² from EDID, 0 if unknown
+  bool hdr_bt2020 = 21;           // display advertises BT.2020 RGB
+  string color_format = 22;       // 8-bit sRGB | fp16→10-bit PQ
+}
+
+// Live HDR encode tuning, pushed from the developer tool sliders. Mirrors the
+// renderer's HdrTuning / the WGSL `Tuning` uniform field-for-field.
+message HdrParams {
+  float enabled = 1;
+  float sdr_white_nits = 2;
+  float max_nits = 3;
+  float brightness = 4;
+  float contrast = 5;
+  float saturation = 6;
+  float gamut = 7;
+  float tone_map = 8;
+  float transfer = 9;
+  float gamma = 10;
+  float exposure = 11;
+}
+message SetHdrParamsReply {}
+
+// Server-streaming logs, a unary stats snapshot, and live HDR tuning.
+service LogStream {
+  rpc Stream(StreamRequest) returns (stream LogRecord);
+  rpc GetStats(StatsRequest) returns (CompositorStats);
+  rpc SetHdrParams(HdrParams) returns (SetHdrParamsReply);
+}

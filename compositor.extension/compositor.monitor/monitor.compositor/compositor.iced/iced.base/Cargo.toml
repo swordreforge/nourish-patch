@@ -1,0 +1,15 @@
+[package]
+name = "compositor_monitor_compositor_iced_base"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+compositor_developer_debug_instance_record = { workspace = true }
+compositor_orchestration_draw_dispatch_frame = { workspace = true }
+thiserror = { workspace = true }
+smithay = { workspace = true }
+iced_core = { workspace = true }
+wgpu = { workspace = true }
+
+compositor_monitor_runtime_surface_base = { workspace = true }
+compositor_support_iced_core_engine_base = { workspace = true }

@@ -1,0 +1,294 @@
+use std::time::Instant;
+
+use smithay::{
+    desktop::Window,
+    utils::{Logical, Point, Size},
+};
+use compositor_support_action_camera_find_base::find::Direction;
+use compositor_support_action_camera_fit_aspect::aspect;
+use compositor_orchestration_core_state_base::Loop;
+use compositor_y5_navigator_travel_machine::view::view;
+use compositor_y5_navigator_travel_state::state::{Target, Travel};
+use compositor_y5_window_lifecycle_interface::interface::TransformUpdate;
+
+pub fn move_direction(s: &mut Loop, direction: Direction, alternative: bool) {
+    let result = compositor_y5_navigator_travel_machine::view_directional::view_directional(
+        s,
+        direction,
+        alternative,
+    );
+
+    let zoom = result.zoom.and_then(|target| {
+        return Some(Target {
+            start: None,
+            target: result.zoom.unwrap(),
+        });
+    });
+
+    let position = result.position.and_then(|target| {
+        return Some(Target {
+            start: None,
+            target: result.position.unwrap(),
+        });
+    });
+
+    let travel = Travel {
+        position: position,
+        duration: None,
+        zoom: zoom,
+        time_start: None,
+    };
+
+    compositor_y5_navigator_state_base::state::request(
+        s.inner.focus_channels(),
+        compositor_y5_navigator_state_base::state::NavRequest::Set(
+            compositor_y5_navigator_state_base::state::State::Travel(travel),
+        ),
+    );
+}
+
+pub fn fit(state: &mut Loop, zoom_1: bool, fit_1: bool) {
+    let focused = focused(state);
+    let selected = state.inner.select().Selection.clone();
+
+    let windows: Vec<&Window> = if !selected.is_empty() {
+        selected.iter().map(|w| w.as_ref()).collect()
+    } else if let Some(ref focused) = focused {
+        vec![focused]
+    } else {
+        let result = vec![];
+        result
+    };
+
+    if windows.is_empty() {
+        return;
+    }
+    if fit_1 && windows.len() != 1 {
+        return;
+    }
+
+    let travel = if fit_1 {
+        let window = windows.first().unwrap().clone();
+        let window_geometry = state.inner.space_state().state.element_geometry(window);
+        if window_geometry.is_none() {
+            return;
+        }
+        let window_geometry = window_geometry.unwrap();
+        let window_size = window_geometry.size;
+        let window_location = window_geometry.loc;
+
+        let output = state
+            .inner.space_state()
+            .state
+            .outputs()
+            .next()
+            .unwrap_or_else(|| abort!("at least one output"));
+        let output_geom_i32 = state
+            .inner.space_state()
+            .state
+            .output_geometry(output)
+            .unwrap_or_else(|| abort!("output has geometry"));
+        let screen_size: Size<f64, Logical> = output_geom_i32.size.to_f64();
+
+        let total_size = aspect::Size {
+            w: screen_size.w as f32,
+            h: screen_size.h as f32,
+        };
+
+        let perceived_size = aspect::Size {
+            w: screen_size.w as f32 / *state.inner.camera_mut().transform.zoom() as f32,
+            h: screen_size.h as f32 / *state.inner.camera_mut().transform.zoom() as f32,
+        };
+
+        let element_size = aspect::Size {
+            h: window_size.h as f32,
+            w: window_size.w as f32,
+        };
+
+        let element_position = aspect::Point {
+            x: window_location.x as f32,
+            y: window_location.y as f32,
+        };
+
+        let (mut element_size, mut element_position) = aspect::fit_aspect_ratio(
+            total_size,
+            perceived_size,
+            element_size,
+            aspect::Origin::TopLeft,
+            element_position,
+            aspect::Flags {
+                scale_to_perceived: false,
+                maximize: true,
+            },
+        );
+
+        let element_position = Point::new(
+            element_position.x.ceil() as i32,
+            element_position.y.ceil() as i32,
+        );
+
+        let new_size = Size::new(element_size.w.ceil() as i32, element_size.h.ceil() as i32);
+
+        let transform_update = TransformUpdate {
+            position: Some(element_position),
+            size: Some(new_size),
+        };
+        compositor_y5_window_lifecycle_interface::interface::reform(
+            state,
+            window.clone(),
+            transform_update,
+        );
+
+        Travel {
+            duration: None,
+            position: Some(Target {
+                start: None,
+                target: (
+                    element_position.x as f64 + (element_size.w / 2.0) as f64,
+                    element_position.y as f64 + (element_size.h / 2.0) as f64,
+                ),
+            }),
+            zoom: Some(Target {
+                start: None,
+                target: 1.0,
+            }),
+            time_start: None,
+        }
+    } else {
+        let result = compositor_y5_navigator_travel_machine::view::view(state, windows, false);
+        let zoom = result.zoom.and_then(|target| {
+            let target = if (zoom_1) { 1.0 } else { target };
+            return Some(Target {
+                start: None,
+                target,
+            });
+        });
+
+        let position = result.position.and_then(|target| {
+            return Some(Target {
+                start: None,
+                target: result.position.unwrap(),
+            });
+        });
+
+        Travel {
+            duration: None,
+            position: position,
+            zoom: zoom,
+            time_start: None,
+        }
+    };
+    // get the view optimal to fit into the screen
+
+    compositor_y5_navigator_state_base::state::request(
+        state.inner.focus_channels(),
+        compositor_y5_navigator_state_base::state::NavRequest::Set(
+            compositor_y5_navigator_state_base::state::State::Travel(travel),
+        ),
+    );
+}
+
+fn focused(state: &mut Loop) -> Option<Window> {
+    let focused: Option<&Window> = {
+        state
+            .state
+            .seat
+            .seat
+            .get_keyboard()
+            .and_then(|kb| kb.current_focus())
+            .and_then(|focus_surface| {
+                state.inner.space_state().state.elements().find(|w| {
+                    w.toplevel()
+                        .and_then(|t| Some(t.wl_surface()))
+                        .map(|s| s == &focus_surface)
+                        .unwrap_or(false)
+                })
+            })
+            .map_or(None, |w| Some(w))
+    };
+    return focused.cloned();
+}
+
+/// Sets the navigator into lock mode - not accepting further state.
+pub fn lock(state: &mut Loop) {
+    let view_result = {
+        let windows: Vec<Window> = state.inner.space_state().state.elements().cloned().collect();
+
+        // 2. Create the vector of references pointing to your local copy, NOT to `state`
+        let windows: Vec<&Window> = windows.iter().collect();
+        let view_result = { view(state, windows, true) };
+
+        // use view with all windows selected
+        view_result
+    };
+
+    const MIN_ZOOM: f64 = 0.1;
+    const MAX_ZOOM: f64 = 0.75;
+    // Set a minimum zoom of 0.25 with maximum zoom of 0.75
+    let pending_travel = compositor_y5_navigator_travel_state::state::Travel {
+        duration: Some(compositor_y5_lock_state_transition::transition::PERIOD_NAVIGATOR_DURATION),
+        time_start: Some(Instant::now()),
+        position: view_result.position.map(|a| Target {
+            start: None,
+            target: a,
+        }),
+        zoom: view_result.zoom.map(|mut a| {
+            if a < MIN_ZOOM {
+                a = MIN_ZOOM;
+            } else if a > MAX_ZOOM {
+                a = MAX_ZOOM
+            }
+
+            Target {
+                start: None,
+                target: a,
+            }
+        }),
+    };
+
+    let set_transform = state.inner.camera().transform.clone();
+    compositor_y5_navigator_state_base::state::request(
+        state.inner.focus_channels(),
+        compositor_y5_navigator_state_base::state::NavRequest::Lock(compositor_y5_navigator_lock_state::state::NavigatorLock {
+            set_transform,
+            pending_travel: Some(pending_travel),
+            transition_start: Instant::now(),
+        }),
+    );
+}
+/// Sets the navigator into lock mode - not accepting further state.
+
+pub fn unlock(state: &mut Loop) {
+    let view_result = {
+        let compositor_y5_navigator_state_base::state::State::Lock(LockState) =
+            state.inner.navigator_mut().state()
+        else {
+            return;
+        };
+
+        LockState.set_transform.clone()
+    };
+
+    let pending_travel = compositor_y5_navigator_travel_state::state::Travel {
+        duration: Some(compositor_y5_lock_state_transition::transition::PERIOD_NAVIGATOR_DURATION),
+        time_start: Some(Instant::now()),
+
+        position: Some(Target {
+            start: None,
+            target: (view_result.position.x, view_result.position.y),
+        }),
+        zoom: Some(Target {
+            start: None,
+            target: view_result.zoom,
+        }),
+    };
+
+    let channels = state.inner.focus_channels();
+    compositor_y5_navigator_state_base::state::request(channels, compositor_y5_navigator_state_base::state::NavRequest::Unlock);
+    compositor_y5_navigator_state_base::state::request(
+        channels,
+        compositor_y5_navigator_state_base::state::NavRequest::Set(
+            compositor_y5_navigator_state_base::state::State::Travel(pending_travel),
+        ),
+    );
+}

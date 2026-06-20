@@ -1,0 +1,64 @@
+use smithay::backend::input::{
+    AbsolutePositionEvent, ButtonState, GestureBeginEvent, GestureEndEvent, GestureSwipeUpdateEvent,
+    InputBackend, InputEvent, KeyboardKeyEvent, PointerButtonEvent, Switch, SwitchState,
+    SwitchToggleEvent,
+};
+use compositor_orchestration_core_state_base::Loop;
+
+/// Delegation of input events from the compositor seat loop
+pub fn process_input_event<I: InputBackend>(_loop: &mut Loop, event: &InputEvent<I>) {
+    match event {
+        InputEvent::Keyboard { event, .. } => {
+            compositor_orchestration_seat_keyboard_input::keyboard::input_received::<I>(event, _loop);
+        }
+        InputEvent::PointerMotionAbsolute { event, .. } => {
+            compositor_orchestration_seat_pointer_input::motion::absolute::<I>(event, _loop)
+        }
+        InputEvent::PointerButton { event, .. } => {
+            compositor_orchestration_seat_pointer_input::button::button::<I>(event, _loop);
+        }
+        InputEvent::PointerAxis { event, .. } => {
+            compositor_orchestration_seat_pointer_input::axis::axis::<I>(event, _loop);
+        }
+
+        InputEvent::PointerMotion { event, .. } => {
+            compositor_orchestration_seat_pointer_input::motion::relative::<I>(event, _loop);
+        }
+
+        InputEvent::DeviceAdded { .. } => {}
+        InputEvent::DeviceRemoved { .. } => {}
+        InputEvent::GestureSwipeBegin { event, .. } => {
+            _loop.inner.gesture.begin(event.fingers());
+        }
+        InputEvent::GestureSwipeUpdate { event, .. } => {
+            _loop.inner.gesture.update(event.delta_x(), event.delta_y());
+        }
+        InputEvent::GestureSwipeEnd { event, .. } => {
+            let cancelled = event.cancelled();
+            _loop.inner.gesture.active = false;
+            compositor_y5_canvas_input_gesture::gesture::swipe_end(_loop, cancelled);
+        }
+        InputEvent::GesturePinchBegin { .. } => {}
+        InputEvent::GesturePinchUpdate { .. } => {}
+        InputEvent::GesturePinchEnd { .. } => {}
+        InputEvent::GestureHoldBegin { .. } => {}
+        InputEvent::GestureHoldEnd { .. } => {}
+        InputEvent::TouchDown { .. } => {}
+        InputEvent::TouchMotion { .. } => {}
+        InputEvent::TouchUp { .. } => {}
+        InputEvent::TouchCancel { .. } => {}
+        InputEvent::TouchFrame { .. } => {}
+        InputEvent::TabletToolAxis { .. } => {}
+        InputEvent::TabletToolProximity { .. } => {}
+        InputEvent::TabletToolTip { .. } => {}
+        InputEvent::TabletToolButton { .. } => {}
+        InputEvent::SwitchToggle { event, .. } => {
+            if event.switch() == Some(Switch::Lid) {
+                // libinput: switch On == lid closed.
+                let lid_open = event.state() == SwitchState::Off;
+                compositor_orchestration_seat_lid_policy::policy::on_lid_toggle(_loop, lid_open);
+            }
+        }
+        InputEvent::Special(_) => {}
+    }
+}

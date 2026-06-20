@@ -1,0 +1,26 @@
+# Interactive companion tool that authors ~/.config/y5.compositor/settings.json.
+# Installation software (lives in the installer container), standalone like the other
+# installer tools (own Cargo.lock, OUTSIDE link.all.sh, plain stdout). It shares the
+# compositor's settings schema WITHOUT drift by path-depending on the exact same
+# `config.base` crate the compositor parses — there is one `Environment` struct,
+# compiled twice. No `[workspace]` table is needed: nothing above it in the installer
+# container is a Cargo workspace, so cargo treats it as its own root (same as the
+# pollkit-agent / mx-gesture-daemon siblings).
+[package]
+name = "y5-compositor-settings"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Cargo target names can't contain '.', so the binary is built as
+# `y5-compositor-settings`; the installer exposes it under the command name
+# `y5.compositor.settings` (symlink), which is what users invoke.
+[[bin]]
+name = "y5-compositor-settings"
+path = "src/main.rs"
+
+[dependencies]
+# The single source of truth for the settings schema + path resolution. Same
+# crate the compositor uses; sharing it by path makes drift impossible.
+compositor_developer_environment_config_base = { path = "../../../compositor.developer/developer.environment/environment.config/config.base" }
+serde_json = "1"

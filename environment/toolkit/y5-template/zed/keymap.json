@@ -1,0 +1,14 @@
+// y5-template keybindings — merge into your Zed keymap
+// (command palette → "zed: open keymap file").
+//
+// These work from anywhere in the workspace (the tool shows a picker, so it
+// doesn't depend on what's focused). Context "Workspace" makes them global.
+[
+  {
+    "context": "Workspace",
+    "bindings": {
+      "alt-n": ["task::Spawn", { "task_name": "y5: new from template" }],
+      "alt-shift-n": ["task::Spawn", { "task_name": "y5: new from named template" }]
+    }
+  }
+]

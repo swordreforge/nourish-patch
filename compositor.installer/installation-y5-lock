@@ -1,0 +1,19 @@
+# /etc/pam.d/y5-lock
+#
+# PAM service for the y5 compositor's lock screen.
+# Mirrors the system's normal interactive password policy.
+#
+# Install:
+#   sudo install -m 644 pam.d/y5-lock /etc/pam.d/y5-lock
+#
+# RHEL / Fedora / Arch / openSUSE:
+auth     include    system-auth
+account  include    system-auth
+
+# Debian / Ubuntu — comment the two lines above and uncomment these:
+# auth     include    common-auth
+# account  include    common-account
+
+# NixOS — PAM services are declarative in configuration.nix. Add:
+#   security.pam.services.y5-lock = {};
+# which produces an equivalent default stack.

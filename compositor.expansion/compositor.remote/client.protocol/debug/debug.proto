@@ -1,0 +1,17 @@
+syntax = "proto3";
+package y5.compositor.rpc.protocol.client.debug;
+
+
+message Request {}
+message Response {}
+
+message RequestNumeric {
+  uint32 Number = 1;
+}
+message ResponseNumeric {}
+
+service Debug {
+  rpc debug (Request) returns (Response);
+  rpc numeric (RequestNumeric) returns (ResponseNumeric);
+}
+

@@ -1,0 +1,32 @@
+# Standalone Wayland window-layout stress-test harness (controller + subject).
+# Deliberately OUTSIDE the repo's link.all.sh cross-workspace graph: its own
+# [workspace], its own Cargo.lock, crates.io deps only, plain-stderr diagnostics.
+[package]
+name = "y5-window-stress"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+# Own workspace root so cargo does not walk up into the compositor workspaces.
+[workspace]
+
+[lib]
+name = "window_stress"
+path = "src/lib.rs"
+
+[[bin]]
+name = "window-stress-controller"
+path = "src/bin/controller.rs"
+
+[[bin]]
+name = "window-stress-subject"
+path = "src/bin/subject.rs"
+
+[dependencies]
+smithay-client-toolkit = "0.19"
+wayland-client = "0.31"
+# staging  -> wp_fractional_scale_v1, wp_single_pixel_buffer_v1
+# unstable -> zxdg_decoration_manager_v1
+wayland-protocols = { version = "0.32", features = ["client", "staging", "unstable"] }
+calloop = "0.13"

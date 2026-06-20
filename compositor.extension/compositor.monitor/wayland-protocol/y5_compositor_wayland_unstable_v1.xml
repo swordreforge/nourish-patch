@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="y5_compositor_unstable_v1">
+    <interface name="y5_compositor_manager_v1" version="1">
+        <description summary="manager for custom ice overlay data"/>
+        <request name="set_overlay_metadata">
+            <description summary="attach custom data to a surface before mapping"/>
+            <arg name="surface" type="object" interface="wl_surface"/>
+            <arg name="payload" type="string"/>
+        </request>
+    </interface>
+</protocol>

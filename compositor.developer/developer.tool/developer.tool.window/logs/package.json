@@ -1,0 +1,32 @@
+{
+  "name": "compositor-developer-tool",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "y5 developer log viewer — streams structured logs from the compositor over gRPC",
+  "scripts": {
+    "dev": "esbuild src/main.tsx --bundle --outfile=dist/bundle.js --servedir=dist --serve=127.0.0.1:1420 --watch",
+    "build": "tsc --noEmit && esbuild src/main.tsx --bundle --minify --outfile=dist/bundle.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.1.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@tauri-apps/cli": "^2.1.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.15.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^15.12.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.16.0"
+  }
+}

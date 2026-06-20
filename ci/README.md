@@ -1,0 +1,104 @@
+# ci/ — the y5 CI/CD pipeline
+
+A single pipeline that runs on **two platforms** — GitHub Actions (production) and GitLab
+CI (the current self-hosted remote) — sharing exactly one copy of the real logic.
+
+## Design: thin YAML, portable scripts
+
+```
+ci/scripts/*.sh        ← ALL logic. Plain, portable shell.
+.github/workflows/*    ← thin: `run: ci/scripts/X.sh`
+.gitlab-ci.yml         ← thin: includes ci/.gitlab/*.yml, each `script: ci/scripts/X.sh`
+```
+
+The only platform awareness anywhere is the `is_github` / `is_gitlab` predicates in
+`ci/scripts/lib.sh`, used by the three scripts that must talk to a platform API (post a
+PR/MR comment, open the promotion request, upload nothing else). Discovery, build,
+coverage, packaging and report-generation are identical on both.
+
+## Scripts
+
+| Script | Does |
+| --- | --- |
+| `lib.sh` | shared helpers (repo root, bin-crate discovery, platform predicates) |
+| `discover-workspaces.sh` | emit the **workspace entries** (dirs with `Cargo.toml` **and** `link.json`) as JSON / lines — drives the GitHub matrix and the GitLab child pipeline |
+| `gen-child-pipeline.sh` | GitLab-only: entries → a child pipeline (lint/build/test/coverage per entry + a merge job) |
+| `link-drift.sh` | re-run `workspace.link.js` in every entry with a generated links block; fail if the committed block is stale (the "forgot `link.all.sh`" guard) |
+| `coverage-full.sh` | per-entry coverage **including dead code** (LLVM region baseline + unit-test merge) → `.ci-coverage/<slug>.lcov` |
+| `merge-coverage.sh` | fuse all entry lcov → `coverage.lcov` + `cobertura.xml` + `html/` + **per-crate `coverage-crates.md`** + self-hosted **`coverage.svg`** badge + a `Coverage: NN.N%` line |
+| `build-docs.sh` | rustdoc per entry + landing page → `public/`; folds in the coverage report + badge when present |
+| `build-site.sh` | full Pages build: run coverage for every entry → merge → `build-docs.sh` (docs + coverage in one site) |
+| `doc-suggest.sh` | PR/MR-only: `claude -p` reviews the diff, posts doc/README suggestions as a comment (advisory, never commits) |
+| `gen-report.sh` | compose the markdown promotion "deployment notes" (tests/coverage/lint/drift/doc) |
+| `open-promotion-pr.sh` | open/update the upstream-integration→upstream PR/MR with the report (never merges) |
+| `package-installer.sh` | **the CD bundle builder** — delegates to `compositor.installer/prepare.sh` to build the full install bundle (installer + compositor/dev/polkit/mx/xwayland binaries + components) → `dist/package.tar.gz` + `SHA256SUMS`. Served at `/release/latest/fedora44/` (what `get.sh` fetches) and attached to Releases |
+| `package-release.sh` | manual/raw: build just the udev+winit compositor binaries as a tarball (not used by the automated CD path — `package-installer.sh` is) |
+
+All scripts work locally too: `Y5_REPO_ROOT=$(pwd) ci/scripts/discover-workspaces.sh`.
+
+## CI image — `ci/Containerfile`
+
+Lean **Fedora 44**: rustup `stable` + `rustfmt`/`clippy`/`llvm-tools-preview`, the
+Wayland/GPU/protobuf **-devel** headers (build needs headers + link libs, no GPU at run
+time), `nodejs`, `lcov`, `llvm`, `cargo-llvm-cov`, `lcov_cobertura`, `sccache`,
+`gh`, and the `claude` CLI. It copies **no source** and installs **no runtime apps**
+(unlike `environment.container/Containerfile`). Pushed to GHCR (GitHub) and the GitLab
+registry as `…/y5-ci:fedora44`; every job runs inside it.
+
+`sccache` is enabled via `RUSTC_WRAPPER=sccache` baked into the image — the documented
+"turn it on only in CI, no repo changes" hook from `environment/README.md`. The repo's
+`.cargo/config.toml` (`-A warnings`) is inherited untouched.
+
+## Workspace entries
+
+The build/test/coverage unit. An *entry* is a directory (≤ 2 deep, excluding `target/`)
+holding both a workspace-root `Cargo.toml` **and** a `link.json`. Today there are 9.
+Nothing is hardcoded, so adding/renaming a workspace needs **no pipeline edit**.
+
+## Branch flow
+
+```
+feature → upstream-integration ──(CI green)──▶ auto PR/MR →upstream ──(you approve)──▶ upstream
+        │ candidate bundle artifact                                                       │
+        │ (ci.yml installer-bundle)                                          Publish: site + docs +
+        │                                                                    install bundle to Pages
+        │                                                                    (/release/latest/fedora44)
+        │                                                                            │
+        │                                                                    tag vX.Y.Z
+        │                                                                            ▼
+        │                                                       Release: install bundle attached (CD)
+```
+
+- **upstream-integration** (candidate): full CI on every push; the `installer-bundle` job
+  builds the full install bundle as a downloadable artifact so the candidate can be tried
+  before merge. On green, the promotion PR/MR to `upstream` is opened/updated with the report.
+- **upstream** (publish): protected — approve & merge the promotion request manually (set
+  branch protection / approval rules in the platform UI). A push here runs **Publish**, which
+  deploys the marketing site (`/`), docs (`/docs`) **and the install bundle**
+  (`/release/latest/fedora44/package.tar.gz` + `SHA256SUMS`) to Pages — the URL
+  `compositor.installer/get.sh` fetches.
+- **tag `v*`**: attaches the same install bundle to a GitHub/GitLab Release for manual
+  download (CD). Live host deploy (`environment/build-release.sh remote`) is a separate,
+  optional, manual job.
+
+The install bundle is built by `compositor.installer/prepare.sh` (via `package-installer.sh`)
+and contains every shipped binary + component + the interactive `y5-install`; building it in
+CI is why the image carries the dev-tool window's GTK/WebKit `-devel` deps.
+
+## Required secrets / variables (set in the platform UI, never in the repo)
+
+| Name | Platform | Used by | Notes |
+| --- | --- | --- | --- |
+| `GITHUB_TOKEN` | GitHub | image (GHCR), coverage, doc-review, promote, release | auto-provided |
+| `ANTHROPIC_API_KEY` | both | doc-review | masked; without it doc-review skips cleanly |
+| `CI_REGISTRY_*` | GitLab | image | auto-provided |
+| `GITLAB_TOKEN` | GitLab | doc-review, promote | project access token, `api` scope, masked |
+| `Y5_DEPLOY_SSH_KEY` | GitLab (optional) | deploy-remote | masked SSH key for `yrd.local` |
+
+## Notes / decisions
+
+- **clippy is advisory**, fmt is blocking — the repo sets `-A warnings` globally in
+  `.cargo/config.toml`, so a blocking `clippy -D warnings` would fight that policy.
+- **First run:** the image job must publish `y5-ci:fedora44` before other jobs can run in
+  it (trigger `image` once manually / via `workflow_dispatch`).
+- **GitHub Pages / branch protection / approvals** are platform settings, not repo files.

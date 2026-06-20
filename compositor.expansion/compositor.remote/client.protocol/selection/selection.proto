@@ -1,0 +1,69 @@
+syntax = "proto3";
+package y5.compositor.rpc.protocol.client.selection;
+
+
+message Layout {
+  repeated Action action = 1;
+}
+
+message Action {
+  oneof action {
+    Align align = 1;
+    Distribute distribute = 2;
+    Stack stack = 3;
+  }
+}
+
+message Align {
+  oneof Action {
+    Modifier Left = 1;
+    Modifier CenterHorizontal = 2;
+    Modifier Right = 3;
+    Modifier Top = 4;
+    Modifier Bottom = 5;
+    Modifier CenterVertical = 6;
+  }
+
+  message Modifier {
+    bool stretch = 1;
+  }
+}
+
+
+message Distribute {
+  oneof Action {
+    Modifier Horizontal = 1;
+    Modifier Vertical = 2;
+  }
+
+  message Modifier {
+    bool start = 1;
+  }
+}
+
+message Stack {
+  oneof Action {
+    bool Horizontal = 1;
+    bool Vertical = 2;
+  }
+}
+
+
+message LayoutResponse {}
+
+
+message FitAspect {
+  bool perceived = 1;
+  bool max = 2;
+  bool vertical = 3;
+  bool horizontal = 4;
+}
+
+message FitAspectResponse {}
+
+
+service Selection {
+  rpc layout (Layout) returns (LayoutResponse);
+  rpc fit_aspect (FitAspect) returns (FitAspectResponse);
+}
+

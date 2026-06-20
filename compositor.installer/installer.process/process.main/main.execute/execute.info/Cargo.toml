@@ -1,0 +1,10 @@
+[package]
+name = "compositor_installer_process_main_execute_info"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compositor_installer_process_config_parse_base = { path = "../../../process.config/config.parse/parse.base" }
+
+[lib]
+path = "lib.rs"

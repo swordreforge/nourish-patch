@@ -1,0 +1,172 @@
+use smithay::desktop::Window;
+use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
+use smithay::utils::{Logical, Point, Size};
+use compositor_y5_camera_transform_translate::slot;
+use compositor_orchestration_core_state_base::Loop;
+use compositor_y5_window_interface_record::data::WindowFullscreen;
+use compositor_y5_window_interface_record::window::LoopWindow;
+
+/// Apply (or clear) fullscreen on a window.
+///
+/// This compositor has no physical "screen" to fill (the canvas is a
+/// pannable/zoomable y5-world), so "fullscreen" means: tell the client its
+/// fullscreen size equals the region it conceptually owns.
+///
+///   * Ungrouped window  → its own current size (it is already "as large as
+///     its screen"); we only flip the protocol state.
+///   * Grouped window     → the group's padded bounding box, and we move the
+///     window to fill that region.
+///
+/// The window is raised to the top of the stack so it stays above its peers
+/// and captures input within its bounds. Pre-fullscreen geometry is stored so
+/// it can be restored on un-fullscreen.
+pub fn fullscreen_set(_loop: &mut Loop, window: Window, fullscreen: bool) {
+    let Some(toplevel) = window.toplevel() else {
+        return;
+    };
+
+    if fullscreen {
+        if window.is_fullscreen() {
+            return;
+        }
+
+        let current_loc = _loop
+            .inner.space_state()
+            .state
+            .element_location(&window)
+            .unwrap_or_default();
+        // The window's PRE-fullscreen slot (what it's rendered at + what the group bbox uses).
+        let current_size = slot::expected_size(&window)
+            .filter(|s| s.w > 0 && s.h > 0)
+            .unwrap_or_else(|| window.geometry().size);
+
+        let (target_loc, target_size) =
+            fullscreen_target(_loop, &window, current_loc, current_size);
+
+        window.set_fullscreen(Some(WindowFullscreen {
+            restore_loc: current_loc,
+            restore_size: current_size,
+        }));
+
+        // Move into place and raise above peers (exclusive within its bounds).
+        _loop
+            .inner.space_state_mut()
+            .state
+            .map_element(window.clone(), target_loc, true);
+        _loop.inner.space_state_mut().state.raise_element(&window, true);
+        if let Some(uuid) = window.uuid() {
+            _loop.inner.raise_drawable(uuid);
+        }
+
+        // The compositor-decided slot IS the fullscreen size — without this the render keeps
+        // fitting the stale (pre-fullscreen) slot and the window never grows. The group bbox uses
+        // the restore rect (above), so it doesn't feed back off this new slot.
+        slot::set_expected_size(&window, target_size);
+
+        toplevel.with_pending_state(|state| {
+            state.states.set(xdg_toplevel::State::Fullscreen);
+            state.size = Some(target_size);
+        });
+        toplevel.send_configure();
+    } else {
+        let Some(restore) = window.fullscreen() else {
+            return;
+        };
+        window.set_fullscreen(None);
+
+        _loop
+            .inner.space_state_mut()
+            .state
+            .map_element(window.clone(), restore.restore_loc, false);
+
+        // Restore the pre-fullscreen slot too (mirror of the enter path).
+        slot::set_expected_size(&window, restore.restore_size);
+
+        toplevel.with_pending_state(|state| {
+            state.states.unset(xdg_toplevel::State::Fullscreen);
+            state.size = Some(restore.restore_size);
+        });
+        toplevel.send_configure();
+    }
+
+    // Geometry changed; refresh the owning group's bounding box overlay.
+    if let Some(uuid) = window.uuid() {
+        compositor_y5_group_interface_base::interface::invalidate_bbox(_loop, uuid);
+    }
+
+    _loop.schedule_redraw();
+}
+
+/// F11: clear fullscreen on the keyboard-focused window, but only if it is
+/// currently fullscreen (set via the protocol). Never enters fullscreen.
+/// Returns `true` when it actually un-fullscreened a window (so the key is
+/// consumed), `false` otherwise (so the key falls through to the client).
+pub fn fullscreen_unset_focused(_loop: &mut Loop) -> bool {
+    let Some(window) = focused_window(_loop) else {
+        return false;
+    };
+    if !window.is_fullscreen() {
+        return false;
+    }
+    fullscreen_set(_loop, window, false);
+    true
+}
+
+/// Compute the fullscreen target rectangle (y5-world) for `window`: the group's
+/// padded bbox if the window belongs to a group, otherwise its own geometry.
+fn fullscreen_target(
+    _loop: &mut Loop,
+    window: &Window,
+    current_loc: Point<i32, Logical>,
+    current_size: Size<i32, Logical>,
+) -> (Point<i32, Logical>, Size<i32, Logical>) {
+    let Some(uuid) = window.uuid() else {
+        return (current_loc, current_size);
+    };
+
+    let Some(group_uuid) = _loop.inner.group_mut()
+        
+        .window
+        .get(&uuid)
+        .map(|g| g.as_ref().clone())
+    else {
+        return (current_loc, current_size);
+    };
+
+    let Some(group) = _loop.inner.group_mut()
+        
+        .group
+        .iter()
+        .find(|g| g.id == group_uuid)
+        .cloned()
+    else {
+        return (current_loc, current_size);
+    };
+
+    // The group's INNER bbox (its padded bbox minus the margin), so the fullscreen window fills the
+    // group's content area and the group keeps its surrounding margin.
+    let rect = compositor_y5_group_interface_base::interface::bbox_inner(_loop, &group)
+        .into_storage_rect();
+    (rect.loc, rect.size)
+}
+
+/// The window backing the current keyboard focus, if any.
+fn focused_window(_loop: &Loop) -> Option<Window> {
+    let focus = _loop
+        .state
+        .seat
+        .seat
+        .get_keyboard()
+        .and_then(|kb| kb.current_focus())?;
+
+    _loop
+        .inner.space_state()
+        .state
+        .elements()
+        .find(|w| {
+            w.toplevel()
+                .map(|t| t.wl_surface() == &focus)
+                .unwrap_or(false)
+        })
+        .cloned()
+}

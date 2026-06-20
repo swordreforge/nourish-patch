@@ -1,0 +1,13 @@
+# When upstream-integration is green, open/update the upstream-integration -> upstream MR
+# with the generated deployment-notes report. upstream is protected (its push publishes); a
+# human approves & merges. Never merges.
+promote:
+  stage: promote
+  script:
+    - ci/scripts/gen-report.sh > promotion-report.md
+    - ci/scripts/open-promotion-pr.sh promotion-report.md
+  variables:
+    PROMOTION_SOURCE: upstream-integration
+    PROMOTION_TARGET: upstream
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "upstream-integration"'

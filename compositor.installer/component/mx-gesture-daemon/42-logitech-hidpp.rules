@@ -1,0 +1,11 @@
+# Place at /etc/udev/rules.d/42-logitech-hidpp.rules
+# Then: sudo udevadm control --reload && sudo udevadm trigger
+#
+# Borrowed in spirit from Solaar's rules. Grants read/write on Logitech
+# HID interfaces to the "plugdev" group; add your user to that group.
+
+# USB / Unifying / Bolt receivers and direct-USB devices
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="046d", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+
+# Bluetooth HID (the MX Master 3/3S typically attaches via BT as well)
+KERNEL=="hidraw*", SUBSYSTEMS=="bluetooth", MODE="0660", GROUP="plugdev", TAG+="uaccess"

@@ -1,0 +1,19 @@
+[package]
+name = "y5-template"
+version = "0.1.0"
+edition = "2021"
+description = "Scaffold a new L2 directory from a y5.template, with chain-prefix validation, run from a Zed task at the selected L1 directory."
+license = "MIT"
+
+[[bin]]
+name = "y5-template"
+path = "src/main.rs"
+
+[dependencies]
+walkdir = "2"
+crossterm = "0.27"
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true

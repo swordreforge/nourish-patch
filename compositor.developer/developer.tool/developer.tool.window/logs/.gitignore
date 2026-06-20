@@ -1,0 +1,6 @@
+node_modules/
+dist/bundle.js
+dist/bundle.js.map
+dist/bundle.css
+src-tauri/target/
+src-tauri/gen/

@@ -1,0 +1,9 @@
+[package]
+name = "compositor_installer_process_config_parse_model"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+
+[lib]
+path = "lib.rs"

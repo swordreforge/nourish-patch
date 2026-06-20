@@ -1,0 +1,5 @@
+syntax = "proto3";
+package y5.compositor.rpc.protocol.client;
+import "navigator/navigator.proto";
+import "selection/selection.proto";
+import "debug/debug.proto";

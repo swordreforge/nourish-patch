@@ -1,0 +1,73 @@
+//! Camera / sphere / cell tunables for the world-selection scene. Kept free of
+//! bevy types so the compositor-side picker (silhouette test, navigation) can
+//! share the same numbers.
+
+/// Cube-sphere subdivision: 6 faces × `CELLS_PER_FACE²` cubic cells. Must match
+/// `compositor_y5_picker_state_base::base::CELLS_PER_FACE`.
+pub const CELLS_PER_FACE: usize = 3;
+pub const CELL_COUNT: usize = 6 * CELLS_PER_FACE * CELLS_PER_FACE;
+
+/// Sphere the cells sit on (cell centers are at this radius).
+pub const SPHERE_RADIUS: f32 = 1.0;
+
+/// Picker entry fade: seconds for the black overlay to clear (fade-in, no morph).
+pub const FADE_SECS: f32 = 0.35;
+
+/// Camera: distance from origin + vertical field of view (radians, ~45°).
+pub const CAMERA_DISTANCE: f32 = 3.4;
+pub const CAMERA_FOV_RAD: f32 = 0.7853982;
+
+/// Idle camera animation: a gentle sway (no sphere spin). Amplitude in world
+/// units, speed in rad/s.
+pub const SWAY_SPEED: f32 = 0.5;
+pub const SWAY_AMPLITUDE: f32 = 0.10;
+
+/// Drag-to-rotate sensitivity: radians of sphere rotation per unit of
+/// normalized pointer drag.
+pub const ROTATE_SENSITIVITY: f32 = 3.0;
+
+/// Pitch is clamped to ±PITCH_MAX (radians) so the sphere stays front-facing and
+/// "W"-aligned — no over-the-top tumbling. Yaw is free (spins around).
+pub const PITCH_MAX: f32 = 0.6;
+
+/// Drag-release momentum: yaw velocity carried per frame, decayed by SPIN_DECAY
+/// each frame until it settles.
+pub const SPIN_DECAY: f32 = 0.94;
+
+/// Selection re-face animation: fraction the orientation slerps toward the
+/// target each frame (so arrow nav glides to the chosen cell instead of snapping).
+pub const APPROACH_RATE: f32 = 0.22;
+
+/// Scroll-to-zoom: camera distance = CAMERA_DISTANCE / zoom. Step per axis tick,
+/// clamped to [ZOOM_MIN, ZOOM_MAX].
+pub const ZOOM_STEP: f32 = 0.12;
+pub const ZOOM_MIN: f32 = 0.6;
+pub const ZOOM_MAX: f32 = 2.0;
+
+/// Cell square edge as a fraction of the per-face cell pitch (rest is gap).
+pub const CELL_FILL: f32 = 0.86;
+
+/// Colours (linear RGBA). Empty cells are transparent (no fill) — only the
+/// wireframe shows. Occupied cells carry their thumbnail.
+pub const WIRE_COLOR: [f32; 4] = [0.45, 0.50, 0.60, 0.55];
+pub const OUTLINE_COLOR: [f32; 4] = [0.55, 0.80, 1.00, 1.0];
+pub const PLUS_COLOR: [f32; 4] = [0.85, 0.92, 1.00, 0.95];
+/// Fill for a cell that holds a world but has no thumbnail yet (e.g. restored
+/// from disk before that world is next active) — a solid patch so the cell reads
+/// as occupied instead of empty.
+pub const OCCUPIED_COLOR: [f32; 4] = [0.30, 0.38, 0.50, 0.70];
+
+/// "+" glyph on the selected cell: bar length + thickness as fractions of the
+/// cell edge.
+pub const PLUS_LEN: f32 = 0.5;
+pub const PLUS_THICK: f32 = 0.10;
+
+/// Approximate screen-space radius (pixels) of the sphere silhouette for an
+/// output of the given height. A sphere's silhouette is rotation-invariant, so
+/// this is constant regardless of drag rotation — used compositor-side to detect
+/// "the pointer is outside the sphere" for drag-to-rotate.
+pub fn sphere_screen_radius(output_height: f32) -> f32 {
+    let alpha = (SPHERE_RADIUS / CAMERA_DISTANCE).asin();
+    let frac = alpha.tan() / (CAMERA_FOV_RAD * 0.5).tan();
+    frac * (output_height * 0.5)
+}

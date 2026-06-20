@@ -1,0 +1,19 @@
+# Repo-wide cargo configuration.
+#
+# Cargo discovers this file by walking up the directory tree from whichever
+# workspace/crate it is building, so every top-level workspace picks it up without
+# any per-workspace edits — the same "configure once, applies everywhere" approach
+# the rest of the repo uses.
+#
+# IMPORTANT: a `RUSTFLAGS` environment variable REPLACES the rustflags below wholesale
+# (cargo does not merge the two). Keep compiler flags here and do NOT export RUSTFLAGS
+# in scripts/shells, or these flags are silently dropped. The build scripts rely on this.
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+    "-A", "warnings",                # quiet warnings (was RUSTFLAGS="-A warnings")
+    # (mold linker removed — the default system linker is used)
+]
+
+[net]
+git-fetch-with-cli = true            # more reliable/faster fetches behind proxies

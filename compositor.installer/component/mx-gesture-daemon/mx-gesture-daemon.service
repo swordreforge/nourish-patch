@@ -1,0 +1,22 @@
+# Place at ~/.config/systemd/user/mx-gesture-daemon.service
+# Then:
+#   systemctl --user daemon-reload
+#   systemctl --user reenable --now mx-gesture-daemon.service
+#   (reenable, not enable, because WantedBy changed below)
+
+[Unit]
+Description=MX Master gesture button daemon
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/mx-gesture-daemon
+# No restart: the daemon recovers internally (reconnects + catches panics).
+# If the process ever exits anyway, that's a genuine bug to fix in the code,
+# not something to paper over by respawning.
+Restart=no
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=graphical-session.target

@@ -1,0 +1,48 @@
+// y5-template Zed tasks (picker-based, with current-L1 pinning).
+//
+// Notes:
+//   - Zed task variables only reflect the active EDITOR; we use them to
+//     (a) pick the scan root ($ZED_WORKTREE_ROOT) and
+//     (b) detect the currently-edited file ($ZED_FILE) so the picker can
+//         pin its containing L1 as the first option.
+//   - The variables are made available in the task ENVIRONMENT (via "env")
+//     so the binary can read them with std::env::var.
+//   - --open: after a successful create, open the new crate's file in Zed.
+//     In a batch (comma-separated names), only the LAST is opened.
+//
+// Requires the y5-template binary on your PATH.
+[
+  {
+    "label": "y5: new from template",
+    "command": "y5-template",
+    "args": ["--scan", "$ZED_WORKTREE_ROOT", "--open"],
+    "env": {
+      "ZED_FILE": "$ZED_FILE",
+      "ZED_WORKTREE_ROOT": "$ZED_WORKTREE_ROOT"
+    },
+    "reveal": "always",
+    "reveal_target": "dock",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "y5: new from named template",
+    "command": "y5-template",
+    "args": ["--scan", "$ZED_WORKTREE_ROOT", "--template", "default", "--open"],
+    "env": {
+      "ZED_FILE": "$ZED_FILE",
+      "ZED_WORKTREE_ROOT": "$ZED_WORKTREE_ROOT"
+    },
+    "reveal": "always",
+    "reveal_target": "dock",
+    "use_new_terminal": false,
+    "allow_concurrent_runs": false
+  },
+  {
+    "label": "y5: list template targets",
+    "command": "y5-template",
+    "args": ["--scan", "$ZED_WORKTREE_ROOT", "--list"],
+    "reveal": "always",
+    "reveal_target": "dock"
+  }
+]

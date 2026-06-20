@@ -1,0 +1,33 @@
+//! Input wiring: the libinput source -> compositor lifecycle + redraw
+//! scheduling. (Ex wire.rs `start()` libinput closure.)
+
+use compositor_kernel_input_loop_libinput_base::libinput::LibinputSource;
+use compositor_kernel_native_context_render_base::render::NativeRenderContext;
+use smithay::reexports::calloop::EventLoop;
+use std::cell::RefCell;
+use std::rc::Rc;
+use compositor_orchestration_core_state_base::state::StatusSession;
+use compositor_orchestration_core_state_base::Loop;
+
+pub fn register(
+    event_loop: &mut EventLoop<Loop>,
+    libinput_source: LibinputSource,
+    ctx_rc: Rc<RefCell<NativeRenderContext>>,
+) {
+    event_loop
+        .handle()
+        .insert_source(libinput_source, move |event, _, state| {
+            if let StatusSession::Paused = state.inner.status_session {
+                return;
+            }
+            // Any input event potentially changes what should be on screen
+            // (cursor position, focus, key feedback). Request a redraw.
+            compositor_orchestration_draw_state_lifecycle::lifecycle::input(state, &event);
+            // A lid switch (or any input that drove the lid policy) may have
+            // queued a display request; perform it now — here so it runs even
+            // when the render loop is gated (DPMS-off) or about to be.
+            compositor_kernel_native_context_display_apply::apply::drain(state, &ctx_rc);
+            state.schedule_redraw();
+        })
+        .unwrap();
+}

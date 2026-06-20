@@ -1,0 +1,9 @@
+[package]
+name = "compositor_installer_process_layout_compute_stage"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+
+[lib]
+path = "lib.rs"

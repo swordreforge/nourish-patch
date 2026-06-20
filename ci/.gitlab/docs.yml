@@ -1,0 +1,17 @@
+# Publish the public site + the install bundle via GitLab Pages (the `pages` job name +
+# public/ artifact are GitLab Pages conventions). Default branch only — mirror of the
+# GitHub Publish workflow: marketing site at root, rustdoc/coverage under /docs, and the
+# install bundle (installer + binaries + components) under /release/latest/fedora44/.
+pages:
+  stage: docs
+  script:
+    - ci/scripts/build-site.sh
+    - mv public _site_docs && mkdir public && mv _site_docs public/docs
+    - cp -r compositor.website/. public/ && rm -f public/SHOT_LIST.md
+    - ci/scripts/package-installer.sh
+    - mkdir -p public/release/latest/fedora44
+    - cp dist/package.tar.gz dist/SHA256SUMS public/release/latest/fedora44/
+  artifacts:
+    paths: [public]
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'

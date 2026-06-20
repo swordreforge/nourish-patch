@@ -1,0 +1,6 @@
+{
+  "compositor_developer_debug_instance_record": {
+    "default-features": false,
+    "features": ["error", "warn", "info", "trace"]
+  }
+}

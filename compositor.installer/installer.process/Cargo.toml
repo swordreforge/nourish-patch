@@ -1,0 +1,18 @@
+# Standalone installer workspace. NOT part of the main compositor link.json /
+# link.all.sh loop — these crates are built and shipped on their own (like
+# pollkit-agent and mx-gesture-daemon). They follow the same chain-prefix naming
+# convention but are wired by plain path deps here.
+[workspace]
+resolver = "2"
+members = [
+    "process.*/*/*",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+compositor_installer_process_packages_enumerate_base = { path = "process.packages/packages.enumerate/enumerate.base" }
+compositor_installer_process_config_parse_base = { path = "process.config/config.parse/parse.base" }
+compositor_installer_process_layout_compute_base = { path = "process.layout/layout.compute/compute.base" }

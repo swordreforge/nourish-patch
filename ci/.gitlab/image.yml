@@ -1,0 +1,21 @@
+# Build & push the lean Fedora 44 CI image to the GitLab registry with kaniko. Runs only
+# when the image inputs change; every other job runs inside the published tag.
+build-image:
+  stage: image
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - |
+      echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
+        --context "$CI_PROJECT_DIR"
+        --dockerfile "$CI_PROJECT_DIR/ci/Containerfile"
+        --destination "$CI_REGISTRY_IMAGE/ci:fedora44"
+  rules:
+    - changes:
+        - ci/Containerfile
+        - ci/scripts/**/*
+    - when: manual
+      allow_failure: true

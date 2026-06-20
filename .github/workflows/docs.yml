@@ -1,0 +1,86 @@
+name: Publish
+
+# Publish everything to GitHub Pages (nourish.snowies.com) on merge to `upstream`:
+#   /                         the marketing site (compositor.website, carries the CNAME)
+#   /docs                     generated rustdoc + coverage site
+#   /release/latest/fedora44  the install bundle (package.tar.gz + SHA256SUMS) that
+#                             compositor.installer/get.sh fetches — installer + binaries
+#                             + every component, built by compositor.installer/prepare.sh.
+#
+# `upstream-integration` is the candidate branch (CI builds the bundle as an artifact via
+# ci.yml); merging it into `upstream` is what actually publishes.
+on:
+  push:
+    branches: [upstream]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # The public site: marketing root + rustdoc/coverage under /docs.
+  site:
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build docs + coverage site
+        run: ci/scripts/build-site.sh
+      - name: Assemble site tree (marketing at root, docs under /docs)
+        run: |
+          mv public _site_docs
+          mkdir public
+          mv _site_docs public/docs
+          cp -r compositor.website/. public/
+          rm -f public/SHOT_LIST.md           # internal shot list — don't publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-public
+          path: public
+
+  # The install bundle (installer + binaries + components), built once here.
+  bundle:
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build install bundle (installer + binaries + components)
+        run: ci/scripts/package-installer.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: install-bundle
+          path: |
+            dist/package.tar.gz
+            dist/SHA256SUMS
+
+  # Lay the bundle into the site tree under /release/... and deploy the single Pages artifact.
+  deploy:
+    needs: [site, bundle]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-public
+          path: public
+      - uses: actions/download-artifact@v4
+        with:
+          name: install-bundle
+          path: bundle
+      - name: Place the install bundle at /release/latest/fedora44/
+        run: |
+          mkdir -p public/release/latest/fedora44
+          cp bundle/package.tar.gz bundle/SHA256SUMS public/release/latest/fedora44/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deploy
+        uses: actions/deploy-pages@v4

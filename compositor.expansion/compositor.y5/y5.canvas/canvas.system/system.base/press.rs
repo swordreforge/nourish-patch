@@ -1,0 +1,470 @@
+//! Pointer PRESS, migrated from the rim (`canvas.input/input.pointer/press.rs`
+//! + `window.input/input.pointer/window.rs`) into `CanvasSystem::input`.
+//!
+//! Consume is ALL-OR-NOTHING: this returns `InputFlow::Consume` exactly when the
+//! old rim handler returned `true` (`!_temporary_passthrough`), and
+//! `InputFlow::Pass` when it returned `false` (so the rim's `native_press` runs
+//! against the window beneath). The grab is written via CanvasSystem's own
+//! buffer; selection via the SELECT_REQUEST channel; iced focus/button via the
+//! surface system channels; the wayland focus/button + held-key release via
+//! `cx.seat`; window-deactivate + grab geometry via `cx.platform.space()`.
+
+use compositor_support_system_input_event_base::base::InputFlow;
+use compositor_support_system_storage_slot_base::base::Storage;
+use compositor_support_system_trait_system_base::base::SystemCx;
+use compositor_support_smithay_dispatch_state_base::state::Dispatch;
+use compositor_y5_canvas_input_state::state::{
+    ActiveOption, ActiveTransformCandidate, Anchor, CanvasGrab, TargetOption,
+};
+use compositor_y5_group_state_base::state::{Group, GroupVisibility, GROUP};
+use compositor_y5_placeholder_system_base::base::PLACEHOLDER;
+use compositor_y5_select_state_base::request::{announce_selection, SelectionCmd};
+use compositor_y5_select_state_base::select::SELECT;
+use compositor_y5_surface_interface_core::hit::surface_under_filtered_cx;
+use compositor_y5_surface_system_base::base::{announce_iced_button, announce_iced_focus};
+use compositor_y5_window_interface_record::window::LoopWindow;
+use compositor_monitor_compositor_iced_base::HandleId;
+use smithay::backend::input::{ButtonState, KeyState};
+use smithay::desktop::Window;
+use smithay::input::keyboard::Keycode;
+use smithay::input::pointer::ButtonEvent;
+use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+use smithay::utils::{Logical, Point, Rectangle, Size, SERIAL_COUNTER};
+use std::collections::HashSet;
+use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
+use crate::base::{CanvasCmd, CANVAS, CANVAS_BUF};
+
+/// A pressable content target (mirrors the rim's `PressCandidate`).
+enum PressCandidate {
+    IcedSurface(HandleId),
+    Window(Window),
+}
+
+pub(crate) fn press(cx: &mut SystemCx, button: u32, x: f64, y: f64) -> InputFlow {
+    let cursor = Point::<f64, Logical>::from((x, y));
+
+    let mut canvas_grab_targetting = false;
+    let mut canvas_grab_selecting = false;
+    let mut canvas_grab_hand = false;
+    match &cx.storage.get(&CANVAS).Grab {
+        CanvasGrab::Target(opt) => match opt {
+            TargetOption::Scale | TargetOption::Move => canvas_grab_targetting = true,
+            TargetOption::Select { .. } => {
+                canvas_grab_targetting = true;
+                canvas_grab_selecting = true;
+            }
+        },
+        CanvasGrab::Active(ActiveOption::Hand) => canvas_grab_hand = true,
+        _ => {}
+    }
+
+    // Hit-test (press accepts a window only if visible; layers/iced pass).
+    let over_surface = surface_under_filtered_cx(cx.storage, cursor, &|hit| {
+        if let Some(window) = hit.window() {
+            return window_visible(cx.storage, window);
+        }
+        true
+    });
+    let over_ice = matches!(&over_surface, Some(hit) if hit.ice().is_some());
+
+    let mut temporary_passthrough = false;
+    if let Some(ice_layer) = over_surface.as_ref().and_then(|w| w.iced_layer()) {
+        temporary_passthrough = (ice_layer
+            & compositor_orchestration_draw_layer_base::base::Layer::SCENE_SURFACE_GROUP.bits())
+            != 0;
+    }
+
+    // Over a window and not targeting: clear selection (unless over ice) and Pass
+    // so the rim's native_press routes the click to the window.
+    if !canvas_grab_hand
+        && !canvas_grab_targetting
+        && (over_surface.is_some() && !temporary_passthrough)
+    {
+        if !over_ice {
+            let cleared = cx.storage.get(&SELECT).clear();
+            announce_selection(cx.channels, SelectionCmd::Set(cleared));
+        }
+        return InputFlow::Pass;
+    }
+
+    if !canvas_grab_hand
+        && canvas_grab_targetting
+        && let Some(hit) = &over_surface
+    {
+        let candidate: Option<PressCandidate> = if let Some(w) = hit.window() {
+            Some(PressCandidate::Window(w.clone()))
+        } else if let Some(h) = hit.iced_handle() {
+            Some(PressCandidate::IcedSurface(h))
+        } else {
+            None
+        };
+
+        if candidate.is_none() && over_ice {
+            // Let ice dispatch (transitive with canvas ownership).
+            return InputFlow::Pass;
+        }
+
+        if let Some(candidate) = candidate {
+            trigger_grab(cx, &candidate, cursor);
+        }
+    } else {
+        // Not targeting, or the hit was not over a window.
+        if !canvas_grab_hand && over_ice {
+            return InputFlow::Pass;
+        }
+
+        // If not targeting anything, clear the selection.
+        if !canvas_grab_hand && !canvas_grab_selecting {
+            let cleared = cx.storage.get(&SELECT).clear();
+            announce_selection(cx.channels, SelectionCmd::Set(cleared));
+        }
+
+        // Shift held (Select append): start a select box; otherwise start a pan.
+        let select_append =
+            matches!(&cx.storage.get(&CANVAS).Grab, CanvasGrab::Target(TargetOption::Select { Append }) if *Append);
+        if select_append {
+            let start_selection: Vec<Uuid> = cx
+                .storage
+                .get(&SELECT)
+                .Selection
+                .iter()
+                .filter_map(|w| w.uuid())
+                .collect();
+            cx.write(
+                &CANVAS_BUF,
+                CanvasCmd::SetGrab(CanvasGrab::Active(ActiveOption::SelectBox {
+                    start_cursor: cursor,
+                    current_cursor: cursor,
+                    start_selection,
+                })),
+            );
+        } else {
+            cx.write(&CANVAS_BUF, CanvasCmd::PanUpdating(true));
+        }
+
+        if !canvas_grab_hand {
+            finalize_non_hand(cx, button);
+        }
+    }
+
+    if temporary_passthrough {
+        InputFlow::Pass
+    } else {
+        InputFlow::Consume
+    }
+}
+
+/// Deactivate every window, release held keys, drop wayland + iced keyboard
+/// focus, and forward the press to the seat/iced (the rim's non-hand tail).
+fn finalize_non_hand(cx: &mut SystemCx, button: u32) {
+    let serial = SERIAL_COUNTER.next_serial();
+    let time = now_msec();
+
+    if let Some(platform) = cx
+        .platform
+        .as_deref_mut()
+        .and_then(|p| p.downcast_mut::<compositor_orchestration_draw_platform_base::platform::Platform>())
+    {
+        for window in platform.space().elements() {
+            window.set_activated(false);
+            if let Some(toplevel) = window.toplevel() {
+                toplevel.send_pending_configure();
+            }
+        }
+    }
+
+    if let Some(dispatch) = cx.seat.as_deref_mut().and_then(|s| s.downcast_mut::<Dispatch>()) {
+        // Release held (non-modifier) keys before dropping focus so clients that
+        // track their own keyboard state don't get stuck key-down on re-focus.
+        release_held_keys(dispatch);
+
+        if let Some(keyboard) = dispatch.seat.seat.get_keyboard() {
+            keyboard.set_focus(dispatch, Option::<WlSurface>::None, serial);
+        }
+
+        if let Some(pointer) = dispatch.seat.seat.get_pointer() {
+            pointer.button(
+                dispatch,
+                &ButtonEvent { button, state: ButtonState::Pressed, serial, time },
+            );
+            pointer.frame(dispatch);
+        }
+    }
+
+    // Iced deactivation: clear keyboard focus + dispatch the button-down. Both
+    // route through the surface system's slot (we can't touch its registry).
+    announce_iced_focus(cx.channels, None);
+    announce_iced_button(cx.channels, button, true);
+}
+
+/// Reimplementation of `compositor_orchestration_seat_keyboard_input::keyboard::
+/// release_held_keys` reading `cx.seat`'s `Dispatch` instead of `&mut Loop`:
+/// release every held NON-modifier key to the focused client (forwarded, no
+/// intercept) before keyboard focus is cleared.
+fn release_held_keys(dispatch: &mut Dispatch) {
+    let Some(keyboard) = dispatch.seat.seat.get_keyboard() else {
+        return;
+    };
+    let to_release: Vec<Keycode> = keyboard.with_pressed_keysyms(|syms| {
+        syms.iter()
+            .filter(|h| !is_modifier_keysym(h.modified_sym().raw()))
+            .map(|h| h.raw_code())
+            .collect()
+    });
+    if to_release.is_empty() {
+        return;
+    }
+    let time = now_msec();
+    for key in to_release {
+        let serial = SERIAL_COUNTER.next_serial();
+        let _ = keyboard.input::<(), _>(dispatch, key, KeyState::Released, serial, time, |_, _, _| {
+            smithay::input::keyboard::FilterResult::Forward
+        });
+    }
+}
+
+/// X11 keysym ranges for modifier keys (see the rim `keyboard.rs` copy).
+fn is_modifier_keysym(raw: u32) -> bool {
+    matches!(raw, 0xffe1..=0xffee | 0xff7f | 0xfe01..=0xfe13)
+}
+
+fn now_msec() -> u32 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u32)
+        .unwrap_or(0)
+}
+
+/// Set up the active Scaling / Moving grab for the pressed candidate. Mirrors
+/// `window.input/input.pointer/window.rs` (`trigger_scale`/`trigger_move`/
+/// `trigger_select`), reading windows from `cx.platform.space()`, placeholders
+/// from `cx.storage` PLACEHOLDER, and groups inline from `cx.storage` GROUP +
+/// space (the Loop-coupled `group_interface::bbox_padded/windows` would cycle).
+fn trigger_grab(cx: &mut SystemCx, candidate: &PressCandidate, cursor: Point<f64, Logical>) {
+    enum Kind {
+        Scale,
+        Move,
+        Select,
+    }
+    let kind = match &cx.storage.get(&CANVAS).Grab {
+        CanvasGrab::Target(TargetOption::Scale) => Kind::Scale,
+        CanvasGrab::Target(TargetOption::Move) => Kind::Move,
+        CanvasGrab::Target(TargetOption::Select { .. }) => Kind::Select,
+        _ => return,
+    };
+
+    if let Kind::Select = kind {
+        if let PressCandidate::Window(window) = candidate {
+            trigger_select(cx, window.clone());
+        }
+        return;
+    }
+
+    // Scale / Move both build the same candidate-geometry + anchor; Move also
+    // accepts a Group ice (Scale does not — `local_type` Group -> None there).
+    let allow_group = matches!(kind, Kind::Move);
+
+    let built: Option<(ActiveTransformCandidate, bool, bool)> = match candidate {
+        PressCandidate::IcedSurface(handle_id) => match local_type(cx.storage, *handle_id) {
+            Some(HandleIdLocalType::Group(group)) if allow_group => {
+                let group_windows = group_windows(cx, &group);
+                let bbox = group_union_box(cx, &group_windows);
+                let (horizontal, vertical) = anchor_flags(bbox, cursor);
+                let candidates = trigger_candidates(cx, group_windows);
+                Some((ActiveTransformCandidate::Window(candidates), horizontal, vertical))
+            }
+            Some(HandleIdLocalType::Group(_)) => None,
+            Some(HandleIdLocalType::Placeholder) => {
+                placeholder_candidate(cx, *handle_id, cursor)
+            }
+            None => None,
+        },
+        PressCandidate::Window(window) => {
+            let geo = window_box(cx, window);
+            let (horizontal, vertical) = anchor_flags(geo, cursor);
+            let candidates = trigger_candidates_select(cx, window.clone());
+            Some((ActiveTransformCandidate::Window(candidates), horizontal, vertical))
+        }
+    };
+
+    let Some((candidates, horizontal, vertical)) = built else { return };
+    let anchor = Anchor { Horizontal: horizontal, Vertical: vertical };
+    let grab = match kind {
+        Kind::Scale => CanvasGrab::Active(ActiveOption::Scaling {
+            candidates,
+            start_cursor: cursor,
+            Anchor: anchor,
+        }),
+        Kind::Move => CanvasGrab::Active(ActiveOption::Moving {
+            candidates,
+            start_cursor: cursor,
+            Anchor: anchor,
+        }),
+        Kind::Select => unreachable!(),
+    };
+    cx.write(&CANVAS_BUF, CanvasCmd::SetGrab(grab));
+}
+
+fn trigger_select(cx: &mut SystemCx, window: Window) {
+    let append = match &cx.storage.get(&CANVAS).Grab {
+        CanvasGrab::Target(TargetOption::Select { Append }) => *Append,
+        _ => return,
+    };
+    let select = cx.storage.get(&SELECT);
+    let next = if append { select.append(window) } else { select.set(window) };
+    announce_selection(cx.channels, SelectionCmd::Set(next));
+}
+
+/// Anchor flags from a rect + cursor: horizontal = right half, vertical = bottom
+/// half (matches the rim center comparison).
+fn anchor_flags(rect: Rectangle<i32, Logical>, cursor: Point<f64, Logical>) -> (bool, bool) {
+    let center_x = rect.loc.x as f64 + (rect.size.w as f64 / 2.0);
+    let center_y = rect.loc.y as f64 + (rect.size.h as f64 / 2.0);
+    (cursor.x >= center_x, cursor.y >= center_y)
+}
+
+/// A single window's storage-space rect (`element_location` + `geometry`).
+fn window_box(cx: &mut SystemCx, window: &Window) -> Rectangle<i32, Logical> {
+    let loc = cx
+        .platform
+        .as_deref_mut()
+        .and_then(|p| p.downcast_mut::<compositor_orchestration_draw_platform_base::platform::Platform>())
+        .and_then(|p| p.space().element_location(window))
+        .unwrap_or_default();
+    Rectangle { loc, size: window.geometry().size }
+}
+
+/// Inline group inner bbox: the union of group member-window geometries (no
+/// padding). The rim's `bbox_padded` pads symmetrically (no center shift) then
+/// `pad_y(125)` (asymmetric, shifts the bbox center up ~62.5px) and converts via
+/// Transform; the only consumer here is the anchor center, so this approximates
+/// the un-padded center — see report.
+fn group_union_box(cx: &mut SystemCx, windows: &[Window]) -> Rectangle<i32, Logical> {
+    let mut acc: Option<Rectangle<i32, Logical>> = None;
+    for w in windows {
+        let b = window_box(cx, w);
+        acc = Some(match acc {
+            Some(a) => a.merge(b),
+            None => b,
+        });
+    }
+    acc.unwrap_or_else(|| Rectangle { loc: Point::from((0, 0)), size: Size::from((0, 0)) })
+}
+
+/// Group member windows present in the space (mirrors `group_interface::windows`).
+fn group_windows(cx: &mut SystemCx, group: &Group) -> Vec<Window> {
+    let Some(platform) = cx
+        .platform
+        .as_deref_mut()
+        .and_then(|p| p.downcast_mut::<compositor_orchestration_draw_platform_base::platform::Platform>())
+    else {
+        return vec![];
+    };
+    platform
+        .space()
+        .elements()
+        .filter(|w| w.uuid().map(|u| group.window.contains(&u)).unwrap_or(false))
+        .cloned()
+        .collect()
+}
+
+/// Candidate geometries for the trigger window + the current selection (dedup by
+/// uuid) — mirrors `get_trigger_candidates_select`.
+fn trigger_candidates_select(
+    cx: &mut SystemCx,
+    trigger: Window,
+) -> Vec<(Window, Rectangle<i32, Logical>)> {
+    let selection: Vec<Window> = cx
+        .storage
+        .get(&SELECT)
+        .Selection
+        .iter()
+        .map(|w| w.as_ref().clone())
+        .collect();
+    let mut windows = vec![trigger];
+    windows.extend(selection);
+    trigger_candidates(cx, windows)
+}
+
+/// Snapshot each window's start geometry, deduped by uuid (mirrors
+/// `get_trigger_candidates`).
+fn trigger_candidates(
+    cx: &mut SystemCx,
+    windows: Vec<Window>,
+) -> Vec<(Window, Rectangle<i32, Logical>)> {
+    let mut candidates: Vec<(Window, Rectangle<i32, Logical>)> = vec![];
+    let mut added: HashSet<Uuid> = HashSet::new();
+    for window in &windows {
+        let Some(uuid) = window.uuid() else { continue };
+        if !added.insert(uuid) {
+            continue;
+        }
+        let geo = window_box(cx, window);
+        candidates.push((window.clone(), geo));
+    }
+    candidates
+}
+
+/// Placeholder scale/move candidate (mirrors the rim placeholder branch).
+fn placeholder_candidate(
+    cx: &mut SystemCx,
+    handle_id: HandleId,
+    cursor: Point<f64, Logical>,
+) -> Option<(ActiveTransformCandidate, bool, bool)> {
+    let placeholder = cx.storage.get(&PLACEHOLDER).visible.iter().find_map(|w| {
+        let active = w.0.restoration.is_none() && w.1.id == handle_id && !w.0.launching;
+        if !active {
+            return None;
+        }
+        Some(((w.0.position, w.0.size), w.0.uuid))
+    })?;
+    let ((position, size), placeholder_uuid) = placeholder;
+    let start_geo = Rectangle {
+        loc: Point::new(position.0, position.1),
+        size: Size::new(size.0, size.1),
+    };
+    let (horizontal, vertical) = anchor_flags(start_geo, cursor);
+    Some((
+        ActiveTransformCandidate::Placeholder(placeholder_uuid, start_geo),
+        horizontal,
+        vertical,
+    ))
+}
+
+enum HandleIdLocalType {
+    Placeholder,
+    Group(Group),
+}
+
+/// Resolve an iced handle to a placeholder or a group, reading `cx.storage`
+/// (mirrors the rim `HandleId::local_type`, which read `&Loop`).
+fn local_type(storage: &Storage, handle_id: HandleId) -> Option<HandleIdLocalType> {
+    let is_placeholder = storage.get(&PLACEHOLDER).visible.iter().any(|w| {
+        w.0.restoration.is_none() && w.1.id == handle_id && !w.0.launching
+    });
+    if is_placeholder {
+        return Some(HandleIdLocalType::Placeholder);
+    }
+    for item in &storage.get(&GROUP).group {
+        if item.Visibility.id() == Some(handle_id) {
+            return Some(HandleIdLocalType::Group(item.clone()));
+        }
+    }
+    None
+}
+
+/// Window visibility via group state (mirrors `CameraSystem`'s helper / the rim
+/// `DrawWindow::visible`): a window in a hidden group is not visible.
+fn window_visible(storage: &Storage, window: &Window) -> bool {
+    let Some(window_uuid) = window.uuid() else { return true };
+    let group_state = storage.get(&GROUP);
+    let Some(group_uuid) = group_state.window.get(&window_uuid) else { return true };
+    for group in &group_state.group {
+        if &group.id != group_uuid.as_ref() {
+            continue;
+        }
+        return matches!(group.Visibility, GroupVisibility::Visible(_));
+    }
+    false
+}

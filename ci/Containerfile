@@ -1,0 +1,74 @@
+# y5 CI image — lean Fedora 44.
+#
+# Goal: everything the pipeline needs to BUILD, TEST, LINT and measure COVERAGE of the
+# y5_compositor tree, and nothing else. Unlike environment.container/Containerfile this
+# image copies NO source and installs NO runtime apps (Chrome, terminals, GPU drivers) —
+# building only needs -devel headers + link libs, never a GPU at run time.
+#
+# Build deps mirror environment/install-deps.sh + the dev Containerfile's devel sets.
+# Used by both platforms: pushed to GHCR (GitHub) and the GitLab registry; every CI job
+# runs *inside* this image.
+FROM fedora:44
+
+# --- Toolchain & build essentials -----------------------------------------------------
+RUN --mount=type=cache,target=/var/cache/dnf \
+    dnf -y install \
+      rustup git clang clang-devel pkgconf-pkg-config \
+      gcc gcc-c++ make \
+      nodejs npm \
+      python3 python3-pip \
+      lcov llvm llvm-tools \
+      sccache jq \
+    && dnf clean all
+
+# --- Wayland / smithay core devel (build-time headers) --------------------------------
+RUN --mount=type=cache,target=/var/cache/dnf \
+    dnf -y install \
+      libinput-devel libseat-devel libxkbcommon-devel \
+      pixman-devel wayland-devel wayland-protocols-devel \
+      mesa-libgbm-devel libdisplay-info-devel systemd-devel \
+      pam-devel dbus-devel pulseaudio-libs-devel \
+    && dnf clean all
+
+# --- Graphics stack devel (link-time) + protobuf --------------------------------------
+RUN --mount=type=cache,target=/var/cache/dnf \
+    dnf -y install \
+      mesa-libEGL-devel mesa-libGL-devel libglvnd-devel \
+      protobuf protobuf-devel protobuf-compiler \
+    && dnf clean all
+
+# --- Developer-tool window (Tauri 2) GUI devel ----------------------------------------
+# Needed so compositor.installer/prepare.sh can build the dev-tool window component of the
+# install bundle (compositor.developer/.../logs/bundle.sh). Without these the bundle's
+# devtool step fails; node/npm above provide the Tauri CLI via the project's package.json.
+RUN --mount=type=cache,target=/var/cache/dnf \
+    dnf -y install \
+      webkit2gtk4.1-devel libsoup3-devel gtk3-devel \
+      librsvg2-devel libappindicator-gtk3-devel \
+    && dnf clean all
+
+# --- Rust stable toolchain via rustup (reliable component + llvm-cov control) ---------
+# rust-toolchain.toml (channel = "stable") in the checkout then resolves to this.
+ENV RUSTUP_HOME=/opt/rustup \
+    CARGO_HOME=/opt/cargo \
+    PATH=/opt/cargo/bin:/usr/bin:/bin
+RUN rustup-init -y --no-modify-path --default-toolchain stable \
+      --component rustfmt clippy llvm-tools-preview \
+    && rustc --version && cargo --version
+
+# --- CI tooling -----------------------------------------------------------------------
+# cargo-llvm-cov: the coverage engine. lcov_cobertura: lcov -> GitLab cobertura.
+# gh: promotion PRs + PR comments on GitHub. claude: the doc-review LLM job.
+RUN cargo install cargo-llvm-cov \
+    && pip install --no-cache-dir lcov_cobertura \
+    && npm install -g @anthropic-ai/claude-code
+RUN --mount=type=cache,target=/var/cache/dnf dnf -y install gh && dnf clean all
+
+# Enable the shared-cache compiler wrapper (documented "CI only" hook in
+# environment/README.md — keeps .cargo/config.toml untouched).
+ENV RUSTC_WRAPPER=sccache \
+    SCCACHE_DIR=/sccache \
+    CARGO_INCREMENTAL=0
+
+LABEL org.opencontainers.image.title="y5-ci" \
+      org.opencontainers.image.description="Lean Fedora 44 CI image for the y5 compositor"

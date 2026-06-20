@@ -1,0 +1,36 @@
+name: CI image
+
+# Build & push the lean Fedora 44 CI image to GHCR. Runs when the image inputs change
+# (or on demand). Every other workflow runs *inside* the tag this publishes.
+on:
+  push:
+    branches: [upstream-integration, upstream]
+    paths:
+      - ci/Containerfile
+      - ci/scripts/**
+      - .github/workflows/image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ci/Containerfile
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

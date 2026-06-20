@@ -1,0 +1,381 @@
+/* ============================================================
+   Nourish — night sky over a snowfield
+   Palette: --night ground, --snow text, --ice accent,
+   aurora gradient reserved for the hero signature only.
+   ============================================================ */
+
+:root{
+  --night:   #070b14;
+  --night-2: #0c1322;
+  --night-3: #131c30;
+  --snow:    #eef3fa;
+  --mist:    #93a3bc;
+  --ice:     #7dd3fc;
+  --ice-deep:#38bdf8;
+  --aurora-a:#5eead4;
+  --aurora-b:#818cf8;
+  --line:    rgba(147,163,188,.18);
+  --radius:  14px;
+  --display: "Sora", system-ui, sans-serif;
+  --body:    system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0;
+  background:var(--night);
+  color:var(--snow);
+  font-family:var(--body);
+  font-size:18px;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+
+h1,h2,h3{ font-family:var(--display); line-height:1.15; letter-spacing:-.01em; }
+h1{ font-size:clamp(2.4rem,6vw,4rem); font-weight:700; margin:.4em 0; }
+h2{ font-size:clamp(1.6rem,3.5vw,2.2rem); font-weight:600; margin:0 0 .5em; }
+h3{ font-size:1.15rem; font-weight:600; margin:1.4em 0 .4em; }
+p{ margin:.6em 0 1em; max-width:62ch; }
+a{ color:var(--ice); text-decoration:none; }
+a:hover{ text-decoration:underline; }
+:focus-visible{ outline:2px solid var(--ice); outline-offset:3px; border-radius:4px; }
+
+.muted{ color:var(--mist); }
+.eyebrow{
+  font-family:var(--display);
+  font-size:.8rem; font-weight:600;
+  text-transform:uppercase; letter-spacing:.14em;
+  color:var(--ice);
+  margin:0 0 .8em;
+}
+.lede{ font-size:1.2rem; color:var(--mist); max-width:54ch; }
+.note{ font-size:.95rem; color:var(--mist); border-left:3px solid var(--line); padding-left:1em; }
+
+.skip-link{
+  position:absolute; left:-999px; top:0;
+  background:var(--ice); color:var(--night);
+  padding:.5em 1em; border-radius:0 0 8px 0; z-index:100;
+}
+.skip-link:focus{ left:0; }
+
+/* ---------- Nav ---------- */
+.nav{
+  position:sticky; top:0; z-index:50;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:.8rem clamp(1rem,4vw,2.5rem);
+  background:rgba(7,11,20,.72);
+  backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line);
+}
+.nav-brand{ display:flex; align-items:baseline; gap:.5rem; color:var(--snow); }
+.nav-brand:hover{ text-decoration:none; }
+.nav-mark{ color:var(--ice); font-size:1.1em; }
+.nav-name{ font-family:var(--display); font-weight:700; font-size:1.15rem; }
+.nav-by{ font-size:.75rem; color:var(--mist); letter-spacing:.05em; }
+.nav-links{ display:flex; align-items:center; gap:clamp(.8rem,2.5vw,1.6rem); }
+.nav-links a{ color:var(--snow); font-size:.95rem; }
+.nav-links a[aria-current="page"]{ color:var(--ice); }
+
+/* ---------- Buttons ---------- */
+.btn{
+  display:inline-flex; align-items:center; gap:.5em;
+  font-family:var(--display); font-weight:600; font-size:.95rem;
+  padding:.65em 1.3em; border-radius:999px;
+  border:1px solid var(--line);
+  transition:transform .18s ease, background .18s ease, border-color .18s ease;
+}
+.btn:hover{ text-decoration:none; transform:translateY(-2px); }
+.btn-primary{
+  background:linear-gradient(120deg,var(--ice-deep),var(--ice));
+  color:var(--night); border-color:transparent;
+}
+.btn-primary:hover{ filter:brightness(1.08); }
+.btn-ghost{ color:var(--snow); background:rgba(255,255,255,.03); }
+.btn-ghost:hover{ border-color:var(--ice); }
+.text-link{ font-family:var(--display); font-weight:600; font-size:.95rem; }
+
+/* ---------- Hero & the aurora signature ---------- */
+.hero{
+  position:relative;
+  padding:clamp(4rem,10vh,7rem) clamp(1rem,4vw,2.5rem) 4rem;
+  text-align:center;
+  overflow:hidden;
+}
+.sky{ position:absolute; inset:0; pointer-events:none; }
+.aurora{
+  position:absolute; left:50%; top:-22%;
+  width:130vw; height:65%;
+  transform:translateX(-50%) rotate(-6deg);
+  background:
+    radial-gradient(55% 60% at 30% 50%, color-mix(in srgb, var(--aurora-a) 26%, transparent) 0%, transparent 70%),
+    radial-gradient(50% 55% at 62% 40%, color-mix(in srgb, var(--ice) 22%, transparent) 0%, transparent 70%),
+    radial-gradient(45% 60% at 82% 55%, color-mix(in srgb, var(--aurora-b) 20%, transparent) 0%, transparent 72%);
+  filter:blur(38px);
+  animation:aurora-drift 26s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift{
+  from{ transform:translateX(-54%) rotate(-7deg) scaleY(1); }
+  to  { transform:translateX(-46%) rotate(-4deg) scaleY(1.12); }
+}
+.stars{ position:absolute; inset:0; }
+.star{
+  position:absolute; border-radius:50%;
+  background:var(--snow);
+  animation:twinkle var(--tw,4s) ease-in-out infinite alternate;
+}
+@keyframes twinkle{ from{ opacity:var(--o1,.25);} to{ opacity:var(--o2,.8);} }
+
+.hero-inner{ position:relative; max-width:760px; margin:0 auto; }
+.hero-inner .lede{ margin-left:auto; margin-right:auto; }
+.hero-actions{
+  display:flex; gap:.9rem; justify-content:center; flex-wrap:wrap; margin-top:1.6rem;
+}
+.hero-video{
+  position:relative;
+  width:min(960px,100%);
+  margin:3.5rem auto 0;
+  aspect-ratio:16/9;
+  border-radius:var(--radius);
+  box-shadow:0 24px 80px rgba(0,0,0,.55), 0 0 0 1px var(--line);
+}
+
+/* ---------- Video & icon placeholders ---------- */
+.video-ph{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:.7rem;
+  background:
+    repeating-linear-gradient(45deg, transparent 0 14px, rgba(255,255,255,.018) 14px 28px),
+    linear-gradient(160deg,var(--night-2),var(--night-3));
+  border:1px dashed rgba(147,163,188,.35);
+  border-radius:var(--radius);
+  aspect-ratio:16/9;
+  color:var(--mist);
+}
+.ph-play{
+  width:0; height:0;
+  border-left:22px solid var(--mist);
+  border-top:13px solid transparent;
+  border-bottom:13px solid transparent;
+  opacity:.7; margin-left:5px;
+}
+.ph-label{ font-size:.85rem; letter-spacing:.04em; }
+.video-ph--mini{ aspect-ratio:16/10; }
+.video-ph--mini .ph-play{
+  border-left-width:14px; border-top-width:8px; border-bottom-width:8px;
+}
+.icon-ph{
+  display:flex; align-items:center; justify-content:center;
+  width:2.6rem; height:2.6rem;
+  border:1px dashed rgba(147,163,188,.4);
+  border-radius:50%;
+  color:var(--ice); font-size:1.1rem;
+}
+
+/* ---------- What is this ---------- */
+.what{
+  max-width:680px;
+  margin:0 auto;
+  padding:4rem clamp(1rem,4vw,2.5rem);
+  text-align:center;
+}
+.what p{ margin-inline:auto; color:var(--mist); }
+.what h2{ color:var(--snow); }
+
+/* ---------- Highlights ---------- */
+.highlight{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:clamp(2rem,5vw,4.5rem);
+  align-items:center;
+  max-width:1100px;
+  margin:0 auto;
+  padding:3.5rem clamp(1rem,4vw,2.5rem);
+}
+.highlight:nth-of-type(even) .highlight-media{ order:2; }
+.highlight-text p{ color:var(--mist); }
+
+/* ---------- Feature grid ---------- */
+.features{
+  max-width:1100px; margin:0 auto;
+  padding:4rem clamp(1rem,4vw,2.5rem);
+}
+.features-head{ text-align:center; margin-bottom:2.5rem; }
+.feature-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));
+  gap:1.2rem;
+}
+.feature-card{
+  display:flex; flex-direction:column; gap:.8rem;
+  background:var(--night-2);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  padding:1.2rem;
+  color:var(--snow);
+  transition:transform .2s ease, border-color .2s ease;
+}
+.feature-card:hover{
+  text-decoration:none;
+  transform:translateY(-4px);
+  border-color:rgba(125,211,252,.5);
+}
+.feature-card h3{ margin:0; font-size:1.05rem; }
+.feature-card p{ margin:0; font-size:.92rem; color:var(--mist); }
+.feature-card--soon{ opacity:.75; cursor:default; }
+.feature-card--soon:hover{ transform:none; border-color:var(--line); }
+.badge-soon{
+  align-self:flex-start;
+  font:600 .72rem var(--display);
+  letter-spacing:.08em; text-transform:uppercase;
+  color:var(--ice);
+  border:1px solid rgba(125,211,252,.45);
+  border-radius:999px;
+  padding:.25em .9em;
+}
+
+/* ---------- CTA & footer ---------- */
+.cta{
+  text-align:center;
+  max-width:680px; margin:0 auto;
+  padding:4.5rem clamp(1rem,4vw,2.5rem) 5rem;
+}
+.cta p{ margin-inline:auto; color:var(--mist); }
+.footer{
+  display:flex; align-items:center; justify-content:space-between;
+  flex-wrap:wrap; gap:1rem;
+  padding:1.6rem clamp(1rem,4vw,2.5rem);
+  border-top:1px solid var(--line);
+  color:var(--mist); font-size:.95rem;
+}
+.footer p{ margin:0; }
+.footer nav{ display:flex; gap:1.4rem; }
+.footer a{ color:var(--mist); }
+.footer a:hover{ color:var(--ice); }
+
+/* ---------- Guide page ---------- */
+.guide{ max-width:760px; margin:0 auto; padding:3rem clamp(1rem,4vw,2rem) 4rem; }
+.guide-hero{ margin-bottom:2.5rem; }
+.toc{ display:flex; flex-wrap:wrap; gap:.6rem; margin-top:1.4rem; }
+.toc a{
+  font-size:.85rem; font-family:var(--display);
+  border:1px solid var(--line); border-radius:999px;
+  padding:.35em 1em; color:var(--snow);
+}
+.toc a:hover{ border-color:var(--ice); text-decoration:none; }
+.guide-section{
+  padding:2.6rem 0;
+  border-top:1px solid var(--line);
+  scroll-margin-top:5rem;
+}
+.guide-section p{ color:var(--mist); }
+.guide-section h2{ color:var(--snow); }
+.code{
+  position:relative;
+  background:var(--night-2);
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:1.1rem 1.2rem;
+  overflow-x:auto;
+  font-size:.88rem; line-height:1.6;
+  color:var(--snow);
+}
+.code code{ font-family:ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace; }
+.copy{
+  position:absolute; top:.6rem; right:.6rem;
+  font:600 .75rem var(--display);
+  background:var(--night-3); color:var(--mist);
+  border:1px solid var(--line); border-radius:6px;
+  padding:.3em .8em; cursor:pointer;
+}
+.copy:hover{ color:var(--ice); border-color:var(--ice); }
+
+/* ---------- Scroll reveals (hidden only when JS is running) ---------- */
+.js .reveal{ opacity:0; transform:translateY(18px); transition:opacity .55s ease, transform .55s ease; }
+.js .reveal.in{ opacity:1; transform:none; }
+
+/* ---------- Responsive ---------- */
+@media (max-width:760px){
+  .highlight{ grid-template-columns:1fr; }
+  .highlight:nth-of-type(even) .highlight-media{ order:0; }
+  .nav-by{ display:none; }
+  .footer{ flex-direction:column; text-align:center; }
+}
+
+/* ---------- Reduced motion: static, fully visible ---------- */
+@media (prefers-reduced-motion: reduce){
+  html{ scroll-behavior:auto; }
+  .aurora,.star{ animation:none; }
+  .js .reveal{ opacity:1; transform:none; transition:none; }
+  .btn, .feature-card{ transition:none; }
+}
+
+/* ---------- Guide: keyboard keys, tables, lists, hero note ---------- */
+kbd{
+  display:inline-block;
+  font-family:var(--body);
+  font-size:.8em;
+  line-height:1;
+  padding:.25em .5em;
+  margin:0 .05em;
+  color:var(--snow);
+  background:var(--night-3);
+  border:1px solid var(--line);
+  border-bottom-width:2px;
+  border-radius:6px;
+  white-space:nowrap;
+}
+.kbd-table{
+  width:100%;
+  border-collapse:collapse;
+  margin:1.2rem 0;
+  font-size:.95rem;
+}
+.kbd-table th, .kbd-table td{
+  text-align:left;
+  padding:.6rem .8rem;
+  border-bottom:1px solid var(--line);
+  vertical-align:top;
+}
+.kbd-table th{
+  color:var(--mist);
+  font-weight:600;
+  font-size:.8rem;
+  text-transform:uppercase;
+  letter-spacing:.04em;
+}
+.kbd-table td:first-child{ white-space:nowrap; color:var(--snow); }
+.kbd-table tr:last-child td{ border-bottom:0; }
+.guide-section ul{
+  margin:1rem 0;
+  padding-left:1.2rem;
+  color:var(--snow);
+  line-height:1.7;
+}
+.guide-section ul li{ margin:.35rem 0; }
+.hero-note{
+  margin-top:1.1rem;
+  font-size:.85rem;
+  color:var(--mist);
+  letter-spacing:.01em;
+}
+
+/* ---------- Guide: per-section looping demo video (plays only while visible) ----------
+   Until the real clips land at assets/guide/<id>.{webm,mp4}, the element shows the same
+   themed box as the placeholders below. main.js plays/pauses it via IntersectionObserver. */
+.guide-media{ margin:1.4rem 0 1.6rem; }
+.guide-video{
+  display:block;
+  width:100%;
+  aspect-ratio:16/9;
+  border-radius:var(--radius);
+  border:1px solid var(--line);
+  background:
+    repeating-linear-gradient(45deg, transparent 0 14px, rgba(255,255,255,.018) 14px 28px),
+    linear-gradient(160deg,var(--night-2),var(--night-3));
+  object-fit:cover;
+}
+@media (prefers-reduced-motion: reduce){
+  /* main.js leaves these paused; keep them quiet and unobtrusive. */
+  .guide-video{ opacity:.92; }
+}

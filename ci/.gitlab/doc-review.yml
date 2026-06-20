@@ -1,0 +1,9 @@
+# PR/MR-only, advisory: Claude suggests stale/missing doc edits and posts them as an MR
+# note. Never edits files; never blocks the merge.
+doc-review:
+  stage: review
+  script:
+    - ci/scripts/doc-suggest.sh
+  allow_failure: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'

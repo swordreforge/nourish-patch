@@ -1,0 +1,385 @@
+//! Call-site-agnostic control of the **default audio sink** (output) via the
+//! PulseAudio client API. On Fedora / most modern distros this is served
+//! transparently by PipeWire's `pipewire-pulse`, so the same code drives both.
+//!
+//! Capabilities:
+//!   * On-demand polling          -> [`AudioController::refresh`] / [`AudioController::state`]
+//!   * Actions                    -> set / adjust volume, set / toggle mute
+//!   * Optional background watcher-> [`AudioController::start_watcher`] keeps the
+//!                                   cached state current automatically and fires
+//!                                   a `notify` callback whenever it changes.
+//!
+//! The PulseAudio threaded mainloop *is* the off-thread component, and it lives
+//! entirely inside this module — the caller never spawns a thread. The watcher
+//! is opt-in and unused until you call `start_watcher`.
+//!
+//! This type is intentionally not `Send`/`Sync`: create it and call its methods
+//! from one thread (your compositor's main/event-loop thread). PulseAudio does
+//! its own work on its internal mainloop thread; the shared snapshot it updates
+//! is behind an `Arc<Mutex<_>>`, so reading `state()` is always cheap and safe.
+
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+
+use libpulse_binding as pulse;
+use pulse::callbacks::ListResult;
+use pulse::context::introspect::Introspector;
+use pulse::context::subscribe::{Facility, InterestMaskSet};
+use pulse::context::{Context, FlagSet as ContextFlagSet, State as ContextState};
+use pulse::mainloop::threaded::Mainloop;
+use pulse::operation::{Operation, State as OpState};
+use pulse::volume::{ChannelVolumes, Volume};
+
+/// A snapshot of the default sink. `volume` is a fraction where `1.0` == 100%
+/// (`PA_VOLUME_NORM`). It can exceed `1.0` if you allow boost via
+/// [`AudioController::set_max_volume`].
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct AudioState {
+    pub sink_name: Option<String>,
+    pub description: Option<String>,
+    pub volume: f64,
+    pub muted: bool,
+}
+
+#[derive(Debug)]
+pub enum AudioError {
+    /// Could not allocate the PulseAudio mainloop.
+    Mainloop,
+    /// Could not allocate the PulseAudio context.
+    Context,
+    /// `pa_context_connect` returned an error.
+    Connect(pulse::error::PAErr),
+    /// The context reached the Failed/Terminated state during connect.
+    ConnectFailed,
+    /// No default sink is currently available (e.g. boot-time race).
+    NoDefaultSink,
+}
+
+impl std::fmt::Display for AudioError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AudioError::Mainloop => write!(f, "failed to create PulseAudio mainloop"),
+            AudioError::Context => write!(f, "failed to create PulseAudio context"),
+            AudioError::Connect(e) => write!(f, "failed to connect to PulseAudio: {e}"),
+            AudioError::ConnectFailed => write!(f, "PulseAudio context failed to become ready"),
+            AudioError::NoDefaultSink => write!(f, "no default sink available"),
+        }
+    }
+}
+impl std::error::Error for AudioError {}
+
+pub struct AudioController {
+    mainloop: Rc<RefCell<Mainloop>>,
+    context: Rc<RefCell<Context>>,
+    introspect: Introspector,
+    state: Arc<Mutex<AudioState>>,
+    /// Upper bound for set/adjust, as a fraction of NORMAL. `1.0` caps at 100%
+    /// (safer UX); set to e.g. `1.5` to allow boost like most desktops.
+    max_volume: f64,
+}
+
+impl AudioController {
+    /// Connect to the default PulseAudio/PipeWire server and start the
+    /// background mainloop. Blocks until the connection is ready (or fails).
+    pub fn new(app_name: &str) -> Result<Self, AudioError> {
+        let mainloop = Rc::new(RefCell::new(Mainloop::new().ok_or(AudioError::Mainloop)?));
+        let context = Rc::new(RefCell::new(
+            Context::new(&*mainloop.borrow(), app_name).ok_or(AudioError::Context)?,
+        ));
+
+        // The context state callback signals the mainloop so our `wait()` loop
+        // below wakes up on every state transition. We use raw pointers inside
+        // the callback to side-step RefCell's borrow flag (the callback runs on
+        // the mainloop thread; PulseAudio serialises access internally).
+        {
+            let ml = Rc::clone(&mainloop);
+            let ctx = Rc::clone(&context);
+            context
+                .borrow_mut()
+                .set_state_callback(Some(Box::new(move || {
+                    let st = unsafe { (*ctx.as_ptr()).get_state() };
+                    if matches!(
+                        st,
+                        ContextState::Ready | ContextState::Failed | ContextState::Terminated
+                    ) {
+                        unsafe { (*ml.as_ptr()).signal(false) };
+                    }
+                })));
+        }
+
+        context
+            .borrow_mut()
+            .connect(None, ContextFlagSet::NOFLAGS, None)
+            .map_err(AudioError::Connect)?;
+
+        mainloop.borrow_mut().lock();
+        mainloop
+            .borrow_mut()
+            .start()
+            .map_err(|_| AudioError::ConnectFailed)?;
+
+        // Wait until ready.
+        loop {
+            let st = context.borrow().get_state();
+            match st {
+                ContextState::Ready => break,
+                ContextState::Failed | ContextState::Terminated => {
+                    mainloop.borrow_mut().unlock();
+                    mainloop.borrow_mut().stop();
+                    return Err(AudioError::ConnectFailed);
+                }
+                _ => mainloop.borrow_mut().wait(),
+            }
+        }
+        // Drop the connect-time callback; the watcher (if started) installs its own.
+        context.borrow_mut().set_state_callback(None);
+
+        let introspect = context.borrow().introspect();
+        mainloop.borrow_mut().unlock();
+
+        let me = AudioController {
+            mainloop,
+            context,
+            introspect,
+            state: Arc::new(Mutex::new(AudioState::default())),
+            max_volume: 1.0,
+        };
+
+        // Seed the cache so callers have a value immediately. A missing sink at
+        // construction time is not fatal — it may appear later.
+        let _ = me.refresh();
+        Ok(me)
+    }
+
+    /// Cap for set/adjust as a fraction of NORMAL (1.0 = 100%). Default `1.0`.
+    pub fn set_max_volume(&mut self, max: f64) {
+        self.max_volume = max.max(0.0);
+    }
+
+    /// The last known snapshot. Cheap; never touches PulseAudio.
+    pub fn state(&self) -> AudioState {
+        self.state.lock().unwrap().clone()
+    }
+
+    /// Synchronously re-query the default sink, update the cache, and return it.
+    pub fn refresh(&self) -> Result<AudioState, AudioError> {
+        let snap = self.query_default_sink()?;
+        *self.state.lock().unwrap() = snap.clone();
+        Ok(snap)
+    }
+
+    /// Set absolute volume as a fraction of NORMAL (`0.0..=max_volume`). Balance
+    /// between channels is preserved by scaling the existing per-channel volumes.
+    pub fn set_volume(&self, fraction: f64) -> Result<AudioState, AudioError> {
+        let target = fraction.clamp(0.0, self.max_volume);
+        let (name, mut cv, _mute) = self.query_raw_default_sink()?;
+        let target_vol = Volume((target * Volume::NORMAL.0 as f64).round() as u32);
+        // scale() sets the loudest channel to `target_vol` and scales the rest
+        // proportionally, preserving L/R balance. Falls back to a flat set.
+        if cv.scale(target_vol).is_none() {
+            cv.set(cv.len().max(1), target_vol);
+        }
+        self.run(|introspect, done| {
+            introspect.set_sink_volume_by_name(&name, &cv, Some(done))
+        })?;
+        self.refresh()
+    }
+
+    /// Relative volume change, e.g. `+0.05` for +5%, `-0.05` for -5%.
+    pub fn adjust_volume(&self, delta: f64) -> Result<AudioState, AudioError> {
+        let cur = self.refresh()?.volume;
+        self.set_volume(cur + delta)
+    }
+
+    pub fn set_muted(&self, muted: bool) -> Result<AudioState, AudioError> {
+        let (name, _cv, _m) = self.query_raw_default_sink()?;
+        self.run(|introspect, done| {
+            introspect.set_sink_mute_by_name(&name, muted, Some(done))
+        })?;
+        self.refresh()
+    }
+
+    pub fn toggle_mute(&self) -> Result<AudioState, AudioError> {
+        let cur = self.refresh()?.muted;
+        self.set_muted(!cur)
+    }
+
+    /// Opt-in: subscribe to sink/server changes and keep [`state`] current
+    /// automatically. `notify` is invoked (on the mainloop thread) after each
+    /// update — keep it tiny and non-blocking. The idiomatic compositor pattern
+    /// is to make `notify` a `calloop::ping::Ping::ping()` (which is `Send`) and
+    /// read `state()` from the ping handler on your main thread.
+    ///
+    /// [`state`]: AudioController::state
+    pub fn start_watcher<F>(&self, notify: F) -> Result<(), AudioError>
+    where
+        F: FnMut() + Send + 'static,
+    {
+        let ml = Rc::clone(&self.mainloop);
+        let state = Arc::clone(&self.state);
+        let introspect = Rc::new(self.context.borrow().introspect());
+        let notify = Rc::new(RefCell::new(notify));
+
+        ml.borrow_mut().lock();
+
+        self.context
+            .borrow_mut()
+            .set_subscribe_callback(Some(Box::new(move |facility, _op, _idx| {
+                // We only care about sink changes and default-sink changes.
+                if !matches!(facility, Some(Facility::Sink) | Some(Facility::Server)) {
+                    return;
+                }
+                // Re-resolve the default sink fully asynchronously (no waiting:
+                // we are already on the mainloop thread). Nested callbacks update
+                // the shared snapshot and fire `notify` only on an actual change.
+                let introspect_inner = Rc::clone(&introspect);
+                let state = Arc::clone(&state);
+                let notify = Rc::clone(&notify);
+                introspect.get_server_info(move |info| {
+                    let Some(name) = info.default_sink_name.as_ref().map(|c| c.to_string()) else {
+                        return;
+                    };
+                    let state = Arc::clone(&state);
+                    let notify = Rc::clone(&notify);
+                    introspect_inner.get_sink_info_by_name(&name, move |res| {
+                        if let ListResult::Item(info) = res {
+                            let snap = sink_info_to_state(info);
+                            let mut guard = state.lock().unwrap();
+                            if *guard != snap {
+                                *guard = snap;
+                                drop(guard);
+                                (notify.borrow_mut())();
+                            }
+                        }
+                    });
+                });
+            })));
+
+        self.context
+            .borrow_mut()
+            .subscribe(InterestMaskSet::SINK | InterestMaskSet::SERVER, |_success| {});
+
+        ml.borrow_mut().unlock();
+        Ok(())
+    }
+
+    // ----- internal synchronous helpers -----
+
+    /// Resolve the default sink name + current per-channel volumes + mute,
+    /// synchronously. Returns raw `ChannelVolumes` so callers can preserve balance.
+    fn query_raw_default_sink(&self) -> Result<(String, ChannelVolumes, bool), AudioError> {
+        let name = self.query_default_sink_name()?;
+        let out: Rc<RefCell<Option<(ChannelVolumes, bool)>>> = Rc::new(RefCell::new(None));
+        {
+            let out = Rc::clone(&out);
+            let ml = Rc::clone(&self.mainloop);
+            self.run_op(|introspect| {
+                let out = Rc::clone(&out);
+                let ml = Rc::clone(&ml);
+                introspect.get_sink_info_by_name(&name, move |res| {
+                    if let ListResult::Item(info) = res {
+                        *out.borrow_mut() = Some((info.volume, info.mute));
+                    }
+                    if !matches!(res, ListResult::Item(_)) {
+                        unsafe { (*ml.as_ptr()).signal(false) };
+                    }
+                })
+            });
+        }
+        let (cv, mute) = out.borrow_mut().take().ok_or(AudioError::NoDefaultSink)?;
+        Ok((name, cv, mute))
+    }
+
+    fn query_default_sink(&self) -> Result<AudioState, AudioError> {
+        let name = self.query_default_sink_name()?;
+        let out: Rc<RefCell<Option<AudioState>>> = Rc::new(RefCell::new(None));
+        {
+            let out = Rc::clone(&out);
+            let ml = Rc::clone(&self.mainloop);
+            self.run_op(|introspect| {
+                let out = Rc::clone(&out);
+                let ml = Rc::clone(&ml);
+                introspect.get_sink_info_by_name(&name, move |res| {
+                    match res {
+                        ListResult::Item(info) => *out.borrow_mut() = Some(sink_info_to_state(info)),
+                        _ => unsafe { (*ml.as_ptr()).signal(false) },
+                    }
+                })
+            });
+        }
+        let result = out.borrow_mut().take().ok_or(AudioError::NoDefaultSink);
+        result
+    }
+
+    fn query_default_sink_name(&self) -> Result<String, AudioError> {
+        let out: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        {
+            let out = Rc::clone(&out);
+            let ml = Rc::clone(&self.mainloop);
+            self.run_op(|introspect| {
+                let out = Rc::clone(&out);
+                let ml = Rc::clone(&ml);
+                introspect.get_server_info(move |info| {
+                    *out.borrow_mut() = info.default_sink_name.as_ref().map(|c| c.to_string());
+                    unsafe { (*ml.as_ptr()).signal(false) };
+                })
+            });
+        }
+        let result = out.borrow_mut().take().ok_or(AudioError::NoDefaultSink);
+        result
+    }
+
+    /// Run an introspect operation to completion under the mainloop lock,
+    /// driving `wait()` until the operation leaves the Running state.
+    fn run_op<T: ?Sized, B>(&self, build: B)
+    where
+        B: FnOnce(&Introspector) -> Operation<T>,
+    {
+        self.mainloop.borrow_mut().lock();
+        let op = build(&self.introspect);
+        while op.get_state() == OpState::Running {
+            self.mainloop.borrow_mut().wait();
+        }
+        self.mainloop.borrow_mut().unlock();
+    }
+
+    /// Run a "set" style operation (callback is `FnMut(bool)` reporting success)
+    /// to completion, signalling the mainloop from the success callback.
+    fn run<B>(&self, build: B) -> Result<(), AudioError>
+    where
+        B: FnOnce(&mut Introspector, Box<dyn FnMut(bool) + 'static>) -> Operation<dyn FnMut(bool)>,
+    {
+        self.mainloop.borrow_mut().lock();
+        let mut introspect = self.context.borrow().introspect();
+        let ml = Rc::clone(&self.mainloop);
+        let done: Box<dyn FnMut(bool) + 'static> = Box::new(move |_success| {
+            unsafe { (*ml.as_ptr()).signal(false) };
+        });
+        let op = build(&mut introspect, done);
+        while op.get_state() == OpState::Running {
+            self.mainloop.borrow_mut().wait();
+        }
+        self.mainloop.borrow_mut().unlock();
+        Ok(())
+    }
+}
+
+impl Drop for AudioController {
+    fn drop(&mut self) {
+        self.mainloop.borrow_mut().lock();
+        self.context.borrow_mut().set_subscribe_callback(None);
+        self.context.borrow_mut().disconnect();
+        self.mainloop.borrow_mut().unlock();
+        self.mainloop.borrow_mut().stop();
+    }
+}
+
+fn sink_info_to_state(info: &pulse::context::introspect::SinkInfo) -> AudioState {
+    AudioState {
+        sink_name: info.name.as_ref().map(|c| c.to_string()),
+        description: info.description.as_ref().map(|c| c.to_string()),
+        volume: info.volume.max().0 as f64 / Volume::NORMAL.0 as f64,
+        muted: info.mute,
+    }
+}

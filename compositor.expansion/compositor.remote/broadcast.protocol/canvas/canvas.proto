@@ -1,0 +1,9 @@
+syntax = "proto3";
+package y5.compositor.rpc.protocol.broadcast.canvas;
+
+
+message Selection {
+  message Notify {
+    int32 size = 1;
+  }
+}

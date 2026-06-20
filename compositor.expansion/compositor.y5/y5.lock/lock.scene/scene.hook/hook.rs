@@ -1,0 +1,53 @@
+use std::time::Duration;
+
+use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::utils::{Physical, Point, Scale, Size};
+use compositor_orchestration_core_state_base::Loop;
+use compositor_orchestration_core_state_base::state::Status;
+use compositor_y5_surface_protocol_base::protocol::SurfaceMessageType;
+
+pub fn hook(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physical>) {
+    let Status::Locked { pending, time, .. } = state.inner.status else {
+        abort!();
+    };
+    if pending {
+        // CHECK: Instead of doing this inside a render hook- insert timer to calloop
+        if time.elapsed()
+            > Duration::from_secs_f64(compositor_y5_lock_state_transition::transition::PERIOD)
+        {
+            compositor_y5_lock_interface_base::interface::lock_done(state, renderer, size);
+        }
+    } else {
+        load_incoming_buffer(state, renderer, size);
+    }
+}
+
+fn load_incoming_buffer(state: &mut Loop, x: &mut GlesRenderer, size: Size<i32, Physical>) {
+    {
+        // Drain the channel into the buffer (single slot borrow).
+        let surface = state.inner.surface_mut();
+        'drain: while true {
+            if let Ok(ok) = surface.surface_message_buffer_channel.1.try_recv() {
+                info!("Buffer item receive");
+                surface.surface_message_buffer.push(ok);
+            } else {
+                break 'drain;
+            }
+        }
+    }
+
+    // Takes the buffer by draining it
+    let taken = std::mem::take(&mut state.inner.surface_mut().surface_message_buffer);
+
+    // Delegate actions
+    for item in taken {
+        info!("Delegate message...: {:?}", item);
+        // CHECK: This omits non lock screen messages.
+        match (item.message) {
+            SurfaceMessageType::LockScreen(lockscreen_message) => {
+                compositor_y5_lock_protocol_base::base::handle(state, x, size, lockscreen_message)
+            }
+            _ => {}
+        }
+    }
+}

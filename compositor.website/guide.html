@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guide — Nourish</title>
+<meta name="description" content="How to install Nourish and learn its features, step by step.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="page-guide">
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="nav">
+  <a class="nav-brand" href="index.html">
+    <span class="nav-mark" aria-hidden="true">✻</span>
+    <span class="nav-name">Nourish</span>
+    <span class="nav-by">by Snowies</span>
+  </a>
+  <nav class="nav-links" aria-label="Main">
+    <a href="index.html">Home</a>
+    <a href="guide.html" aria-current="page">Guide</a>
+    <a class="btn btn-ghost" href="https://discord.gg/snowies" rel="noopener">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M20.32 4.37a19.8 19.8 0 0 0-4.93-1.51 13.78 13.78 0 0 0-.64 1.28 18.27 18.27 0 0 0-5.5 0 12.64 12.64 0 0 0-.64-1.28c-1.71.29-3.37.8-4.93 1.51A20.26 20.26 0 0 0 .1 18.06a19.9 19.9 0 0 0 6.07 3.03c.49-.66.92-1.37 1.3-2.1a12.94 12.94 0 0 1-2.05-.98c.17-.12.34-.25.5-.38a14.2 14.2 0 0 0 12.16 0c.17.13.33.26.5.38-.65.39-1.34.71-2.05.98.37.73.81 1.44 1.3 2.1a19.84 19.84 0 0 0 6.07-3.03 20.2 20.2 0 0 0-2.58-13.69ZM8.02 15.33c-1.18 0-2.16-1.08-2.16-2.42 0-1.33.95-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.95 2.42-2.16 2.42Zm7.96 0c-1.18 0-2.16-1.08-2.16-2.42 0-1.33.95-2.42 2.16-2.42 1.21 0 2.18 1.1 2.16 2.42 0 1.34-.95 2.42-2.16 2.42Z"/></svg>
+      Discord
+    </a>
+    <a class="btn btn-ghost" href="https://github.com/snowies/nourish" rel="noopener">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+      GitHub
+    </a>
+  </nav>
+</header>
+
+<main id="main" class="guide">
+
+<header class="guide-hero">
+  <h1>The Nourish guide</h1>
+  <p class="lede">Everything from your first install to the small tricks
+  that make the day smoother. Written for people, not programmers.</p>
+  <p class="note">Nourish is young — version 0.0.1. A few things below are
+  honestly marked <em>not yet</em> so you know what to expect.</p>
+  <nav class="toc" aria-label="On this page">
+    <a href="#install">Install</a>
+    <a href="#canvas">Canvas</a>
+    <a href="#zoom">Zoom</a>
+    <a href="#groups">Groups</a>
+    <a href="#placeholders">Restoring</a>
+    <a href="#worlds">Worlds</a>
+    <a href="#zones">Zones</a>
+    <a href="#navigation">Navigation</a>
+    <a href="#capture">Capture</a>
+    <a href="#launcher">Launcher</a>
+    <a href="#shortcuts">Shortcuts</a>
+    <a href="#mxmaster">MX Master</a>
+    <a href="#lockscreen">Lock screen</a>
+    <a href="#backdrop">Backdrop</a>
+    <a href="#monitors">Screens</a>
+    <a href="#renderer">Renderer</a>
+    <a href="#graphics">Graphics cards</a>
+    <a href="#wayland">Wayland &amp; X11</a>
+    <a href="#performance">Performance</a>
+    <a href="#personalize">Personalize</a>
+    <a href="#opensource">Open source</a>
+  </nav>
+</header>
+
+<!-- ========== INSTALL ========== -->
+<article class="guide-section" id="install">
+  <h2>Installing Nourish</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/install.{webm,mp4} (+ poster assets/guide/install.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/install.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/install.webm" type="video/webm">
+      <source src="assets/guide/install.mp4" type="video/mp4">
+    </video>
+  </figure>
+
+  <h3>What you need</h3>
+  <p>Nourish ships today as a prebuilt package for <strong>Fedora 44</strong>
+  — a free, popular, beginner-friendly version of Linux. If your computer
+  runs Windows or macOS, you'd install Fedora alongside it or on a spare
+  machine first. You'll also want a reasonably modern graphics card (NVIDIA,
+  Intel, or AMD). Don't want to commit your whole machine yet? You can run
+  Nourish in a window <em>inside</em> your existing Linux desktop to try it.</p>
+
+  <h3>The one-command install</h3>
+  <p>Open the Terminal app and paste this. It downloads the prebuilt
+  release, unpacks it, and launches a friendly interactive installer —
+  it only pulls the runtime libraries Nourish needs (no developer
+  toolchain), and it's safe to re-run.</p>
+  <pre class="code"><button class="copy" data-copy>Copy</button><code>curl -fsSL https://nourish.snowies.com/release/latest/fedora44/package.tar.gz | tar -xz && y5-install/install.sh</code></pre>
+
+  <p>Want to see exactly what it would do, changing nothing?</p>
+  <pre class="code"><button class="copy" data-copy>Copy</button><code>curl -fsSL https://nourish.snowies.com/release/latest/fedora44/package.tar.gz | tar -xz && y5-install/install.sh --dry-run</code></pre>
+
+  <p>The installer detects your graphics card and pre-selects the right
+  driver, installs the runtime packages with your permission (it uses
+  <code>sudo</code> for the system steps), and sets up the login session
+  entries. You can also optionally install the MX Master gesture daemon,
+  the developer log-viewer, and the lock-screen policy.</p>
+
+  <h3>From source (for the curious)</h3>
+  <p>The full source lives on
+  <a href="https://github.com/snowies/nourish" rel="noopener">GitHub</a>.
+  Nourish is a set of independent Cargo workspaces rather than one — there's
+  no top-level <code>Cargo.toml</code> — and the build goes through the
+  helper scripts under <code>environment/</code>:</p>
+  <pre class="code"><button class="copy" data-copy>Copy</button><code>git clone https://github.com/snowies/nourish
+cd nourish
+# Build + run the compositor (debug) via the helper script:
+environment.container/run.sh debug</code></pre>
+  <p class="note">Building from source needs the Rust toolchain plus the
+  system development packages (Wayland, libinput, Mesa/Vulkan, ffmpeg, …).
+  The repository's <code>ci/</code> and <code>environment/</code> folders
+  list everything, and the prebuilt install above needs none of it.</p>
+
+  <h3>Starting Nourish</h3>
+  <p>Log out, and on your login screen pick a <strong>"Y5…"</strong> session
+  from the session menu (usually a small gear icon). Log back in — and
+  you're home.</p>
+
+  <p class="note">Stuck? Open an issue on
+  <a href="https://github.com/snowies/nourish" rel="noopener">GitHub</a>
+  or say hello on <a href="https://discord.gg/snowies" rel="noopener">Discord</a>
+  and a human will help.</p>
+</article>
+
+<!-- ========== FEATURE GUIDES (anchors match home page cards) ========== -->
+
+<article class="guide-section" id="canvas">
+  <h2>One endless canvas</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/canvas.{webm,mp4} (+ poster assets/guide/canvas.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/canvas.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/canvas.webm" type="video/webm">
+      <source src="assets/guide/canvas.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>In Nourish, your screen isn't the whole desktop — it's a window onto a
+  much bigger one. Every app lives somewhere on a single endless canvas, and
+  you pan around it the way you'd look around a real desk. New windows open
+  centred on wherever you're looking, and they stay put until you move them;
+  nothing ever auto-rearranges behind your back.</p>
+  <p><strong>To pan:</strong> hold <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>Alt</kbd>
+  and drag, or use an MX Master gesture (see below). <strong>To move a
+  window:</strong> hold <kbd>Super</kbd> and drag it. <strong>To resize
+  one:</strong> hold <kbd>Super</kbd>+<kbd>Shift</kbd> and drag.</p>
+</article>
+
+<article class="guide-section" id="zoom">
+  <h2>Pin-sharp zoom</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/zoom.{webm,mp4} (+ poster assets/guide/zoom.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/zoom.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/zoom.webm" type="video/webm">
+      <source src="assets/guide/zoom.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Scroll the wheel to zoom — the point under your cursor stays put, so
+  you zoom toward whatever you're looking at. Zoom out for the big picture
+  or dive into a single window, and everything stays crisp while you do it,
+  video included. Press <kbd>Super</kbd>+<kbd>F</kbd> at any time to frame
+  all your windows at once.</p>
+</article>
+
+<article class="guide-section" id="groups">
+  <h2>Groups</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/groups.{webm,mp4} (+ poster assets/guide/groups.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/groups.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/groups.webm" type="video/webm">
+      <source src="assets/guide/groups.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Select a few windows (hold <kbd>Super</kbd>+<kbd>Alt</kbd> and drag a
+  box around them), then press <kbd>Super</kbd>+<kbd>G</kbd> to group them.
+  Windows in a group can be aligned (left, centre, right, top, bottom),
+  distributed evenly, and stacked — design-tool tidiness in one move. A
+  window can go fullscreen <em>within</em> its group, and a whole group can
+  collapse down to just its name: hidden but never lost. Use
+  <kbd>Super</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd> to add the current window to
+  an existing group.</p>
+</article>
+
+<article class="guide-section" id="placeholders">
+  <h2>Restoring windows</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/placeholders.{webm,mp4} (+ poster assets/guide/placeholders.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/placeholders.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/placeholders.webm" type="video/webm">
+      <source src="assets/guide/placeholders.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>When a window closes — or its app crashes — Nourish leaves a
+  placeholder of the same size in the same spot, remembering how the app
+  was launched. Tap it and the window comes back exactly where it was. Many
+  apps pick up their own last state on their own: a terminal returns to its
+  last folder, a browser to its open tabs.</p>
+  <p>Better still, your whole layout is <strong>saved to disk</strong> (under
+  your user state folder), so it survives a logout, a crash, or a full
+  reboot — not just an app closing. Log back in and your canvas is waiting,
+  windows and placeholders where you left them.</p>
+</article>
+
+<article class="guide-section" id="worlds">
+  <h2>Worlds</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/worlds.{webm,mp4} (+ poster assets/guide/worlds.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/worlds.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/worlds.webm" type="video/webm">
+      <source src="assets/guide/worlds.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>One endless canvas is usually enough — but sometimes you want a clean
+  one. Press <kbd>Super</kbd>+<kbd>K</kbd> and a gentle 3D picker rises up,
+  each of your canvases shown as a tile. Use the arrow keys (or the mouse)
+  to pick one and press <kbd>Enter</kbd> to fly into it;
+  <kbd>Esc</kbd> (or <kbd>Super</kbd>+<kbd>K</kbd> again) backs out without
+  switching.</p>
+  <p>Each world is a complete, separate canvas with its own windows — keep
+  "work" and "play" apart, or give a project its own space. Worlds remember
+  themselves between sessions, just like everything else. (They're a bit
+  like virtual desktops, but spatial: you fly between whole canvases rather
+  than flipping a switch.)</p>
+</article>
+
+<article class="guide-section" id="zones">
+  <h2>Zones</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/zones.{webm,mp4} (+ poster assets/guide/zones.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/zones.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/zones.webm" type="video/webm">
+      <source src="assets/guide/zones.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Zones are saved spots on your canvas you can jump to instantly — a
+  writing corner, a project table, a reading nook. Press <kbd>F1</kbd>–<kbd>F6</kbd>
+  to recall a saved spot, and <kbd>Shift</kbd>+<kbd>F1</kbd>–<kbd>F6</kbd> to
+  save your current view into that slot. Six favourite places, each one key
+  away from wherever you are.</p>
+</article>
+
+<article class="guide-section" id="navigation">
+  <h2>Navigation</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/navigation.{webm,mp4} (+ poster assets/guide/navigation.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/navigation.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/navigation.webm" type="video/webm">
+      <source src="assets/guide/navigation.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Move focus to the next window in any direction with a single keystroke,
+  and the view smoothly glides and settles on it — no hunting, no reaching
+  for the mouse.</p>
+  <table class="kbd-table">
+    <thead><tr><th>Keys</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Super</kbd>+<kbd>←</kbd>&nbsp;<kbd>→</kbd>&nbsp;<kbd>↑</kbd>&nbsp;<kbd>↓</kbd></td><td>Glide to the next window left / right / up / down</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>Alt</kbd>+arrows</td><td>An alternate navigation pass (handy in dense layouts)</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>F</kbd></td><td>Zoom to fit every window in view</td></tr>
+    </tbody>
+  </table>
+</article>
+
+<article class="guide-section" id="capture">
+  <h2>Capture</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/capture.{webm,mp4} (+ poster assets/guide/capture.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/capture.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/capture.webm" type="video/webm">
+      <source src="assets/guide/capture.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Press <kbd>Super</kbd>+<kbd>S</kbd> to open the capture setup overlay.
+  Nourish can capture four ways:</p>
+  <ul>
+    <li><strong>One or more windows</strong> — pick them on the canvas; the capture tracks them live.</li>
+    <li><strong>A region of the canvas</strong> — draw a box in the world; it follows your pan and zoom.</li>
+    <li><strong>A region of the screen</strong> — a fixed rectangle of pixels.</li>
+    <li><strong>The whole screen.</strong></li>
+  </ul>
+  <p>Save a crisp <strong>PNG screenshot</strong>, or record a smooth
+  <strong>hardware-encoded H.264 video</strong> (using your GPU's NVENC on
+  NVIDIA, or VAAPI on AMD/Intel). There's a <strong>transparent-background
+  toggle</strong> too — turn the wallpaper off and capture just your windows
+  over nothing, perfect for overlays. Screenshots go to your Pictures
+  folder, or you can pick a location with the standard Save dialog.</p>
+  <p class="note">Sharing your screen live <em>into</em> another app
+  (Zoom, the browser, OBS) isn't wired up yet — that's a separate Wayland
+  protocol still on the list. Nourish's own recorder works today.</p>
+</article>
+
+<article class="guide-section" id="launcher">
+  <h2>The launcher</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/launcher.{webm,mp4} (+ poster assets/guide/launcher.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/launcher.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/launcher.webm" type="video/webm">
+      <source src="assets/guide/launcher.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Press <kbd>Super</kbd>+<kbd>N</kbd> to open the built-in application
+  launcher, find your app by typing, and start it from the keyboard — the
+  new window opens centred on your current view.</p>
+</article>
+
+<article class="guide-section" id="shortcuts">
+  <h2>Shortcuts that just work</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/shortcuts.{webm,mp4} (+ poster assets/guide/shortcuts.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/shortcuts.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/shortcuts.webm" type="video/webm">
+      <source src="assets/guide/shortcuts.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Nourish ships with a small, carefully chosen set of shortcuts that
+  covers everything — moving, zooming, grouping, jumping — designed to be
+  comfortable for long days. Here's the whole set; it fits on one page.</p>
+  <table class="kbd-table">
+    <thead><tr><th>Keys</th><th>Action</th></tr></thead>
+    <tbody>
+      <tr><td><kbd>Super</kbd>+<kbd>N</kbd></td><td>Open the application launcher</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>S</kbd></td><td>Open the screen-capture overlay</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>L</kbd></td><td>Lock the screen</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>K</kbd></td><td>Open / close the worlds picker</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>F</kbd></td><td>Zoom to fit all windows</td></tr>
+      <tr><td><kbd>Super</kbd>+arrows</td><td>Navigate to the next window in a direction</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>G</kbd></td><td>Group the selected windows</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>Alt</kbd>+<kbd>G</kbd></td><td>Add the current window to a group</td></tr>
+      <tr><td><kbd>F1</kbd>–<kbd>F6</kbd></td><td>Recall a saved zone</td></tr>
+      <tr><td><kbd>Shift</kbd>+<kbd>F1</kbd>–<kbd>F6</kbd></td><td>Save the current view as a zone</td></tr>
+      <tr><td><kbd>F11</kbd></td><td>Exit fullscreen on the focused window</td></tr>
+      <tr><td><kbd>Super</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd></td><td>Quit / restart the graphical session</td></tr>
+    </tbody>
+  </table>
+  <p>Mouse "tools" come from holding a modifier while you drag:
+  <kbd>Super</kbd> moves a window, <kbd>Super</kbd>+<kbd>Shift</kbd> scales
+  it, <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>Alt</kbd> pans the canvas,
+  <kbd>Super</kbd>+<kbd>Alt</kbd> box-selects windows. The media keys on
+  your keyboard (volume, play/pause, next/previous) work as you'd expect.</p>
+  <p class="note">When you run Nourish in a window inside another desktop
+  (the "try it safely" mode), <kbd>Super</kbd> becomes <kbd>Ctrl</kbd> so it
+  doesn't clash with your host. Shortcuts aren't user-editable yet — that's
+  on the roadmap.</p>
+</article>
+
+<article class="guide-section" id="mxmaster">
+  <h2>MX Master gestures</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/mxmaster.{webm,mp4} (+ poster assets/guide/mxmaster.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/mxmaster.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/mxmaster.webm" type="video/webm">
+      <source src="assets/guide/mxmaster.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>If you use a Logitech MX Master mouse, its gesture button becomes a
+  compass: hold it and flick in any direction to glide that way across the
+  canvas. The installer can set up the small background helper that makes
+  this work (along with the udev rule it needs); after that there's nothing
+  to configure.</p>
+</article>
+
+<article class="guide-section" id="lockscreen">
+  <h2>The lock screen</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/lockscreen.{webm,mp4} (+ poster assets/guide/lockscreen.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/lockscreen.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/lockscreen.webm" type="video/webm">
+      <source src="assets/guide/lockscreen.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Press <kbd>Super</kbd>+<kbd>L</kbd> to lock. Your session is held
+  safely behind a real password prompt (checked the proper way, through
+  your system's PAM login) until you type your password. And there's a
+  little surprise we'd rather you discover than read about — so lock your
+  screen and see.</p>
+</article>
+
+<article class="guide-section" id="backdrop">
+  <h2>A living backdrop</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/backdrop.{webm,mp4} (+ poster assets/guide/backdrop.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/backdrop.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/backdrop.webm" type="video/webm">
+      <source src="assets/guide/backdrop.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Behind your windows sits a gentle parallax scene — not a flat
+  wallpaper, but a soft 3D backdrop that drifts as you pan and zoom around
+  the canvas, giving you a quiet sense of place and motion. It's drawn by
+  its own little graphics engine and stays well out of your way.</p>
+</article>
+
+<article class="guide-section" id="monitors">
+  <h2>Multiple screens</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/monitors.{webm,mp4} (+ poster assets/guide/monitors.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/monitors.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/monitors.webm" type="video/webm">
+      <source src="assets/guide/monitors.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Today Nourish drives a <strong>single monitor</strong>. Multi-display
+  support — each screen its own view onto the canvas — is planned but not
+  wired up yet, so for now a second monitor won't light up. If you're
+  trying Nourish in a window inside another desktop, that window is your
+  one screen.</p>
+</article>
+
+<article class="guide-section" id="renderer">
+  <h2>The graphics engine</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/renderer.{webm,mp4} (+ poster assets/guide/renderer.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/renderer.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/renderer.webm" type="video/webm">
+      <source src="assets/guide/renderer.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Nourish draws your desktop on the GPU. It has two graphics backends —
+  <strong>Vulkan</strong> (the modern technology behind today's games) and
+  <strong>GLES</strong> (a well-established, broadly compatible one) — and
+  it's built to use the best one your machine supports, falling back
+  automatically so the canvas works as widely as possible.</p>
+  <p class="note">An honest note for the technically minded: on real
+  hardware (a full login session, not the try-it-in-a-window mode), GLES is
+  the path that's fully wired to the screen today; the Vulkan scan-out path
+  is still being finished. Both run in the windowed/nested mode. You pick
+  your preference in the settings file (<a href="#personalize">below</a>).</p>
+</article>
+
+<article class="guide-section" id="graphics">
+  <h2>Any graphics card</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/graphics.{webm,mp4} (+ poster assets/guide/graphics.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/graphics.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/graphics.webm" type="video/webm">
+      <source src="assets/guide/graphics.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Nourish works with NVIDIA cards as well as Intel and AMD graphics
+  (through the Mesa drivers that come with Linux). The installer detects
+  which one you have and pulls the matching driver for you. Video recording
+  uses your card's hardware encoder — NVENC on NVIDIA, VAAPI on AMD and
+  Intel.</p>
+</article>
+
+<article class="guide-section" id="wayland">
+  <h2>Built on Wayland</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/wayland.{webm,mp4} (+ poster assets/guide/wayland.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/wayland.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/wayland.webm" type="video/webm">
+      <source src="assets/guide/wayland.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Nourish is built natively on Wayland — the modern standard for how
+  Linux draws to your screen — rather than translating from older
+  technology. That's part of why it feels smooth and stays secure, and it
+  means Wayland-native apps run as first-class citizens. For the
+  technically curious, here's a sample of what it speaks:</p>
+  <table class="kbd-table">
+    <thead><tr><th>Area</th><th>Supported</th></tr></thead>
+    <tbody>
+      <tr><td>Core</td><td>wl_compositor / subcompositor, wl_shm, wl_seat, wl_output, xdg-output</td></tr>
+      <tr><td>Windows</td><td>xdg-shell, xdg-decoration, xdg-activation, xdg-foreign, wlr-layer-shell</td></tr>
+      <tr><td>Display</td><td>presentation-time, viewporter, fractional-scale, single-pixel-buffer, cursor-shape, color-management</td></tr>
+      <tr><td>Input</td><td>pointer-constraints, relative-pointer, text-input / input-method, tablet manager</td></tr>
+      <tr><td>Graphics</td><td>linux-dmabuf (import + export), linux-drm-syncobj (explicit sync)</td></tr>
+      <tr><td>Clipboard</td><td>wl_data_device (copy/paste + drag-and-drop)</td></tr>
+    </tbody>
+  </table>
+  <h3>Older (X11) apps</h3>
+  <p>Some apps haven't moved to Wayland yet. A built-in compatibility layer
+  for those (XWayland) <strong>isn't included yet</strong>, so a handful of
+  X11-only apps won't open for now. It's on the roadmap; most modern apps
+  are already Wayland-native and run fine today.</p>
+</article>
+
+<article class="guide-section" id="performance">
+  <h2>Light on resources</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/performance.{webm,mp4} (+ poster assets/guide/performance.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/performance.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/performance.webm" type="video/webm">
+      <source src="assets/guide/performance.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Nourish leans on your graphics chip to do the heavy lifting, so the
+  canvas stays fluid even with a lot of windows open. It's young software,
+  so it's still being tuned — but the architecture is built for a calm,
+  steady frame rate rather than flashy effects.</p>
+</article>
+
+<article class="guide-section" id="personalize">
+  <h2>Make it yours</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/personalize.{webm,mp4} (+ poster assets/guide/personalize.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/personalize.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/personalize.webm" type="video/webm">
+      <source src="assets/guide/personalize.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>All of Nourish's settings live in one readable file at
+  <code>~/.config/y5.compositor/settings.json</code>. There's also a small
+  interactive settings editor you can run to change them with a friendly
+  menu instead of editing by hand. Here's what the file looks like:</p>
+  <pre class="code"><button class="copy" data-copy>Copy</button><code>{
+  "renderer": "vulkan",          // "vulkan" or "gles"
+  "renderer_fallback": true,     // fall back to GLES if Vulkan can't start
+  "renderer_sync": "",           // "", "infence", or "kms" frame sync
+  "hdr": false,                  // HDR output (Vulkan only)
+  "depth": 10,                   // colour depth: 8 (SDR) or 10 (deep colour)
+  "vrr": true,                   // variable refresh rate (adaptive sync)
+  "render_node": "/dev/dri/renderD128",
+  "desktop_name": "Y5Compositor",
+  "log_level": "info,warn,error",
+  "capture_encoder": ""          // "" = auto (NVENC), or "vaapi" for AMD/Intel
+}</code></pre>
+  <p class="note">Settings are read once when Nourish starts, so save the
+  file and start a fresh session to apply changes (live reload isn't in
+  yet). The installer writes a sensible default for you during setup.</p>
+</article>
+
+<article class="guide-section" id="opensource">
+  <h2>Free &amp; open source</h2>
+  <figure class="guide-media">
+    <!-- Drop the recorded clip at assets/guide/opensource.{webm,mp4} (+ poster assets/guide/opensource.jpg).
+         Loops, muted; plays only while on-screen (main.js IntersectionObserver). -->
+    <video class="guide-video" loop muted playsinline preload="none"
+           poster="assets/guide/opensource.jpg"
+           aria-label="Short looping demo for this section (plays while visible)">
+      <source src="assets/guide/opensource.webm" type="video/webm">
+      <source src="assets/guide/opensource.mp4" type="video/mp4">
+    </video>
+  </figure>
+  <p>Nourish is free to use, share, and study. The complete source code
+  lives on <a href="https://github.com/snowies/nourish" rel="noopener">GitHub</a>,
+  where you can report problems, suggest ideas, or contribute. It's
+  dual-licensed under <strong>MIT</strong> or <strong>Apache-2.0</strong> —
+  the standard, permissive pair used across the Rust ecosystem — so you can
+  use it under whichever of the two suits you. No account, no ads, no
+  strings.</p>
+</article>
+
+</main>
+
+<footer class="footer">
+  <p><span class="nav-mark" aria-hidden="true">✻</span> Nourish is
+  a <a href="https://snowies.com">Snowies</a> project.</p>
+  <nav aria-label="Footer">
+    <a href="index.html">Home</a>
+    <a href="guide.html">Guide</a>
+    <a href="https://github.com/snowies/nourish" rel="noopener">GitHub</a>
+    <a href="https://discord.gg/snowies" rel="noopener">Discord</a>
+    <a href="#opensource">Free forever</a>
+    <a href="#opensource">MIT / Apache-2.0</a>
+  </nav>
+</footer>
+
+<script src="main.js"></script>
+</body>
+</html>

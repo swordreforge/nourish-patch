@@ -1,0 +1,14 @@
+[package]
+name = "compositor_y5_picker_seat_dispatch"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+compositor_developer_debug_instance_record = { workspace = true }
+compositor_orchestration_core_state_base = { workspace = true }
+compositor_y5_picker_seat_keyboard = { workspace = true }
+compositor_y5_picker_seat_pointer = { workspace = true }
+smithay = { workspace = true }
+
+[lib]
+path = "lib.rs"

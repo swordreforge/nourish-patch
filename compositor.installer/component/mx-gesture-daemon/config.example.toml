@@ -1,0 +1,25 @@
+# mx-gesture-daemon example config
+# Copy to: ~/.config/mx-gesture-daemon/config.toml
+
+# Optional. Substring match on product name.
+# device = "MX Master 3S"
+
+# Optional. Hex PID override, e.g. "B034" (MX Master 3S over Bluetooth).
+# pid = "B034"
+
+# How many raw mouse counts must accumulate before a direction fires.
+# Smaller = more sensitive. ~80 is a sane default; try 50–150.
+threshold = 250
+min_interval_ms = 500
+# Fire a "tap" action when the button is pressed and released without
+# crossing the threshold.
+fire_tap = true
+
+# Shell commands run via `sh -c`. Use whatever your desktop expects.
+# Examples below are X11; adapt to wtype/ydotool/dbus for Wayland.
+[actions]
+up    = "xdotool key super"             # show overview
+down  = "xdotool key super+d"           # show desktop
+left  = "xdotool key alt+Left"          # back
+right = "xdotool key alt+Right"         # forward
+tap   = "xdotool key XF86AudioPlay"     # play/pause

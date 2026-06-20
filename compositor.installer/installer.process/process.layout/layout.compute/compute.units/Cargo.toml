@@ -1,0 +1,11 @@
+[package]
+name = "compositor_installer_process_layout_compute_units"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+compositor_installer_process_layout_compute_policy = { path = "../compute.policy" }
+compositor_installer_process_layout_compute_stage = { path = "../compute.stage" }
+
+[lib]
+path = "lib.rs"

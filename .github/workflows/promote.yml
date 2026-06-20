@@ -1,0 +1,43 @@
+name: Promote
+
+# When upstream-integration is green, open/update an upstream-integration -> upstream PR
+# whose body is the generated deployment-notes report (tests, coverage, lint, link-drift,
+# doc suggestions). upstream is a protected branch (its push triggers Publish) — a human
+# approves and merges. This workflow never merges.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [upstream-integration]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  open-pr:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: upstream-integration
+      - name: Download CI coverage report
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          name: coverage-report
+          path: .ci-coverage
+        continue-on-error: true
+      - name: Compose report + open promotion PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PROMOTION_SOURCE: upstream-integration
+          PROMOTION_TARGET: upstream
+        run: |
+          ci/scripts/gen-report.sh > /tmp/report.md
+          ci/scripts/open-promotion-pr.sh /tmp/report.md

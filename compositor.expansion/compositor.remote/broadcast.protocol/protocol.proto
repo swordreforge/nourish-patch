@@ -1,0 +1,3 @@
+syntax = "proto3";
+package y5.compositor.rpc.protocol.broadcast;
+import "canvas/canvas.proto";

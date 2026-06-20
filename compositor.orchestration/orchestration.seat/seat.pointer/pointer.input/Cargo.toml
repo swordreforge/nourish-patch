@@ -1,0 +1,32 @@
+[package]
+name = "compositor_orchestration_seat_pointer_input"
+version = "0.0.1"
+edition = "2024"
+
+
+[dependencies]
+uuid = { workspace = true }
+compositor_y5_camera_state_base = { workspace = true }
+compositor_y5_lock_system_base = { workspace = true }
+compositor_y5_camera_system_base = { workspace = true }
+compositor_y5_surface_system_base = { workspace = true }
+compositor_y5_canvas_system_base = { workspace = true }
+compositor_orchestration_seat_system_pointer = { workspace = true }
+compositor_support_system_input_event_base = { workspace = true }
+compositor_orchestration_input_drive_base = { workspace = true }
+compositor_orchestration_draw_layer_base.workspace = true
+compositor_y5_window_interface_draw.workspace = true
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+bitflags = { workspace = true }
+smithay = { workspace = true }
+compositor_orchestration_core_state_base.workspace = true
+compositor_y5_canvas_input_keyboard.workspace = true
+compositor_y5_surface_interface_base.workspace = true
+compositor_y5_window_interface_record.workspace = true
+compositor_y5_camera_transform_translate.workspace = true
+compositor_monitor_compositor_iced_base.workspace = true
+compositor_support_iced_core_engine_base.workspace = true
+compositor_support_smithay_dispatch_state_base.workspace = true
+[lib]
+path = "lib.rs"

@@ -1,0 +1,125 @@
+
+# Operating system installations: Fedora 43
+FROM fedora:43 as OS
+# Use BuildKit cache mount for DNF to speed up subsequent builds
+# --- [ Category: Toolchain & Build Essentials ] ---
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/cache/libdnf5 \
+    dnf -y update && \
+    dnf -y install \
+    cargo \
+    rust \
+    git \
+    clang-devel \
+    pkgconfig \
+    pam-devel \
+    pkgconf-pkg-config
+
+
+#    dnf -y update && \
+# --- [ Category: Wayland & Smithay Core Devel ] ---
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/cache/libdnf5 \
+    dnf -y install \
+    libdisplay-info-devel \
+    libinput-devel \
+    libseat-devel \
+    libxkbcommon-devel \
+    pixman-devel \
+    systemd-devel \
+    wayland-devel \
+    wayland-protocols-devel
+
+#    dnf -y update && \
+# --- [ Category: Graphics Stack & Drivers ] ---
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/cache/libdnf5 \
+    dnf -y install \
+    egl-wayland \
+    vulkan-loader-devel \
+    libglvnd-egl \
+    libglvnd-gles \
+    libglvnd-opengl \
+    libva-nvidia-driver \
+    libvdpau \
+    libgbm \
+    mesa-dri-drivers \
+    mesa-libEGL \
+    mesa-libEGL-devel \
+    mesa-libgbm-devel \
+    vulkan-loader
+
+#    dnf -y update && \
+# --- [ Category: XWayland & X11 Compatibility ] ---
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/cache/libdnf5 \
+    dnf -y install \
+    libX11-devel \
+    libXfont2-devel \
+    libXres-devel \
+    libXv-devel \
+    libxcb-devel \
+    xcb-util-cursor-devel \
+    xorg-x11-server-Xwayland-devel
+
+#    dnf -y update && \
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/cache/libdnf5 \
+    dnf -y install  \
+    protobuf protobuf-devel protobuf-compiler
+
+
+
+#    dnf -y update && \
+# --- [ Category: Testing & Debugging Tools ] ---
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/cache/libdnf5 \
+    dnf -y install  \
+    alacritty \
+    egl-utils \
+    foot \
+    glmark2 \
+    glx-utils \
+    mesa-demos \
+    wev \
+    weston-terminal \
+    xterm \
+    mesa-demos glx-utils
+
+# Manually create the repo file
+RUN echo -e "[google-chrome]\n\
+name=google-chrome\n\
+baseurl=http://dl.google.com/linux/chrome/rpm/stable/x86_64\n\
+enabled=1\n\
+gpgcheck=1\n\
+gpgkey=https://dl.google.com/linux/linux_signing_key.pub" > /etc/yum.repos.d/google-chrome.repo
+
+RUN --mount=type=cache,target=/var/cache/dnf \
+    --mount=type=cache,target=/var/cache/libdnf5 \
+    dnf -y install google-chrome-stable
+
+RUN dnf install -y dbus-devel pulseaudio-libs-devel
+
+# Operation system configuration
+from OS as OS_CONFIG
+# Create the socket directory for XWayland
+RUN mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
+
+from OS_CONFIG as entry
+WORKDIR /working.directory
+COPY --exclude=target vendor ./vendor
+COPY --exclude=compositor/target compositor ./compositor
+COPY --exclude=compositor.rpc/target compositor.rpc ./compositor.rpc
+COPY --exclude=compositor.monitor/target compositor.monitor ./compositor.monitor
+COPY --exclude=compositor.support/target compositor.support ./compositor.support
+COPY --exclude=compositor.loader/target compositor.loader ./compositor.loader
+COPY --exclude=compositor.background/target compositor.background ./compositor.background
+COPY --exclude=compositor.introspection/target compositor.introspection ./compositor.introspection
+#RUN git clone https://github.com/Smithay/smithay.git
+WORKDIR /working.directory/compositor.loader/loader.main/main.execute/execute
+#RUN cargo build --release
+
+env RUSTFLAGS "-A warnings"
+RUN cargo build
+#RUN cargo build
+RUN cargo build --release --no-default-features --features backend-native

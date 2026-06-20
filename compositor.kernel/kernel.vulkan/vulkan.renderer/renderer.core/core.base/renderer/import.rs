@@ -1,0 +1,218 @@
+//! The `Import*` trait family: dmabuf (sampled client buffers), SHM/mem (CPU
+//! upload), and the EGL stub. GPU work is delegated to the `memory.*`
+//! piece-crates; this module wraps the results into `VulkanTexture`s.
+
+use ash::vk;
+use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::allocator::{Buffer, Fourcc};
+use smithay::backend::renderer::{ImportDma, ImportDmaWl, ImportMem, ImportMemWl};
+use smithay::utils::{Buffer as BufferCoord, Rectangle, Size};
+use std::sync::Arc;
+
+use crate::error::VulkanError;
+use crate::texture::{TextureInner, VulkanTexture};
+use super::VulkanRenderer;
+
+impl VulkanRenderer {
+    /// One-shot layout transition for a freshly imported sampled image
+    /// (`UNDEFINED → SHADER_READ_ONLY_OPTIMAL`).
+    pub(super) fn transition_to_sampled(&self, image: vk::Image) -> Result<(), VulkanError> {
+        let cmd = Self::alloc_command_buffer(&self.dev, self.command_pool)?;
+        let dev = &self.dev.device;
+        unsafe {
+            dev.begin_command_buffer(
+                cmd,
+                &vk::CommandBufferBeginInfo::default()
+                    .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+            )?;
+            let barrier = vk::ImageMemoryBarrier2::default()
+                .src_stage_mask(vk::PipelineStageFlags2::TOP_OF_PIPE)
+                .dst_stage_mask(vk::PipelineStageFlags2::FRAGMENT_SHADER)
+                .dst_access_mask(vk::AccessFlags2::SHADER_SAMPLED_READ)
+                .old_layout(vk::ImageLayout::UNDEFINED)
+                .new_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image(image)
+                .subresource_range(vk::ImageSubresourceRange {
+                    aspect_mask: vk::ImageAspectFlags::COLOR,
+                    base_mip_level: 0,
+                    level_count: 1,
+                    base_array_layer: 0,
+                    layer_count: 1,
+                });
+            let barriers = [barrier];
+            let dep = vk::DependencyInfo::default().image_memory_barriers(&barriers);
+            dev.cmd_pipeline_barrier2(cmd, &dep);
+            dev.end_command_buffer(cmd)?;
+            let cmds = [cmd];
+            let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+            dev.queue_submit(self.queue.queue, &[submit], vk::Fence::null())?;
+            dev.device_wait_idle()?;
+            dev.free_command_buffers(self.command_pool, &cmds);
+        }
+        Ok(())
+    }
+}
+
+impl ImportDma for VulkanRenderer {
+    fn dmabuf_formats(&self) -> smithay::backend::allocator::format::FormatSet {
+        const FOURCCS: &[Fourcc] = &[
+            Fourcc::Argb8888,
+            Fourcc::Xrgb8888,
+            Fourcc::Abgr8888,
+            Fourcc::Xbgr8888,
+        ];
+        compositor_kernel_vulkan_format_modifier_base::modifier::render_formats(&self.phd, FOURCCS)
+    }
+
+    fn import_dmabuf(
+        &mut self,
+        dmabuf: &Dmabuf,
+        _damage: Option<&[Rectangle<i32, BufferCoord>]>,
+    ) -> Result<VulkanTexture, VulkanError> {
+        let imported =
+            compositor_kernel_vulkan_memory_import_base::import::import(&self.dev, &self.phd, dmabuf)
+                .map_err(|e| VulkanError::Import(e.to_string()))?;
+        self.transition_to_sampled(imported.image)?;
+        Ok(VulkanTexture {
+            inner: Arc::new(TextureInner {
+                device: self.dev.device.clone(),
+                image: imported.image,
+                memory: imported.memory,
+                view: imported.view,
+                format: imported.format,
+                fourcc: Some(dmabuf.format().code),
+                width: imported.size.0,
+                height: imported.size.1,
+                owns_memory: true,
+            }),
+            surf: [0.0; 4],
+        })
+    }
+}
+
+// Wayland dmabuf import uses the provided default (get_dmabuf + import_dmabuf).
+impl ImportDmaWl for VulkanRenderer {
+    fn import_dma_buffer(
+        &mut self,
+        buffer: &smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer,
+        surface: Option<&smithay::wayland::compositor::SurfaceData>,
+        damage: &[Rectangle<i32, BufferCoord>],
+    ) -> Result<VulkanTexture, VulkanError> {
+        let dmabuf = smithay::wayland::dmabuf::get_dmabuf(buffer)
+            .map_err(|e| VulkanError::Import(format!("get_dmabuf: {e}")))?;
+        let mut tex = ImportDma::import_dmabuf(self, dmabuf, Some(damage))?;
+        if self.hdr_enabled {
+            if let Some(s) = surface {
+                tex.set_surf(crate::shm_cache::surf_from_surface(s));
+            }
+        }
+        Ok(tex)
+    }
+}
+
+impl ImportMem for VulkanRenderer {
+    fn import_memory(
+        &mut self,
+        data: &[u8],
+        format: Fourcc,
+        size: Size<i32, BufferCoord>,
+        _flipped: bool,
+    ) -> Result<VulkanTexture, VulkanError> {
+        let up = compositor_kernel_vulkan_memory_upload_base::upload::create_and_upload(
+            &self.dev,
+            &self.phd,
+            self.command_pool,
+            self.queue.queue,
+            &mut self.shm_staging,
+            data,
+            format,
+            size,
+        )?;
+        Ok(VulkanTexture {
+            inner: Arc::new(TextureInner {
+                device: self.dev.device.clone(),
+                image: up.image,
+                memory: up.memory,
+                view: up.view,
+                format: up.format,
+                fourcc: Some(format),
+                width: up.width,
+                height: up.height,
+                owns_memory: true,
+            }),
+            surf: [0.0; 4],
+        })
+    }
+
+    fn update_memory(
+        &mut self,
+        texture: &VulkanTexture,
+        data: &[u8],
+        region: Rectangle<i32, BufferCoord>,
+    ) -> Result<(), VulkanError> {
+        // In-place re-upload of the damaged region into the existing image
+        // (reuses the device-local allocation rather than allocating a new one).
+        compositor_kernel_vulkan_memory_upload_base::upload::update_region(
+            &self.dev,
+            &self.phd,
+            self.command_pool,
+            self.queue.queue,
+            &mut self.shm_staging,
+            texture.inner.image,
+            (texture.inner.width, texture.inner.height),
+            data,
+            region,
+        )
+    }
+
+    fn mem_formats(&self) -> Box<dyn Iterator<Item = Fourcc>> {
+        Box::new(
+            [
+                Fourcc::Argb8888,
+                Fourcc::Xrgb8888,
+                Fourcc::Abgr8888,
+                Fourcc::Xbgr8888,
+            ]
+            .into_iter(),
+        )
+    }
+}
+
+impl ImportMemWl for VulkanRenderer {
+    fn import_shm_buffer(
+        &mut self,
+        buffer: &smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer,
+        surface: Option<&smithay::wayland::compositor::SurfaceData>,
+        damage: &[Rectangle<i32, BufferCoord>],
+    ) -> Result<VulkanTexture, VulkanError> {
+        crate::shm_cache::import_shm_buffer(self, buffer, surface, damage)
+    }
+}
+
+// Required so `VulkanRenderer: ImportAll` (smithay's EGL-featured blanket impl
+// needs ImportEgl). wl_drm/EGL client buffers are legacy; modern clients use
+// dmabuf (implemented) or SHM (implemented). egl_reader returns None, so the
+// ImportAll dispatcher never routes EGL buffers here in practice.
+impl smithay::backend::renderer::ImportEgl for VulkanRenderer {
+    fn bind_wl_display(
+        &mut self,
+        _display: &smithay::reexports::wayland_server::DisplayHandle,
+    ) -> Result<(), smithay::backend::egl::Error> {
+        Ok(())
+    }
+
+    fn unbind_wl_display(&mut self) {}
+
+    fn egl_reader(&self) -> Option<&smithay::backend::egl::display::EGLBufferReader> {
+        None
+    }
+
+    fn import_egl_buffer(
+        &mut self,
+        _buffer: &smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer,
+        _surface: Option<&smithay::wayland::compositor::SurfaceData>,
+        _damage: &[Rectangle<i32, BufferCoord>],
+    ) -> Result<VulkanTexture, VulkanError> {
+        Err(VulkanError::Unimplemented("import_egl_buffer (wl_drm/EGL)"))
+    }
+}

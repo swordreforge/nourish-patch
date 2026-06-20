@@ -1,0 +1,46 @@
+syntax = "proto3";
+package y5.compositor.rpc.protocol.client.navigator;
+
+
+message Travel {
+  oneof action {
+    ZoomReset.Request reset = 1;
+    ViewDirection.Request view_direction = 2;
+  }
+}
+
+message TravelResponse {}
+
+
+message ZoomReset {
+  message Request {
+
+  }
+}
+
+
+message ViewDirection {
+  message Direction {
+    oneof direction {
+      bool left = 1;
+      bool right = 2;
+      bool up = 3;
+      bool down = 4;
+      ViewDirection.Diagonal angle = 5;
+    }
+  }
+  message Diagonal {
+    float angle = 1;
+    float snap = 2;
+  }
+
+  message Request {
+      ViewDirection.Direction direction = 1;
+      bool alternative = 2;
+  }
+}
+
+service Navigator {
+  rpc travel (Travel) returns (TravelResponse);
+}
+

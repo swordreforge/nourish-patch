@@ -1,0 +1,17 @@
+syntax = "proto3";
+package y5.compositor.rpc.message.server;
+
+message BroadcastString {
+  string message_to_broadcast = 1;
+}
+message BroadcastNumber {
+  int32 message_to_broadcast = 1;
+}
+
+message BroadcastEvent {
+  // This tells the protobuf compiler to generate a Rust Enum!
+  oneof event {
+    BroadcastString broadcast_str = 1;
+    BroadcastNumber broadcast_num = 2;
+  }
+}
