@@ -138,6 +138,7 @@ jobs:
             .ci-coverage/coverage.lcov
             .ci-coverage/cobertura.xml
             .ci-coverage/coverage.svg
+            .ci-coverage/coverage.txt
             .ci-coverage/coverage-crates.md
             .ci-coverage/html
       - name: PR coverage comment (per-crate table)
