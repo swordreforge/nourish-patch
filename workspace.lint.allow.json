@@ -238,5 +238,8 @@
  ],
  "compositor.orchestration/orchestration.seat/seat.pointer/pointer.texture": [
   "size"
+ ],
+ "compositor.introspection/introspection.restoration/restoration.state/state.match": [
+  "size"
  ]
 }
