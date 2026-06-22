@@ -5,6 +5,10 @@ use compositor_y5_placeholder_state_base::state::PlaceholderState;
 use smithay::utils::{Physical, Point, Size};
 use std::any::Any;
 use uuid::Uuid;
+use compositor_orchestration_launch_broadcast_base::broadcast::event::EXECUTED;
+use compositor_introspection_execution_launch_types::types::LaunchOutcome;
+use compositor_introspection_execution_launch_policy::policy::REQUIRE_PID;
+use compositor_y5_placeholder_record_base::placeholder::PlaceholderLaunchToken;
 
 // The slot tokens live with the state (in `placeholder.state`) so the persistence
 // document can reference them without a crate cycle; re-export for legacy sites.
@@ -38,6 +42,9 @@ pub fn announce_placeholder_geometry(
 
 enum PlaceholderCmd {
     SetGeometry(Uuid, Option<(i32, i32)>, Option<(i32, i32)>),
+    /// Record the activation token / PID for a launched placeholder so the next
+    /// matching window restores into it. Set from the Executed launch event.
+    SetRestoration(Uuid, PlaceholderLaunchToken),
 }
 y5_buffer!(PLACEHOLDER_BUF: PlaceholderCmd);
 
@@ -53,6 +60,8 @@ impl System for PlaceholderSystem {
     fn register(&mut self, builder: &mut WorldBuilder) {
         builder.storage.insert(&PLACEHOLDER, PlaceholderState::new());
         builder.receive(&PLACEHOLDER_GEOMETRY, Self::on_geometry);
+        // The general launch-completed event; we match on our own placeholder ids.
+        builder.receive(&EXECUTED, Self::on_executed);
     }
 
     /// Persist this world's placeholders (slim launch-plan prior data) into the
@@ -100,11 +109,37 @@ impl System for PlaceholderSystem {
                     });
                 });
             }
+            // Slot half of the launch flow: stamp the restoration token/PID onto
+            // the visible placeholder identified by `uuid` (the correlation). The
+            // restoration matchers try the token before the PID, so the token-only
+            // path (REQUIRE_PID == false) still restores.
+            PlaceholderCmd::SetRestoration(uuid, token) => {
+                cx.transact(false, |storage| {
+                    storage.get_mut(&PLACEHOLDER_MUT).modify_visible(&uuid, |ph| {
+                        ph.restoration = Some(token.clone());
+                    });
+                });
+            }
         }
     }
 }
 
 impl PlaceholderSystem {
+    /// React to the general Executed launch event. Match on our own placeholder
+    /// id (the outcome's correlation) and stamp the restoration via the buffer;
+    /// outcomes for other originators (correlation `None`/foreign) are ignored.
+    fn on_executed(&mut self, cx: &mut SystemCx, outcome: &LaunchOutcome) {
+        let Some(uuid) = outcome.correlation else { return };
+        if outcome.result.is_err() {
+            return;
+        }
+        let token = PlaceholderLaunchToken {
+            token: outcome.token.clone(),
+            child: if REQUIRE_PID { outcome.pid } else { None },
+        };
+        cx.write(&PLACEHOLDER_BUF, PlaceholderCmd::SetRestoration(uuid, token));
+    }
+
     /// Announced by CanvasSystem during a placeholder move/scale drag. Apply the
     /// slot half via the buffer; resolve the iced handle from the slot and
     /// announce the registry half to the surface system (rim parity:

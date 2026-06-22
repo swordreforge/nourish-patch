@@ -179,6 +179,13 @@ compositor_developer_stats_registry_counter = { path = "../compositor.developer/
 compositor_developer_stats_registry_hdr = { path = "../compositor.developer/developer.stats/stats.registry/registry.hdr" }
 compositor_developer_stats_registry_meta = { path = "../compositor.developer/developer.stats/stats.registry/registry.meta" }
 compositor_developer_stats_registry_snapshot = { path = "../compositor.developer/developer.stats/stats.registry/registry.snapshot" }
+compositor_introspection_execution_launch_build = { path = "../compositor.introspection/introspection.execution/execution.launch/launch.build" }
+compositor_introspection_execution_launch_dispatch = { path = "../compositor.introspection/introspection.execution/execution.launch/launch.dispatch" }
+compositor_introspection_execution_launch_execute = { path = "../compositor.introspection/introspection.execution/execution.launch/launch.execute" }
+compositor_introspection_execution_launch_policy = { path = "../compositor.introspection/introspection.execution/execution.launch/launch.policy" }
+compositor_introspection_execution_launch_reap = { path = "../compositor.introspection/introspection.execution/execution.launch/launch.reap" }
+compositor_introspection_execution_launch_scope = { path = "../compositor.introspection/introspection.execution/execution.launch/launch.scope" }
+compositor_introspection_execution_launch_types = { path = "../compositor.introspection/introspection.execution/execution.launch/launch.types" }
 compositor_introspection_extraction_window_base = { path = "../compositor.introspection/introspection.extraction/extraction.window/window.base" }
 compositor_introspection_extraction_window_desktop_entry = { path = "../compositor.introspection/introspection.extraction/extraction.window/window.desktop.entry" }
 compositor_introspection_extraction_window_desktop_search = { path = "../compositor.introspection/introspection.extraction/extraction.window/window.desktop.search" }
@@ -229,10 +236,6 @@ compositor_introspection_inference_hint_descriptors = { path = "../compositor.in
 compositor_introspection_launchplan_plan_base = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.base" }
 compositor_introspection_launchplan_plan_capture = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.capture" }
 compositor_introspection_launchplan_plan_core = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.core" }
-compositor_introspection_launchplan_plan_exec_opts = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.exec.opts" }
-compositor_introspection_launchplan_plan_exec_pid = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.exec.pid" }
-compositor_introspection_launchplan_plan_exec_run = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.exec.run" }
-compositor_introspection_launchplan_plan_exec_spawn = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.exec.spawn" }
 compositor_introspection_launchplan_plan_exec_unit = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.exec.unit" }
 compositor_introspection_launchplan_plan_preferences = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.preferences" }
 compositor_introspection_launchplan_plan_preferences_field = { path = "../compositor.introspection/introspection.launchplan/launchplan.plan/plan.preferences.field" }
@@ -276,6 +279,8 @@ compositor_kernel_drm_mode_synthesize_base = { path = "../compositor.kernel/kern
 compositor_kernel_drm_output_physical_base = { path = "../compositor.kernel/kernel.drm/drm.output/output.physical/physical.base" }
 compositor_kernel_drm_syncobj_device_base = { path = "../compositor.kernel/kernel.drm/drm.syncobj/syncobj.device/device.base" }
 compositor_kernel_drm_syncobj_timeline_base = { path = "../compositor.kernel/kernel.drm/drm.syncobj/syncobj.timeline/timeline.base" }
+compositor_kernel_execution_driver_executor_base = { path = "../compositor.kernel/kernel.execution/execution.driver/driver.executor/executor.base" }
+compositor_kernel_execution_driver_executor_install = { path = "../compositor.kernel/kernel.execution/execution.driver/driver.executor/executor.install" }
 compositor_kernel_gles_context_egl_base = { path = "../compositor.kernel/kernel.gles/gles.context/context.egl/egl.base" }
 compositor_kernel_gles_element_combined_base = { path = "../compositor.kernel/kernel.gles/gles.element/element.combined/combined.base" }
 compositor_kernel_gles_element_wrap_base = { path = "../compositor.kernel/kernel.gles/gles.element/element.wrap/wrap.base" }
@@ -414,6 +419,7 @@ compositor_orchestration_driver_resume_base = { path = "orchestration.driver/dri
 compositor_orchestration_environment_interface_lifecycle = { path = "orchestration.environment/environment.interface/interface.lifecycle" }
 compositor_orchestration_environment_type_base = { path = "orchestration.environment/environment.type/type.base" }
 compositor_orchestration_input_drive_base = { path = "orchestration.input/input.drive/drive.base" }
+compositor_orchestration_launch_broadcast_base = { path = "orchestration.launch/launch.broadcast/broadcast.base" }
 compositor_orchestration_seat_delegate_base = { path = "orchestration.seat/seat.delegate/delegate.base" }
 compositor_orchestration_seat_delegate_lock = { path = "orchestration.seat/seat.delegate/delegate.lock" }
 compositor_orchestration_seat_delegate_main = { path = "orchestration.seat/seat.delegate/delegate.main" }

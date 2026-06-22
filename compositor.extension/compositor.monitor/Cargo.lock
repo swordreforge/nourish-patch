@@ -422,9 +422,9 @@ name = "compositor_monitor_compositor_iced_base"
 version = "0.1.0"
 dependencies = [
  "compositor_developer_debug_instance_record",
- "compositor_monitor_engine_iced_base",
  "compositor_monitor_runtime_surface_base",
  "compositor_orchestration_draw_dispatch_frame",
+ "compositor_support_iced_core_engine_base",
  "iced_core",
  "smithay",
  "thiserror 2.0.18",
@@ -436,7 +436,7 @@ name = "compositor_monitor_devtool_example_base"
 version = "0.1.0"
 dependencies = [
  "compositor_developer_debug_instance_record",
- "compositor_monitor_engine_iced_base",
+ "compositor_support_iced_core_engine_base",
  "iced_core",
  "iced_widget",
 ]
@@ -513,25 +513,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "compositor_monitor_engine_iced_base"
-version = "0.1.0"
-dependencies = [
- "bitflags 2.11.1",
- "compositor_developer_debug_instance_record",
- "iced_core",
- "iced_graphics",
- "iced_runtime",
- "iced_wgpu",
- "iced_widget",
- "thiserror 2.0.18",
- "wgpu",
-]
-
-[[package]]
 name = "compositor_monitor_launcher_ui_base"
 version = "0.1.0"
 dependencies = [
- "compositor_monitor_engine_iced_base",
+ "compositor_support_iced_core_engine_base",
  "iced_core",
  "iced_widget",
 ]
@@ -626,6 +611,21 @@ dependencies = [
  "tonic-prost-build",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "compositor_support_iced_core_engine_base"
+version = "0.1.0"
+dependencies = [
+ "bitflags 2.11.1",
+ "compositor_developer_debug_instance_record",
+ "iced_core",
+ "iced_graphics",
+ "iced_runtime",
+ "iced_wgpu",
+ "iced_widget",
+ "thiserror 2.0.18",
+ "wgpu",
 ]
 
 [[package]]

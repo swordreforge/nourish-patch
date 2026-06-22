@@ -17,6 +17,9 @@ use compositor_introspection_extraction_window_base::default_registry;
 use compositor_introspection_sampler_window_base::sampler::{SampleBatch, SampleResult, Sampler};
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::{Loader, Orchestrator as State};
+// App-launch executor (kernel.execution driver) — all worker/reaper/channel
+// wiring is encapsulated behind `block_sigchld` + `install`.
+use compositor_kernel_execution_driver_executor_install::install as launch_executor;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // FIRST: parse the single COMPOSITOR_ENVIRONMENT JSON into the process-global
@@ -24,6 +27,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // `log_level` from it — and panics immediately if the var is unset or any
     // required field is missing/malformed. It is the ONLY place env config is read.
     compositor_developer_environment_config_base::base::init();
+
+    // Block SIGCHLD before any thread spawns, so the launch reaper's signalfd is
+    // the sole consumer (no-op under the Direct backend).
+    launch_executor::block_sigchld();
 
     let environment = compositor_orchestration_environment_type_base::base::Get();
     compositor_support_library_debug_client_base::init_logging();
@@ -412,6 +419,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             compositor_orchestration_draw_state_lifecycle::lifecycle::sampler_result(state, result);
         })
         .unwrap_or_else(|e| compositor_developer_debug_instance_record::abort!("register sampler results source: {e:?}"));
+
+    // App-launch executor (kernel.execution): builds the Executor driver, stores
+    // it as driver data, and wires its calloop sources (off-thread worker outcome
+    // receiver + SIGCHLD reaper). Each completed launch is broadcast by
+    // orchestration as the general per-world `Executed` event.
+    launch_executor::install(&mut state, &event_loop.handle());
 
     // Sampling heartbeat — a sparing, multi-level demo of live developer logs (so the
     // viewer shows activity over time and its level filters can be exercised). Remove when
