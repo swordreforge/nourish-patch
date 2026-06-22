@@ -31,17 +31,30 @@ pub fn execute(req: &LaunchRequest, scope: bool) -> LaunchOutcome {
     cmd.stdout(Stdio::inherit());
     cmd.stderr(Stdio::inherit());
 
-    // Reset the child's signal mask to empty before exec. We block SIGCHLD
-    // process-wide for the reaper's signalfd, and `execve` preserves the mask —
-    // so without this, launched apps inherit a blocked SIGCHLD and ones that
-    // rely on it (e.g. alacritty detecting its shell exiting) never close.
-    // SAFETY: the closure runs in the forked child before exec; sigemptyset /
-    // pthread_sigmask are async-signal-safe.
+    // Child hygiene applied between fork and exec. SAFETY: the closure runs in
+    // the forked child before exec; every call below is async-signal-safe (a
+    // single syscall or a sigset op), allocates nothing, and touches no shared
+    // state.
     unsafe {
         cmd.pre_exec(|| {
+            // (1) Reset the signal mask. We block SIGCHLD process-wide for the
+            // reaper's signalfd and `execve` preserves the mask — so without this
+            // apps inherit a blocked SIGCHLD and ones that rely on it (e.g.
+            // alacritty detecting its shell exiting) never close.
             let mut set: libc::sigset_t = std::mem::zeroed();
             libc::sigemptyset(&mut set);
             libc::pthread_sigmask(libc::SIG_SETMASK, &set, std::ptr::null_mut());
+
+            // (2) Don't leak inherited fds into the app: the compositor's DRM
+            // master / GPU nodes / wayland sockets / dmabuf / syncobj / event-loop
+            // epoll+eventfds, AND whatever the launching harness leaked into us.
+            // Mark every fd >= 3 close-on-exec so they all close at the imminent
+            // exec; stdio (0/1/2) is kept. CLOSE_RANGE_CLOEXEC defers the close to
+            // exec (rather than closing now), which leaves Rust's CLOEXEC
+            // error-report pipe usable so spawn-failure detection still works.
+            // Best-effort — ignore the result (e.g. pre-5.11 kernels).
+            libc::close_range(3, libc::c_uint::MAX, libc::CLOSE_RANGE_CLOEXEC as libc::c_int);
+
             Ok(())
         });
     }
