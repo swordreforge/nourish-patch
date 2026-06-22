@@ -2029,9 +2029,9 @@ name = "compositor_introspection_execution_launch_execute"
 version = "0.0.1"
 dependencies = [
  "compositor_developer_debug_instance_record",
- "compositor_introspection_execution_launch_policy",
  "compositor_introspection_execution_launch_scope",
  "compositor_introspection_execution_launch_types",
+ "libc",
 ]
 
 [[package]]
@@ -8549,6 +8549,7 @@ dependencies = [
  "bitflags 2.13.0",
  "compositor_developer_debug_instance_record",
  "compositor_introspection_execution_launch_build",
+ "compositor_introspection_execution_launch_policy",
  "compositor_introspection_launchplan_plan_base",
  "compositor_introspection_launchplan_plan_capture",
  "compositor_introspection_restoration_state_base",

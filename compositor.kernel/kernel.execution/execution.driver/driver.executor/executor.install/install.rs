@@ -9,7 +9,7 @@ use compositor_introspection_execution_launch_policy::policy::{LaunchBackend, La
 use compositor_introspection_execution_launch_dispatch::dispatch::LaunchWorker;
 use compositor_introspection_execution_launch_reap::reap::reap_zombies;
 use compositor_introspection_execution_launch_types::types::LaunchOutcome;
-use compositor_kernel_execution_driver_executor_base::executor::{Executor, EXECUTOR_MUT};
+use compositor_kernel_execution_driver_executor_base::executor::{Executor, EXECUTOR};
 
 /// Block SIGCHLD process-wide before any thread is spawned, so the reaper's
 /// signalfd is the sole consumer. Call at the very top of `main()`. No-op under
@@ -31,10 +31,18 @@ pub fn block_sigchld() {
 /// sources. After this the rim reads `EXECUTOR` to launch apps.
 pub fn install(state: &mut Loop, handle: &LoopHandle<'static, Loop>) {
     let base_env = base_env(state);
+    // Adopt launched PIDs into a systemd scope only when the SystemdScope backend
+    // is active AND systemd is the init system. In a sandbox without systemd as
+    // PID 1 (`systemctl` "has not been booted with systemd"), fall back to plain
+    // self-spawn + reaper.
+    let scope = matches!(LAUNCH_BACKEND, LaunchBackend::SystemdScope) && systemd_booted();
 
     let (tx, rx) = channel::<LaunchOutcome>();
-    let worker = matches!(LAUNCH_DISPATCH, LaunchDispatch::OffThread).then(|| LaunchWorker::spawn(tx.clone()));
-    *state.inner.kernel.get_mut(&EXECUTOR_MUT) = Some(Executor::new(worker, tx, base_env));
+    let worker = matches!(LAUNCH_DISPATCH, LaunchDispatch::OffThread)
+        .then(|| LaunchWorker::spawn(tx.clone(), scope));
+    // Register the driver slot (insert — the slot doesn't exist yet; get_mut would
+    // panic on an unregistered slot, like the other driver slots in Orchestrator::new).
+    state.inner.kernel.insert(&EXECUTOR, Some(Executor::new(worker, tx, base_env, scope)));
 
     // Outcome receiver → orchestration broadcasts the general Executed event.
     handle
@@ -50,6 +58,13 @@ pub fn install(state: &mut Loop, handle: &LoopHandle<'static, Loop>) {
         .unwrap_or_else(|e| abort!("register launch outcome source: {e:?}"));
 
     install_reaper(handle);
+}
+
+/// systemd as the init system? Mirrors libsystemd's `sd_booted()`:
+/// `/run/systemd/system` exists iff systemd is PID 1. When it isn't, `systemctl`
+/// "has not been booted with systemd as init system" — so scope adoption is skipped.
+fn systemd_booted() -> bool {
+    std::path::Path::new("/run/systemd/system").exists()
 }
 
 /// The faithful environment every launched app inherits (built once at startup).

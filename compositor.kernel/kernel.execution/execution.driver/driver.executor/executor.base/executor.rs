@@ -9,10 +9,13 @@ use compositor_introspection_execution_launch_types::types::{LaunchOutcome, Laun
 /// App-launch driver. Held in kernel storage; populated by the loader's
 /// `install`. Every outcome is posted on `outcome_tx` so orchestration can
 /// broadcast it; the executor itself stays unaware of placeholders / the bus.
+/// `scope` (adopt into a systemd transient scope) is decided once at install
+/// from a runtime systemd probe, so the same value covers every launch.
 pub struct Executor {
     worker: Option<LaunchWorker>,
     outcome_tx: CalloopSender<LaunchOutcome>,
     base_env: Vec<(String, String)>,
+    scope: bool,
 }
 
 impl Executor {
@@ -20,8 +23,9 @@ impl Executor {
         worker: Option<LaunchWorker>,
         outcome_tx: CalloopSender<LaunchOutcome>,
         base_env: Vec<(String, String)>,
+        scope: bool,
     ) -> Self {
-        Self { worker, outcome_tx, base_env }
+        Self { worker, outcome_tx, base_env, scope }
     }
 
     /// Launch `request`. The faithful base env is prepended; caller-supplied
@@ -39,7 +43,7 @@ impl Executor {
                 return None;
             }
         }
-        let outcome = execute(&request);
+        let outcome = execute(&request, self.scope);
         let _ = self.outcome_tx.send(outcome.clone());
         Some(outcome)
     }
