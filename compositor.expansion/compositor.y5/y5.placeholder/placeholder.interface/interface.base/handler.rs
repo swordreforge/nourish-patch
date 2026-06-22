@@ -2,7 +2,9 @@ use smithay::wayland::xdg_activation::XdgActivationTokenData;
 use compositor_orchestration_core_state_base::Loop;
 use compositor_y5_placeholder_protocol_base::message::{PlaceholderAction, PlaceholderMessage};
 use compositor_introspection_execution_launch_build::build::request_from_plan;
+use compositor_introspection_execution_launch_policy::policy::REQUIRE_PID;
 use compositor_kernel_execution_driver_executor_base::executor::EXECUTOR;
+use compositor_y5_placeholder_record_base::placeholder::PlaceholderLaunchToken;
 
 pub fn delegate(
     _loop: &mut Loop,
@@ -78,21 +80,37 @@ pub fn delegate(
                 ("DESKTOP_STARTUP_ID".to_string(), token_str.clone()),
             ];
 
-            let req = match request_from_plan(&record.launch, &synt, &extra_env, token_str, Some(message.uuid)) {
+            let req = match request_from_plan(&record.launch, &synt, &extra_env, token_str.clone(), Some(message.uuid)) {
                 Ok(req) => req,
                 Err(e) => {
                     warn!("launch build failed: {e}");
                     return;
                 }
             };
-            // Launch via the kernel executor driver. Restoration is NOT set here:
-            // the PlaceholderSystem listens for the general Executed event and
-            // matches by correlation = this placeholder's uuid.
-            if let Some(executor) = _loop.inner.kernel.get(&EXECUTOR).as_ref() {
-                executor.launch(req);
+            // Launch via the kernel executor driver. Inline dispatch returns the
+            // outcome (incl. the PID) synchronously; off-thread returns `None`.
+            let immediate = if let Some(executor) = _loop.inner.kernel.get(&EXECUTOR).as_ref() {
+                executor.launch(req)
             } else {
                 warn!("launch executor unavailable; launch dropped");
-            }
+                return;
+            };
+
+            // The activation token is known synchronously (we just minted it), so
+            // arm restoration NOW — even for off-thread dispatch — so a fast-mapping
+            // window still matches on the token before the Executed event arrives.
+            // The PID is folded in only if available immediately (inline); otherwise
+            // the Executed listener fills it in later by correlation (idempotent).
+            let immediate_pid = immediate.as_ref().and_then(|o| o.pid);
+            let mut restoration = Some(PlaceholderLaunchToken {
+                token: token_str,
+                child: if REQUIRE_PID { immediate_pid } else { None },
+            });
+            _loop.inner.placeholder_mut().modify_visible(&message.uuid, move |placeholder| {
+                if let Some(t) = restoration.take() {
+                    placeholder.restoration = Some(t);
+                }
+            });
             info!("Launch!");
         }
     }
