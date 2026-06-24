@@ -69,7 +69,13 @@ pub(crate) fn press(cx: &mut SystemCx, button: u32, x: f64, y: f64) -> InputFlow
         }
         true
     });
-    let over_ice = matches!(&over_surface, Some(hit) if hit.ice().is_some());
+    // "Over ice" = over any iced surface (registry `Iced` hits, or a layer-shell
+    // surface flagged ice). Registry `Iced` hits must count here too, otherwise a
+    // click on a world-space iced UI (e.g. the selection toolbar) falls through to
+    // the canvas press and clears the selection — destroying a selection-driven
+    // overlay before its button can act.
+    let over_ice =
+        matches!(&over_surface, Some(hit) if hit.ice().is_some() || hit.is_iced());
 
     let mut temporary_passthrough = false;
     if let Some(ice_layer) = over_surface.as_ref().and_then(|w| w.iced_layer()) {
