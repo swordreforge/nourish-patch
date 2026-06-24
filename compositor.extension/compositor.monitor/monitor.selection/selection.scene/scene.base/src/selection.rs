@@ -6,8 +6,8 @@ use iced_core::{
 use iced_wgpu::Renderer;
 use iced_widget::{Container, Row, Space, button, column, container, row, text};
 use std::collections::HashSet;
-use compositor_monitor_devtool_font_base::font::MATERIAL_FAMILY;
-use compositor_monitor_devtool_font_base::font_map;
+use compositor_monitor_selection_font_base::font::MATERIAL_FAMILY;
+use compositor_monitor_selection_font_base::font_map;
 use crate::selection::SelectionAction::ScaleToFit;
 //
 

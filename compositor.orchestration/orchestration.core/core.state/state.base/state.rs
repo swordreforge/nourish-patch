@@ -161,6 +161,9 @@ impl Orchestrator {
         kernel_data.insert(&compositor_orchestration_driver_capture_base::base::CAPTURE_REGISTRY, None);
         kernel_data.insert(&compositor_orchestration_driver_capture_base::base::CAPTURE, compositor_y5_graphic_capture_session::session::CaptureState::idle());
 
+        // Selection-overlay driver: the align/distribute toolbar instance.
+        kernel_data.insert(&compositor_orchestration_driver_selection_base::base::SELECTION_OVERLAY, Default::default());
+
         Self {
             environment,
             __set_lock: None,

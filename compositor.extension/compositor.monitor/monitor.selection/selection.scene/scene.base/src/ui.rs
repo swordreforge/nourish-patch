@@ -1,12 +1,12 @@
 use crate::app::CompositorSnapshot;
 use iced_core::{
-    Alignment, Background, Border, Color, Element, Length, Padding, Point, Shadow, Theme, Vector,
-    alignment,
+    Background, Border, Color, Element, Length, Padding, Shadow, Theme, Vector, alignment,
 };
-use iced_runtime::Task;
 use iced_wgpu::Renderer;
-use iced_widget::{Container, Stack, button, column, container, row, text};
+use iced_widget::{column, container};
 use crate::selection::{ScaleToFitOption, SelectionAction, SelectionState};
+use compositor_support_iced_core_engine_base::IcedUi;
+use compositor_support_iced_core_engine_base::ui::EventFlags;
 
 pub struct Overlay {
     pub clicks: u32,
@@ -14,7 +14,6 @@ pub struct Overlay {
     pub mode: Mode,
     pub selection_count: u32,
     pub selection: SelectionState,
-    pub cursor_position: Option<Point>,
 }
 
 pub enum Mode {
@@ -33,7 +32,6 @@ pub enum Message {
     AltChanged(bool),
     ExecuteSelection(Vec<SelectionAction>, bool),
     ExecuteScaleToFit(ScaleToFitOption),
-    CursorMoved(Point),
 }
 
 impl Default for Overlay {
@@ -44,7 +42,6 @@ impl Default for Overlay {
             last_pressed: None,
             mode: Mode::None,
             selection: SelectionState::default(),
-            cursor_position: None,
         }
     }
 }
@@ -54,20 +51,49 @@ impl Overlay {
         Self::default()
     }
 
-    pub fn update(&mut self, message: Message) -> Task<Message> {
+    /// Build with the current selection count so the bar renders immediately
+    /// (the reconciler creates the instance only when count > 0).
+    pub fn with_count(count: i32) -> Self {
+        let mut o = Self::default();
+        o.apply_count(count);
+        o
+    }
+
+    fn apply_count(&mut self, size: i32) {
+        self.mode = if size == 0 { Mode::None } else { Mode::Selecting };
+        self.selection_count = size as u32;
+    }
+}
+
+impl IcedUi for Overlay {
+    type Message = Message;
+
+    fn subscribe(&self) -> EventFlags {
+        // Shift/Alt arrive as keyboard `ModifiersChanged` events; button clicks
+        // are consumed by the iced widgets directly.
+        EventFlags::KEYBOARD
+    }
+
+    fn event_process(&self, event: &iced_core::Event) -> Vec<Message> {
+        if let iced_core::Event::Keyboard(iced_core::keyboard::Event::ModifiersChanged(mods)) =
+            event
+        {
+            return vec![
+                Message::ShiftChanged(mods.shift()),
+                Message::AltChanged(mods.alt()),
+            ];
+        }
+        Vec::new()
+    }
+
+    fn update(&mut self, message: Message) {
         match message {
-            Message::CursorMoved(point) => {
-                self.cursor_position = Some(point);
-            }
             Message::ButtonPressed(n) => {
                 self.clicks += 1;
                 self.last_pressed = Some(n);
                 info!("button pressed button={n} total_clicks={}", self.clicks);
             }
-            Message::SelectNotify(size) => {
-                self.mode = if size == 0 { Mode::None } else { Mode::Selecting };
-                self.selection_count = size as u32;
-            }
+            Message::SelectNotify(size) => self.apply_count(size),
             Message::ShiftChanged(held) => self.selection.shift_held = held,
             Message::AltChanged(held) => self.selection.alt_held = held,
             Message::SelectionClicked(action) => {
@@ -83,11 +109,9 @@ impl Overlay {
             }
             _ => {}
         }
-        Task::none()
     }
 
-    pub fn view(&self) -> Element<'_, Message, Theme, Renderer> {
-        // Build the bar (or nothing) as before
+    fn view(&self) -> Element<'_, Message, Theme, Renderer> {
         let bar_element: Element<'_, Message, Theme, Renderer> = match self.mode {
             Mode::None => container(column!()).into(),
             Mode::Selecting => {
@@ -113,54 +137,14 @@ impl Overlay {
             }
         };
 
-        // The bottom-anchored bar layer
-        let bar_layer = container(bar_element)
+        // Bottom-anchored bar, centered horizontally. (No synthetic cursor: the
+        // compositor draws the real cursor over this surface.)
+        container(bar_element)
             .width(Length::Fill)
             .height(Length::Fill)
             .align_x(alignment::Horizontal::Center)
             .align_y(alignment::Vertical::Bottom)
-            .padding(Padding { top: 0.0, right: 0.0, bottom: 8.0, left: 0.0 });
-
-        // The cursor box layer, positioned absolutely via padding trick
-        let cursor_layer: Element<'_, Message, Theme, Renderer> =
-            if let Some(pos) = self.cursor_position {
-                const BOX_SIZE: f32 = 16.0;
-                // Center the box on the cursor position
-                let left = (pos.x - BOX_SIZE / 2.0).max(0.0);
-                let top = (pos.y - BOX_SIZE / 2.0).max(0.0);
-
-                let dot = container(column!())
-                    .width(Length::Fixed(BOX_SIZE))
-                    .height(Length::Fixed(BOX_SIZE))
-                    .style(|_theme| container::Style {
-                        snap: true,
-                        background: Some(Background::Color(Color::from_rgb(1.0, 0.2, 0.2))),
-                        border: Border {
-                            color: Color::from_rgba(0.0, 0.0, 0.0, 0.5),
-                            width: 1.0,
-                            radius: 3.0.into(),
-                        },
-                        shadow: Shadow::default(),
-                        text_color: None,
-                    });
-
-                container(dot)
-                    .width(Length::Fill)
-                    .height(Length::Fill)
-                    .padding(Padding { top, left, right: 0.0, bottom: 0.0 })
-                    .align_x(alignment::Horizontal::Left)
-                    .align_y(alignment::Vertical::Top)
-                    .into()
-            } else {
-                container(column!()).into()
-            };
-
-        // Stack: bar at bottom, cursor box on top
-        Stack::new()
-            .push(bar_layer)
-            .push(cursor_layer)
-            .width(Length::Fill)
-            .height(Length::Fill)
+            .padding(Padding { top: 0.0, right: 0.0, bottom: 8.0, left: 0.0 })
             .into()
     }
 }
