@@ -19,25 +19,34 @@ pub use compositor_y5_placeholder_state_base::state::{PLACEHOLDER, PLACEHOLDER_M
 /// the slot, so an input system (CanvasSystem) can't write `modify_visible`
 /// directly — it announces this; the placeholder system applies the slot half
 /// via its buffer AND announces the registry half to the surface system.
-/// `position`/`size` are `(x, y)` / `(w, h)` exactly as the rim passed them.
+/// `position`/`size` are `(x, y)` / `(w, h)` in WORLD-logical space (the space the
+/// slot stores). `scale` is the output's fractional scale at the time of the drag,
+/// captured by the announcing input system (channel receivers have no
+/// `cx.platform`, so they can't read it themselves) — the registry half multiplies
+/// the world geometry by it to reach the storage-physical space the iced surface
+/// was spawned in (`Transform::into_storage_rect_physical` = world × scale).
 #[derive(Clone, Copy)]
 pub struct PlaceholderGeometry {
     pub uuid: Uuid,
     pub position: Option<(i32, i32)>,
     pub size: Option<(i32, i32)>,
+    pub scale: f64,
 }
 y5_channel!(pub PLACEHOLDER_GEOMETRY, PLACEHOLDER_GEOMETRY_TX: PlaceholderGeometry);
 
 /// Announce a placeholder geometry change to the placeholder system. Mirrors the
 /// surface system's `announce_iced_button`; cross-crate senders can't reach the
-/// channel TX directly, so they call this on the world's router.
+/// channel TX directly, so they call this on the world's router. `position`/`size`
+/// are WORLD-logical; `scale` is the current output fractional scale (see
+/// [`PlaceholderGeometry`]).
 pub fn announce_placeholder_geometry(
     channels: &mut compositor_support_system_channel_router_base::base::ChannelRouter,
     uuid: Uuid,
     position: Option<(i32, i32)>,
     size: Option<(i32, i32)>,
+    scale: f64,
 ) {
-    channels.send(&PLACEHOLDER_GEOMETRY_TX, PlaceholderGeometry { uuid, position, size });
+    channels.send(&PLACEHOLDER_GEOMETRY_TX, PlaceholderGeometry { uuid, position, size, scale });
 }
 
 enum PlaceholderCmd {
@@ -153,8 +162,25 @@ impl PlaceholderSystem {
         cx.write(&PLACEHOLDER_BUF, PlaceholderCmd::SetGeometry(ev.uuid, ev.position, ev.size));
 
         if let Some(handle) = handle {
-            let position = ev.position.map(|(x, y)| Point::<i32, Physical>::from((x, y)));
-            let size = ev.size.map(|(w, h)| Size::<i32, Physical>::from((w, h)));
+            // World → storage-physical: the iced surface was spawned at
+            // `Transform::into_storage_rect_physical()` (world × scale, camera
+            // applied at render). The slot stores world; the registry stores
+            // world × scale. Without the scale the surface jumps on the first
+            // drag whenever scale != 1 (e.g. fractional-scale winit). See the
+            // `scale` note on `PlaceholderGeometry`.
+            let s = ev.scale;
+            let position = ev.position.map(|(x, y)| {
+                Point::<i32, Physical>::from((
+                    (x as f64 * s).round() as i32,
+                    (y as f64 * s).round() as i32,
+                ))
+            });
+            let size = ev.size.map(|(w, h)| {
+                Size::<i32, Physical>::from((
+                    (w as f64 * s).round() as i32,
+                    (h as f64 * s).round() as i32,
+                ))
+            });
             compositor_y5_surface_system_base::base::announce_placeholder_geometry(
                 cx.channels, handle, position, size,
             );

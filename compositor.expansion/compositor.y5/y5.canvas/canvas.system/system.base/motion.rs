@@ -246,6 +246,12 @@ pub(crate) fn motion(cx: &mut SystemCx, x: f64, y: f64, _screen_x: f64, _screen_
             .collect()
     };
 
+    // The output fractional scale: the placeholder system needs it to convert the
+    // world-space drag geometry into the storage-physical space its iced surface
+    // lives in (world × scale). Read once here — channel receivers (the placeholder
+    // system) have no `cx.platform`, so the input layer must capture it.
+    let scale = output_scale(cx);
+
     // Apply window reforms (force = interactive drag) reading `cx.platform.space()`.
     // Each window owns a live `map` placeholder keyed by its UUID; keep its geometry
     // in sync with the drag (rim `_reform` did this via `placeholder.interface::set`)
@@ -255,7 +261,7 @@ pub(crate) fn motion(cx: &mut SystemCx, x: f64, y: f64, _screen_x: f64, _screen_
             let position = update.position.map(|p| (p.x, p.y));
             let size = update.size.map(|s| (s.w, s.h));
             compositor_y5_placeholder_system_base::base::announce_placeholder_geometry(
-                cx.channels, uuid, position, size,
+                cx.channels, uuid, position, size, scale,
             );
         }
         reform_force(cx, window, update);
@@ -281,7 +287,7 @@ pub(crate) fn motion(cx: &mut SystemCx, x: f64, y: f64, _screen_x: f64, _screen_
         let position = update.position.map(|p| (p.x, p.y));
         let size = update.size.map(|s| (s.w, s.h));
         compositor_y5_placeholder_system_base::base::announce_placeholder_geometry(
-            cx.channels, uuid, position, size,
+            cx.channels, uuid, position, size, scale,
         );
     }
 
@@ -347,6 +353,20 @@ fn reform_force(cx: &mut SystemCx, window: Window, update: Update) {
             toplevel.send_configure();
         }
     }
+}
+
+/// The current output's fractional scale (`1.0` when there is no output, an
+/// identity transform). The placeholder iced surface is spawned in
+/// storage-physical space (world × scale, see `Transform::into_storage_rect_physical`),
+/// so a world-space drag must be scaled by this before the placeholder system
+/// forwards it to the iced registry — otherwise it jumps on the first drag frame
+/// whenever scale != 1 (fractional-scale winit; native runs at 1.0 and never saw it).
+fn output_scale(cx: &mut SystemCx) -> f64 {
+    cx.platform
+        .as_deref_mut()
+        .and_then(|p| p.downcast_mut::<compositor_orchestration_draw_platform_base::platform::Platform>())
+        .and_then(|p| p.space().outputs().next().map(|o| o.current_scale().fractional_scale()))
+        .unwrap_or(1.0)
 }
 
 /// Union of the candidate windows' start geometries (the moving set's bbox),
