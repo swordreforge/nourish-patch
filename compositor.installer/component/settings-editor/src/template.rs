@@ -22,6 +22,7 @@ pub fn default_settings() -> Environment {
         capture_quality: "lossless".to_string(),
         capture_refresh_rate_max: 60,
         capture_background_encoder: String::new(),
+        capture_nvenc_allow_readback_fallback: false,
         capture_variable_frame_rate: true,
         window_client_size_fallback: false,
         window_subsurface_shrinks: false,

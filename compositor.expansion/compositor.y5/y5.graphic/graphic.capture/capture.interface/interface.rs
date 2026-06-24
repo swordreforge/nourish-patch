@@ -19,6 +19,7 @@ use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::utils::{Logical, Physical, Point, Rectangle, Size};
 use uuid::Uuid;
 
+use compositor_y5_camera_transform_translate::slot;
 use compositor_y5_camera_transform_translate::transform::Transform;
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::CoordinateTrait;
@@ -29,7 +30,7 @@ use compositor_y5_graphic_capture_encode::{
 use compositor_y5_graphic_capture_vaapi::{
     Backend, CaptureEncoder, EncoderThread, NvencCudaEncoder, VaapiEncoder, backend_from_config,
     capture_background_auto, capture_cfr, capture_codec_name, capture_codecs, capture_cq,
-    capture_fps,
+    capture_fps, capture_nvenc_readback_fallback,
 };
 use compositor_y5_graphic_capture_registry::{CaptureSource, OutputId};
 use compositor_y5_graphic_capture_session::message::{
@@ -43,6 +44,7 @@ use compositor_y5_surface_draw_capture::dialog::ContinueDialog;
 use compositor_y5_surface_draw_capture::dim::RegionDim;
 use compositor_y5_surface_draw_capture::hud::StopHud;
 use compositor_y5_surface_draw_capture::encodialog::EncodingDialog;
+use compositor_y5_surface_draw_capture::errordialog::ErrorDialog;
 use compositor_y5_surface_draw_capture::savedialog::SaveDialog;
 use compositor_y5_surface_draw_capture::setup::SetupOverlay;
 use compositor_y5_surface_draw_handle::handle::{IcedSpace, load};
@@ -349,6 +351,57 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
         return;
     }
 
+    // Video: start the hardware encoder FIRST, so we can abort cleanly (error
+    // dialog) instead of "recording" nothing when no encoder is available — and
+    // so we don't spawn indicator chrome we'd have to tear back down.
+    let fps = capture_fps();
+    let cq = capture_cq();
+    let (encoder, video_readback) = match backend_from_config() {
+        Backend::Nvenc => {
+            // Zero-copy on every backend, including winit/nested — there the
+            // result is vertically flipped (the CUDA path can't flip), which is
+            // accepted rather than dropping to the readback path.
+            let zc = capture.dmabuf().and_then(|d| {
+                capture_codecs()
+                    .into_iter()
+                    .find_map(|c| NvencCudaEncoder::start(&d, fps, c, cq))
+            });
+            match zc {
+                Some(z) => (Some(CaptureEncoder::NvencCuda(z)), None),
+                // The readback path is only used as a fallback when explicitly
+                // allowed (`nvenc_allow_readback_fallback`); otherwise a failed
+                // zero-copy aborts the capture with an error dialog.
+                None if capture_nvenc_readback_fallback() => {
+                    warn!("nvenc zero-copy unavailable — using readback fallback");
+                    let enc = capture.size().and_then(|s| {
+                        EncoderThread::spawn_nvenc(s.w.max(0) as u32, s.h.max(0) as u32, fps, cq)
+                    });
+                    (enc.map(CaptureEncoder::Nvenc), Some(AsyncReadback::new()))
+                }
+                None => {
+                    warn!("nvenc zero-copy unavailable; readback fallback disabled");
+                    (None, None)
+                }
+            }
+        }
+        Backend::Vaapi => {
+            let enc = capture
+                .dmabuf()
+                .and_then(|dmabuf| VaapiEncoder::start(&dmabuf, fps));
+            (enc.map(CaptureEncoder::Vaapi), None)
+        }
+    };
+    if encoder.is_none() {
+        warn!("hardware video encoder unavailable — capture aborted");
+        drop(capture); // free the registry entry (no Active state will hold it)
+        show_capture_error(
+            state,
+            renderer,
+            "Recording unavailable: no working hardware video encoder.",
+        );
+        return;
+    }
+
     // Video: indicator overlays. The dim sits below windows (its own layer);
     // the border sits above everything (screen-space). Both are click-through
     // (CAPTURE_PASSTHROUGH → hit-test-transparent) so the whole capture region
@@ -398,44 +451,6 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
     );
     state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).stop_hud_id = Some(stop.untyped());
     forward(state, stop);
-
-    // Start the hardware video encoder (no software fallback). The backend is
-    // chosen by `Y5_CAPTURE_ENCODER`: NVENC (NVIDIA, default) reads back BGRA
-    // frames; VAAPI (mesa/AMD/Intel) reads the capture dmabuf zero-copy.
-    let fps = capture_fps();
-    let cq = capture_cq();
-    let (encoder, video_readback) = match backend_from_config() {
-        Backend::Nvenc => {
-            // Prefer the zero-copy path (dmabuf → EGL → CUDA → NVENC): no
-            // readback, no CPU copy. Try the configured codec then its fallbacks
-            // (av1 → h265 → h264) until one's encoder opens; fall back to the
-            // readback encoder thread if libcuda/libEGL is unavailable.
-            let zc = capture.dmabuf().and_then(|d| {
-                capture_codecs()
-                    .into_iter()
-                    .find_map(|c| NvencCudaEncoder::start(&d, fps, c, cq))
-            });
-            match zc {
-                Some(z) => (Some(CaptureEncoder::NvencCuda(z)), None),
-                None => {
-                    warn!("nvenc zero-copy unavailable — using readback path");
-                    let enc = capture.size().and_then(|s| {
-                        EncoderThread::spawn_nvenc(s.w.max(0) as u32, s.h.max(0) as u32, fps, cq)
-                    });
-                    (enc.map(CaptureEncoder::Nvenc), Some(AsyncReadback::new()))
-                }
-            }
-        }
-        Backend::Vaapi => {
-            let enc = capture
-                .dmabuf()
-                .and_then(|dmabuf| VaapiEncoder::start(&dmabuf, fps));
-            (enc.map(CaptureEncoder::Vaapi), None)
-        }
-    };
-    if encoder.is_none() {
-        warn!("hardware video encoder unavailable — video will not be recorded");
-    }
 
     state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase = CapturePhase::Active(ActiveState {
         media,
@@ -729,6 +744,29 @@ fn poll_saveas(state: &mut Loop, renderer: &mut GlesRenderer) {
 
 fn discard_saving(state: &mut Loop) {
     teardown(state);
+}
+
+/// Abort a capture before it starts and show a modal error dialog (e.g. no
+/// working hardware video encoder). The dialog's OK button emits `Discard`,
+/// which routes to `teardown` and dismisses it.
+fn show_capture_error(state: &mut Loop, renderer: &mut GlesRenderer, message: &str) {
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase = CapturePhase::Idle;
+    let (sw, sh) = output_size(state);
+    let rect = Rectangle::new(
+        Point::from(((sw - DIALOG_W) / 2, (sh - DIALOG_H) / 2)),
+        Size::from((DIALOG_W, DIALOG_H)),
+    );
+    let dlg = load(
+        state,
+        renderer,
+        ErrorDialog::new(message),
+        rect,
+        IcedSpace::Screen,
+        Layer::SCENE.bits(),
+    );
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).save_dialog_id = Some(dlg.untyped());
+    forward(state, dlg);
+    warn!("capture aborted — {message}");
 }
 
 /// Commit the chosen `target`: save the screenshot, or for video route to the
@@ -1133,6 +1171,19 @@ fn indicator_rect(state: &Loop, target: &CaptureTarget, sw: i32, sh: i32) -> Opt
     Some(to_overlay(phys))
 }
 
+/// The window's **compositor slot** rect in y5-world `Logical` — its enforced
+/// location + size, not the full subsurface `element_bbox`. This is what the
+/// capture region tracks/invalidates against, so popups/subsurfaces extending
+/// past the window don't bloat the captured region. Falls back to the element
+/// geometry when no slot size has been decided yet.
+fn window_slot_rect(state: &Loop, w: &smithay::desktop::Window) -> Option<Rectangle<i32, Logical>> {
+    let loc = state.inner.space_state().state.element_location(w)?;
+    match slot::expected_size(w).filter(|s| s.w > 0 && s.h > 0) {
+        Some(size) => Some(Rectangle::new(loc, size)),
+        None => state.inner.space_state().state.element_geometry(w),
+    }
+}
+
 /// The live union bbox (y5-world) of the captured (`force_set`) windows.
 fn live_windows_bbox(state: &Loop) -> Option<Rectangle<i32, Logical>> {
     let mut acc: Option<Rectangle<i32, Logical>> = None;
@@ -1141,7 +1192,7 @@ fn live_windows_bbox(state: &Loop) -> Option<Rectangle<i32, Logical>> {
         if !state.inner.kernel.get(&compositor_orchestration_driver_capture_base::base::CAPTURE).force_set.contains(&id) {
             continue;
         }
-        if let Some(g) = state.inner.space_state().state.element_bbox(w) {
+        if let Some(g) = window_slot_rect(state, w) {
             acc = Some(match acc {
                 None => g,
                 Some(a) => union(a, g),
@@ -1188,7 +1239,7 @@ fn windows_bbox_world_of(state: &Loop, ids: &[Uuid]) -> Option<Rectangle<i32, Lo
         if !set.contains(&id) {
             continue;
         }
-        if let Some(g) = state.inner.space_state().state.element_bbox(w) {
+        if let Some(g) = window_slot_rect(state, w) {
             acc = Some(match acc {
                 None => g,
                 Some(a) => union(a, g),
