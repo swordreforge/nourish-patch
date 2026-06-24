@@ -160,6 +160,9 @@ impl Orchestrator {
         // Capture driver: registry + session state.
         kernel_data.insert(&compositor_orchestration_driver_capture_base::base::CAPTURE_REGISTRY, None);
         kernel_data.insert(&compositor_orchestration_driver_capture_base::base::CAPTURE, compositor_y5_graphic_capture_session::session::CaptureState::idle());
+        // Backend kind (nested winit vs udev) mirrored into the kernel store so
+        // input/draw systems can read it via `cx.kernel`.
+        kernel_data.insert(&compositor_orchestration_storage_state_base::state::NESTED, nested);
 
         Self {
             environment,
