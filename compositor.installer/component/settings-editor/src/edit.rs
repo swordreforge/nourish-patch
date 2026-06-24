@@ -86,6 +86,11 @@ pub fn interactive(base: Environment) -> Environment {
             &["", "ffmpeg"],
             &base.capture_background_encoder,
         ),
+        capture_nvenc_allow_readback_fallback: yes_no(
+            "capture_nvenc_allow_readback_fallback",
+            "Fall back to the slower readback encoder if NVENC zero-copy fails (else show an error).",
+            base.capture_nvenc_allow_readback_fallback,
+        ),
         capture_variable_frame_rate: yes_no(
             "capture_variable_frame_rate",
             "Keep variable frame rate (true) or force constant frame rate during re-encode (false).",

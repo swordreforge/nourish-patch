@@ -44,6 +44,11 @@ pub struct Environment {
     /// `"ffmpeg"` = run it automatically in the background after every recording
     /// (no checkbox; writes a `.y5-encoding` file renamed to the target on done).
     pub capture_background_encoder: String,
+    /// `false` (default) = a failed NVENC zero-copy start aborts the capture with
+    /// an error dialog. `true` = fall back to the slower GPU→CPU readback encoder
+    /// instead. (The readback path also flips correctly on winit, unlike
+    /// zero-copy — but it's not used unless this is enabled.)
+    pub capture_nvenc_allow_readback_fallback: bool,
     /// `true` = keep the capture's natural variable frame rate (exact timing,
     /// smallest). `false` = produce a constant frame rate, snapped to a standard
     /// rate (else nearest 5), for editors/players that reject VFR. CFR is applied

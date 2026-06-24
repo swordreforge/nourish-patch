@@ -65,6 +65,13 @@ pub fn capture_cq() -> u32 {
     }
 }
 
+/// Whether a failed NVENC zero-copy start may fall back to the readback encoder
+/// (`capture_nvenc_allow_readback_fallback`). Default false → abort with an error
+/// dialog instead.
+pub fn capture_nvenc_readback_fallback() -> bool {
+    compositor_developer_environment_config_base::base::get().capture_nvenc_allow_readback_fallback
+}
+
 /// Whether the optimized software re-encode runs automatically in the background
 /// after every recording (`capture_background_encoder == "ffmpeg"`). When false,
 /// the save dialog offers it as a checkbox instead.
