@@ -86,6 +86,11 @@ pub fn interactive(base: Environment) -> Environment {
             &["", "ffmpeg"],
             &base.capture_background_encoder,
         ),
+        capture_variable_frame_rate: yes_no(
+            "capture_variable_frame_rate",
+            "Keep variable frame rate (true) or force constant frame rate during re-encode (false).",
+            base.capture_variable_frame_rate,
+        ),
         window_client_size_fallback: yes_no(
             "window_client_size_fallback",
             "Fall back to client xdg geometry instead of compositor-tracked sizing.",

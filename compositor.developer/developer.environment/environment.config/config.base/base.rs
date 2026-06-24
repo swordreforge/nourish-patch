@@ -44,6 +44,12 @@ pub struct Environment {
     /// `"ffmpeg"` = run it automatically in the background after every recording
     /// (no checkbox; writes a `.y5-encoding` file renamed to the target on done).
     pub capture_background_encoder: String,
+    /// `true` = keep the capture's natural variable frame rate (exact timing,
+    /// smallest). `false` = produce a constant frame rate, snapped to a standard
+    /// rate (else nearest 5), for editors/players that reject VFR. CFR is applied
+    /// during the re-encode pass (it can't be done without re-timing frames), so
+    /// `false` forces a re-encode even for an otherwise plain save.
+    pub capture_variable_frame_rate: bool,
     /// `false` = compositor-tracked window sizing; `true` = client xdg geometry.
     pub window_client_size_fallback: bool,
     /// `false` = fit only the root toplevel; `true` = fit the whole surface tree.

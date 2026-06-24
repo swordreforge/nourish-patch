@@ -72,6 +72,13 @@ pub fn capture_background_auto() -> bool {
     compositor_developer_environment_config_base::base::get().capture_background_encoder == "ffmpeg"
 }
 
+/// Whether the saved file must be constant-frame-rate (`capture_variable_frame_rate
+/// == false`). CFR is produced by the re-encode pass; when true the driver forces
+/// a re-encode even for an otherwise plain save.
+pub fn capture_cfr() -> bool {
+    !compositor_developer_environment_config_base::base::get().capture_variable_frame_rate
+}
+
 /// Normalized `capture_codec` string (`av1`|`h265`|`h264`, default `av1`). The
 /// driver maps this to the software re-encode codec.
 pub fn capture_codec_name() -> &'static str {

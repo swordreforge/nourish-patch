@@ -28,7 +28,8 @@ use compositor_y5_graphic_capture_encode::{
 };
 use compositor_y5_graphic_capture_vaapi::{
     Backend, CaptureEncoder, EncoderThread, NvencCudaEncoder, VaapiEncoder, backend_from_config,
-    capture_background_auto, capture_codec_name, capture_codecs, capture_cq, capture_fps,
+    capture_background_auto, capture_cfr, capture_codec_name, capture_codecs, capture_cq,
+    capture_fps,
 };
 use compositor_y5_graphic_capture_registry::{CaptureSource, OutputId};
 use compositor_y5_graphic_capture_session::message::{
@@ -736,6 +737,9 @@ fn commit_save(state: &mut Loop, renderer: &mut GlesRenderer, target: PathBuf) {
     // Read the checkbox before the dialog is torn down.
     let optimize_checked = save_dialog_optimized(state);
     let auto = capture_background_auto();
+    // CFR (constant frame rate) can only be produced by re-encoding, so it forces
+    // a re-encode even when the user didn't opt into "Optimized encoding".
+    let cfr = capture_cfr();
 
     let phase = std::mem::replace(&mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase, CapturePhase::Idle);
     let CapturePhase::Saving { pending, .. } = phase else {
@@ -754,15 +758,15 @@ fn commit_save(state: &mut Loop, renderer: &mut GlesRenderer, target: PathBuf) {
             close_save_dialog(state);
         }
         PendingSave::Video(temp) => {
-            if auto || optimize_checked {
+            if auto || optimize_checked || cfr {
                 let codec = optimized_codec();
                 if auto {
                     // Background, no progress UI: writes a `.y5-encoding` partial
                     // and renames to `target` when done (lossless fallback on fail).
-                    reencode_detached(temp, target, codec);
+                    reencode_detached(temp, target, codec, cfr);
                     close_save_dialog(state);
                 } else {
-                    begin_encoding(state, renderer, temp, target, codec);
+                    begin_encoding(state, renderer, temp, target, codec, cfr);
                 }
             } else {
                 save_fallback(&temp, &target);
@@ -781,9 +785,10 @@ fn begin_encoding(
     temp: PathBuf,
     target: PathBuf,
     codec: OptimizedCodec,
+    cfr: bool,
 ) {
     let partial = partial_path(&target);
-    let job = match ReencodeJob::spawn(&temp, partial.clone(), codec) {
+    let job = match ReencodeJob::spawn(&temp, partial.clone(), codec, cfr) {
         Some(j) => j,
         None => {
             warn!("optimized encode could not start — saving lossless");

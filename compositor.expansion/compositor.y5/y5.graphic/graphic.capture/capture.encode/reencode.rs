@@ -74,13 +74,19 @@ pub struct ReencodeJob {
 impl ReencodeJob {
     /// Spawn an ffmpeg re-encode of `input` → `output` with `codec`'s preset.
     /// Returns `None` if ffmpeg can't be spawned (caller falls back).
-    pub fn spawn(input: &Path, output: PathBuf, codec: OptimizedCodec) -> Option<ReencodeJob> {
+    pub fn spawn(
+        input: &Path,
+        output: PathBuf,
+        codec: OptimizedCodec,
+        cfr: bool,
+    ) -> Option<ReencodeJob> {
         let total_us = probe_duration_us(input).unwrap_or(0);
 
         let mut cmd = Command::new("ffmpeg");
         cmd.args(["-y", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-i"])
             .arg(input)
             .args(codec.encode_args())
+            .args(cfr_args(input, cfr))
             .arg(&output)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -186,10 +192,10 @@ pub fn partial_path(target: &Path) -> PathBuf {
 /// `target` on success. On any failure, falls back to saving the lossless `temp`
 /// as `target` (a recording is never lost). Returns immediately; runs on its own
 /// thread, so no progress bar / state-machine polling is involved.
-pub fn reencode_detached(temp: PathBuf, target: PathBuf, codec: OptimizedCodec) {
+pub fn reencode_detached(temp: PathBuf, target: PathBuf, codec: OptimizedCodec, cfr: bool) {
     std::thread::spawn(move || {
         let partial = partial_path(&target);
-        if run_blocking(&temp, &partial, codec) && std::fs::rename(&partial, &target).is_ok() {
+        if run_blocking(&temp, &partial, codec, cfr) && std::fs::rename(&partial, &target).is_ok() {
             let _ = std::fs::remove_file(&temp);
             info!("reencode(auto): {} done", target.display());
         } else {
@@ -208,11 +214,12 @@ pub fn save_fallback(temp: &Path, target: &Path) {
 }
 
 /// Spawn ffmpeg and block until exit; `true` on success with non-empty output.
-fn run_blocking(input: &Path, output: &Path, codec: OptimizedCodec) -> bool {
+fn run_blocking(input: &Path, output: &Path, codec: OptimizedCodec, cfr: bool) -> bool {
     let status = Command::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-i"])
         .arg(input)
         .args(codec.encode_args())
+        .args(cfr_args(input, cfr))
         .arg(output)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -220,6 +227,56 @@ fn run_blocking(input: &Path, output: &Path, codec: OptimizedCodec) -> bool {
         .status();
     matches!(status, Ok(s) if s.success())
         && std::fs::metadata(output).map(|m| m.len() > 0).unwrap_or(false)
+}
+
+/// ffmpeg output options forcing constant frame rate at a snapped target rate
+/// (empty when CFR isn't requested). `-fps_mode cfr -r N` re-times frames
+/// (dup/drop) into a steady rate that VFR-averse editors/players accept.
+fn cfr_args(input: &Path, cfr: bool) -> Vec<String> {
+    if !cfr {
+        return Vec::new();
+    }
+    let target = snap_fps(probe_avg_fps(input).unwrap_or(60.0));
+    vec!["-fps_mode".into(), "cfr".into(), "-r".into(), target.to_string()]
+}
+
+/// Snap a measured average fps to the nearest standard rate when within ±5,
+/// otherwise to the nearest multiple of 5 (so e.g. 57 → 60, 43 → 45).
+fn snap_fps(avg: f64) -> u32 {
+    const STD: [u32; 7] = [24, 25, 30, 50, 60, 90, 120];
+    let (best, dist) = STD
+        .iter()
+        .map(|&s| (s, (avg - s as f64).abs()))
+        .min_by(|a, b| a.1.total_cmp(&b.1))
+        .unwrap();
+    if dist <= 5.0 {
+        best
+    } else {
+        ((avg / 5.0).round() as u32).max(1) * 5
+    }
+}
+
+/// Probe a file's average frame rate via `ffprobe`. `None` if unavailable.
+fn probe_avg_fps(input: &Path) -> Option<f64> {
+    let out = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=avg_frame_rate",
+            "-of",
+            "default=nw=1:nk=1",
+        ])
+        .arg(input)
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&out.stdout);
+    let (n, d) = s.trim().split_once('/')?;
+    let n: f64 = n.trim().parse().ok()?;
+    let d: f64 = d.trim().parse().ok()?;
+    if d == 0.0 { None } else { Some(n / d) }
 }
 
 /// Probe a media file's duration in microseconds via `ffprobe`. `None` if
