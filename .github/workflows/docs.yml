@@ -5,7 +5,7 @@ name: Publish
 # drift:
 #   Pages (nourish.snowies.com):
 #     /                         the marketing site (compositor.website, carries the CNAME)
-#     /docs                     generated rustdoc + coverage site
+#     /docs                     coverage report + reference guides
 #     /release/latest/fedora44  the install bundle (package.tar.gz + SHA256SUMS) get.sh fetches
 #   GitHub Release:
 #     the rolling `latest` release — the same package.tar.gz + SHA256SUMS attached as assets.
@@ -37,7 +37,7 @@ env:
   CARGO_PROFILE_DEV_DEBUG: "0"
 
 jobs:
-  # The public site: marketing root + rustdoc/coverage under /docs.
+  # The public site: marketing root + coverage report under /docs.
   site:
     runs-on: ubuntu-latest
     container: ghcr.io/${{ github.repository_owner }}/y5-ci:fedora44
@@ -66,7 +66,7 @@ jobs:
           else
             echo ">> no successful upstream-integration CI run found — publishing without coverage"
           fi
-      # rustdoc only (no coverage recompile); build-docs.sh folds in the reused .ci-coverage/.
+      # No recompile here; build-docs.sh just folds in the reused .ci-coverage/ report.
       - name: Build docs site
         run: ci/scripts/build-docs.sh
       - name: Assemble site tree (marketing at root, docs under /docs)

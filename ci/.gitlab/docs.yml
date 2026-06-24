@@ -1,6 +1,6 @@
 # Publish the public site + the install bundle via GitLab Pages (the `pages` job name +
 # public/ artifact are GitLab Pages conventions). Default branch only — mirror of the
-# GitHub Publish workflow: marketing site at root, rustdoc/coverage under /docs, and the
+# GitHub Publish workflow: marketing site at root, coverage report under /docs, and the
 # install bundle (installer + binaries + components) under /release/latest/fedora44/.
 pages:
   stage: docs
