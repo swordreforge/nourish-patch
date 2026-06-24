@@ -15,12 +15,19 @@ pub mod ffi {
 }
 
 mod common;
+pub mod cuda;
+mod dynload;
+pub mod egl;
 pub mod nvenc;
+pub mod nvenc_cuda;
+pub mod thread;
 pub mod vaapi;
 
 use std::path::PathBuf;
 
 pub use nvenc::NvencEncoder;
+pub use nvenc_cuda::{Codec, NvencCudaEncoder};
+pub use thread::EncoderThread;
 pub use vaapi::VaapiEncoder;
 
 /// Which hardware video backend to use. Selected by the `capture_encoder`
@@ -39,16 +46,20 @@ pub fn backend_from_config() -> Backend {
     }
 }
 
-/// A running video encode session — NVENC (readback-fed BGRA) or VAAPI
-/// (zero-copy dmabuf).
+/// A running video encode session:
+/// - `NvencCuda` — zero-copy dmabuf → EGL → CUDA → NVENC (preferred on NVIDIA);
+/// - `Nvenc` — NVENC fed by GPU→CPU readback, encoded on its own [`EncoderThread`]
+///   (fallback when the zero-copy path is unavailable);
+/// - `Vaapi` — zero-copy dmabuf, encoded inline.
 pub enum CaptureEncoder {
-    Nvenc(NvencEncoder),
+    Nvenc(EncoderThread),
+    NvencCuda(NvencCudaEncoder),
     Vaapi(VaapiEncoder),
 }
 
 impl CaptureEncoder {
-    /// NVENC consumes readback BGRA frames via `push`; VAAPI reads the dmabuf
-    /// itself via `VaapiEncoder::encode`.
+    /// Only the readback NVENC variant needs the GPU→CPU readback frames; the
+    /// zero-copy variants (`NvencCuda`, `Vaapi`) read the dmabuf directly.
     pub fn needs_readback(&self) -> bool {
         matches!(self, Self::Nvenc(_))
     }
@@ -56,6 +67,7 @@ impl CaptureEncoder {
     pub fn finish(self) -> Option<PathBuf> {
         match self {
             Self::Nvenc(n) => n.finish(),
+            Self::NvencCuda(z) => z.finish(),
             Self::Vaapi(v) => v.finish(),
         }
     }
@@ -63,6 +75,7 @@ impl CaptureEncoder {
     pub fn discard(self) {
         match self {
             Self::Nvenc(n) => n.discard(),
+            Self::NvencCuda(z) => z.discard(),
             Self::Vaapi(v) => v.discard(),
         }
     }

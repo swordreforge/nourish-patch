@@ -22,9 +22,10 @@ use uuid::Uuid;
 use compositor_y5_camera_transform_translate::transform::Transform;
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::CoordinateTrait;
-use compositor_y5_graphic_capture_encode::{AsyncReadback, Frame, readback, save_png};
+use compositor_y5_graphic_capture_encode::{AsyncReadback, readback, save_png};
 use compositor_y5_graphic_capture_vaapi::{
-    Backend, CaptureEncoder, NvencEncoder, VaapiEncoder, backend_from_config,
+    Backend, CaptureEncoder, Codec, EncoderThread, NvencCudaEncoder, VaapiEncoder,
+    backend_from_config,
 };
 use compositor_y5_graphic_capture_registry::{CaptureSource, OutputId};
 use compositor_y5_graphic_capture_session::message::{
@@ -399,10 +400,22 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
     // frames; VAAPI (mesa/AMD/Intel) reads the capture dmabuf zero-copy.
     let (encoder, video_readback) = match backend_from_config() {
         Backend::Nvenc => {
-            let enc = capture.size().and_then(|s| {
-                NvencEncoder::start(s.w.max(0) as u32, s.h.max(0) as u32, VIDEO_FPS)
-            });
-            (enc.map(CaptureEncoder::Nvenc), Some(AsyncReadback::new()))
+            // Prefer the zero-copy path (dmabuf → EGL → CUDA → NVENC): no
+            // readback, no CPU copy. Falls back to the readback encoder thread
+            // if libcuda/libEGL/NVENC-CUDA is unavailable.
+            let zc = capture
+                .dmabuf()
+                .and_then(|d| NvencCudaEncoder::start(&d, VIDEO_FPS, Codec::H264));
+            match zc {
+                Some(z) => (Some(CaptureEncoder::NvencCuda(z)), None),
+                None => {
+                    warn!("nvenc zero-copy unavailable — using readback path");
+                    let enc = capture.size().and_then(|s| {
+                        EncoderThread::spawn_nvenc(s.w.max(0) as u32, s.h.max(0) as u32, VIDEO_FPS)
+                    });
+                    (enc.map(CaptureEncoder::Nvenc), Some(AsyncReadback::new()))
+                }
+            }
         }
         Backend::Vaapi => {
             let enc = capture
@@ -525,16 +538,25 @@ fn video_frame(state: &mut Loop) {
             v.encode();
             a.last_frame = Some(now);
         }
+        Some(CaptureEncoder::NvencCuda(z)) => {
+            // Zero-copy: the dmabuf already holds this frame (capture blit ran
+            // earlier in the frame). Just signal the encoder thread to map +
+            // CUDA-copy + encode it. No readback.
+            if !due {
+                return;
+            }
+            z.tick();
+            a.last_frame = Some(now);
+        }
         Some(CaptureEncoder::Nvenc(n)) => {
             let (Some(ctx), Some(rb)) = (ctx.as_ref(), a.readback.as_mut()) else {
                 return;
             };
-            // 1. Consume a completed readback → encode.
-            if let Some(mut frame) = rb.poll(ctx) {
-                if flip {
-                    frame.flip_vertical();
-                }
-                n.push(&frame.bgra, frame.width, frame.height);
+            // 1. Hand a completed readback to the encoder thread (non-blocking,
+            //    unbounded → never drops a frame). The vertical flip + encode
+            //    run on the worker, off the render thread.
+            if let Some(frame) = rb.poll(ctx) {
+                n.send(frame.bgra, frame.width, frame.height, flip);
             }
             // 2. Submit a fresh readback if due and the slot is free.
             if due && !rb.inflight() {
