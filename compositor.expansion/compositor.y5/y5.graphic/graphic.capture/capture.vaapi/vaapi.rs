@@ -96,7 +96,7 @@ impl VaapiEncoder {
             stream: ptr::null_mut(),
             desc: Box::new(unsafe { std::mem::zeroed() }),
             stream_index: 0,
-            pts: 0,
+            pts: -1,
             fps: fps.max(1),
             width: w as u32,
             height: h as u32,
@@ -386,13 +386,14 @@ impl VaapiEncoder {
 
     /// Encode the current contents of the capture dmabuf as one frame. Call
     /// after the per-frame render into the dmabuf has completed (synced).
-    pub fn encode(&mut self) {
+    pub fn encode(&mut self, pts: i64) {
         if !self.started {
             return;
         }
         unsafe {
-            (*self.drm_frame).pts = self.pts;
-            self.pts += 1;
+            let pts = pts.max(self.pts + 1); // strictly monotonic guard
+            self.pts = pts;
+            (*self.drm_frame).pts = pts;
             // Push the (persistent) DRM frame into the graph (its dmabuf content
             // changed since last frame). KEEP_REF so the graph doesn't take it.
             let r = ffi::av_buffersrc_add_frame_flags(

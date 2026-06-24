@@ -29,6 +29,27 @@ pub struct Environment {
     pub vk_diag: String,
     /// Capture encoder: `"mesa"`/`"vaapi"` for VAAPI, else NVENC.
     pub capture_encoder: String,
+    /// Live-capture video codec: `"av1"` | `"h265"` | `"h264"`. Falls back to
+    /// the first available NVENC encoder along av1 → h265 → h264 (VP9 has no
+    /// NVENC; reachable only via the optimized software re-encode).
+    pub capture_codec: String,
+    /// Live-capture quality: `"lossless"` (near-lossless, CQ 19) or
+    /// `"optimized"` (smaller, higher CQ — still real-time hardware). Sets the
+    /// live NVENC CQ; independent of the optional software re-encode below.
+    pub capture_quality: String,
+    /// Max live-capture frame rate, clamped to `30..=120`.
+    pub capture_refresh_rate_max: u32,
+    /// Optional post-capture **software** re-encode (much smaller): `""` = off
+    /// (offer it as an "Optimized encoding" checkbox in the save dialog);
+    /// `"ffmpeg"` = run it automatically in the background after every recording
+    /// (no checkbox; writes a `.y5-encoding` file renamed to the target on done).
+    pub capture_background_encoder: String,
+    /// `true` = keep the capture's natural variable frame rate (exact timing,
+    /// smallest). `false` = produce a constant frame rate, snapped to a standard
+    /// rate (else nearest 5), for editors/players that reject VFR. CFR is applied
+    /// during the re-encode pass (it can't be done without re-timing frames), so
+    /// `false` forces a re-encode even for an otherwise plain save.
+    pub capture_variable_frame_rate: bool,
     /// `false` = compositor-tracked window sizing; `true` = client xdg geometry.
     pub window_client_size_fallback: bool,
     /// `false` = fit only the root toplevel; `true` = fit the whole surface tree.

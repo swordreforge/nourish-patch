@@ -21,6 +21,7 @@ extern crate compositor_developer_debug_instance_record;
 pub mod border;
 pub mod dialog;
 pub mod dim;
+pub mod encodialog;
 pub mod hud;
 pub mod mask;
 pub mod savedialog;

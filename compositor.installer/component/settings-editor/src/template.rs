@@ -18,6 +18,11 @@ pub fn default_settings() -> Environment {
         log_level: "info,warn,error".to_string(),
         vk_diag: String::new(),
         capture_encoder: "nvenc".to_string(),
+        capture_codec: "av1".to_string(),
+        capture_quality: "lossless".to_string(),
+        capture_refresh_rate_max: 60,
+        capture_background_encoder: String::new(),
+        capture_variable_frame_rate: true,
         window_client_size_fallback: false,
         window_subsurface_shrinks: false,
     }

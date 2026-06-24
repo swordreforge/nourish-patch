@@ -59,6 +59,38 @@ pub fn interactive(base: Environment) -> Environment {
             &["nvenc", "vaapi", "mesa"],
             &base.capture_encoder,
         ),
+        capture_codec: choose(
+            "capture_codec",
+            "Live capture codec (falls back av1 -> h265 -> h264 by availability).",
+            &["av1", "h265", "h264"],
+            &base.capture_codec,
+        ),
+        capture_quality: choose(
+            "capture_quality",
+            "Live capture quality: lossless (CQ 19) or optimized (smaller, higher CQ).",
+            &["lossless", "optimized"],
+            &base.capture_quality,
+        ),
+        capture_refresh_rate_max: choose(
+            "capture_refresh_rate_max",
+            "Max capture frame rate.",
+            &["30", "60", "90", "120"],
+            &base.capture_refresh_rate_max.to_string(),
+        )
+        .parse()
+        .unwrap_or(60)
+        .clamp(30, 120),
+        capture_background_encoder: choose(
+            "capture_background_encoder",
+            "Auto background software re-encode after capture: ffmpeg, or off.",
+            &["", "ffmpeg"],
+            &base.capture_background_encoder,
+        ),
+        capture_variable_frame_rate: yes_no(
+            "capture_variable_frame_rate",
+            "Keep variable frame rate (true) or force constant frame rate during re-encode (false).",
+            base.capture_variable_frame_rate,
+        ),
         window_client_size_fallback: yes_no(
             "window_client_size_fallback",
             "Fall back to client xdg geometry instead of compositor-tracked sizing.",
