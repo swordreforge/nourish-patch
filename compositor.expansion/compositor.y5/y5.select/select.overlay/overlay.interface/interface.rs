@@ -109,15 +109,31 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
 
     let untyped = handle.untyped();
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
-        // Capture keyboard so Shift/Alt modifiers reach the toolbar. Cleared on
-        // destroy (destroy_by_id resets focus), so keyboard is captured only
-        // while the toolbar is visible.
+        // Give the toolbar iced keyboard focus so Shift/Alt modifiers reach it.
         reg.set_keyboard_focus(Some(untyped));
     }
+    // ...and drop the wayland keyboard focus. The keyboard handler routes to iced
+    // ONLY when no wayland client is focused (`wayland_handle` short-circuits
+    // otherwise), so a focused window would otherwise swallow the modifiers. This
+    // mirrors the old layer-shell overlay's on-demand keyboard grab.
+    grab_keyboard_to_overlay(state);
 
     let st = state.inner.kernel.get_mut(&SELECTION_OVERLAY_MUT);
     st.handle = Some(untyped);
     st.count = count;
+}
+
+/// Clear the wayland keyboard focus so keys/modifiers flow to the iced registry
+/// (and thus the focused toolbar) instead of a focused window.
+fn grab_keyboard_to_overlay(state: &mut Loop) {
+    let serial = smithay::utils::SERIAL_COUNTER.next_serial();
+    if let Some(keyboard) = state.state.seat.seat.get_keyboard() {
+        keyboard.set_focus(
+            &mut state.state,
+            Option::<smithay::reexports::wayland_server::protocol::wl_surface::WlSurface>::None,
+            serial,
+        );
+    }
 }
 
 fn update(state: &mut Loop, id: HandleId, count: i32) {
