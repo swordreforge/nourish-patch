@@ -24,8 +24,8 @@ use compositor_y5_camera_transform_translate::transform::Transform;
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::CoordinateTrait;
 use compositor_y5_graphic_capture_encode::{
-    AsyncReadback, OptimizedCodec, ReencodeJob, ReencodeStatus, partial_path, readback,
-    reencode_detached, save_fallback, save_png,
+    AsyncReadback, OptimizedCodec, ReencodeJob, ReencodeStatus, ffmpeg_format, partial_path,
+    readback, reencode_detached, save_fallback, save_png,
 };
 use compositor_y5_graphic_capture_vaapi::{
     Backend, CaptureEncoder, EncoderThread, NvencCudaEncoder, VaapiEncoder, backend_from_config,
@@ -583,7 +583,9 @@ fn video_frame(state: &mut Loop) {
             if !due {
                 return;
             }
-            z.tick(pts);
+            // PTS for the zero-copy path is computed on the encoder worker at
+            // encode time (so it matches the frame actually read); we only signal.
+            z.tick();
             a.last_frame = Some(now);
         }
         Some(CaptureEncoder::Nvenc(n)) => {
@@ -826,7 +828,7 @@ fn begin_encoding(
     cfr: bool,
 ) {
     let partial = partial_path(&target);
-    let job = match ReencodeJob::spawn(&temp, partial.clone(), codec, cfr) {
+    let job = match ReencodeJob::spawn(&temp, partial.clone(), codec, cfr, ffmpeg_format(&target)) {
         Some(j) => j,
         None => {
             warn!("optimized encode could not start — saving lossless");

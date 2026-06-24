@@ -78,9 +78,10 @@ struct DmabufInfo {
 }
 
 enum Msg {
-    /// A fresh frame is in the dmabuf — map + copy + encode it at this PTS
-    /// (encoder timebase, 1/fps).
-    Tick(i64),
+    /// A fresh frame is in the dmabuf — encode the latest one. PTS is derived on
+    /// the worker at encode time (not carried here), so coalesced ticks still get
+    /// correct, real-time playback timing.
+    Tick,
     Finish,
     Discard,
 }
@@ -131,10 +132,12 @@ impl NvencCudaEncoder {
         }
     }
 
-    /// Signal that the dmabuf holds a fresh frame to encode. Non-blocking,
-    /// never drops (unbounded queue).
-    pub fn tick(&self, pts: i64) {
-        let _ = self.tx.send(Msg::Tick(pts));
+    /// Signal that the dmabuf holds a fresh frame. Non-blocking. Extra signals
+    /// while the worker is busy coalesce — the dmabuf only ever holds the latest
+    /// frame, so queuing them would only let the worker fall behind (sped-up
+    /// playback) and pile up a backlog that stalls Stop.
+    pub fn tick(&self) {
+        let _ = self.tx.send(Msg::Tick);
     }
 
     pub fn finish(mut self) -> Option<PathBuf> {
@@ -196,9 +199,49 @@ fn worker(
             return None;
         }
     };
-    for msg in rx {
+    // PTS anchor: real elapsed time is measured HERE (at encode time), so a
+    // frame's PTS always matches the dmabuf content the worker actually reads —
+    // even if the worker can't keep up with the capture rate. This is what keeps
+    // playback at the right speed regardless of throughput.
+    let mut anchor: Option<std::time::Instant> = None;
+    loop {
+        let msg = match rx.recv() {
+            Ok(m) => m,
+            Err(_) => break, // senders dropped without Finish/Discard → discard
+        };
         match msg {
-            Msg::Tick(pts) => unsafe { sess.encode_one(pts) },
+            Msg::Tick => {
+                // Coalesce any queued ticks; the dmabuf only holds the latest
+                // frame, so we encode it exactly once per drain.
+                let mut terminal = None;
+                loop {
+                    match rx.try_recv() {
+                        Ok(Msg::Tick) => {}
+                        Ok(Msg::Finish) => {
+                            terminal = Some(true);
+                            break;
+                        }
+                        Ok(Msg::Discard) => {
+                            terminal = Some(false);
+                            break;
+                        }
+                        Err(_) => break,
+                    }
+                }
+                let a = *anchor.get_or_insert_with(std::time::Instant::now);
+                let pts = (a.elapsed().as_secs_f64() * fps as f64).round() as i64;
+                unsafe { sess.encode_one(pts) };
+                match terminal {
+                    Some(true) => return Some(unsafe { sess.finish() }),
+                    Some(false) => {
+                        let temp = sess.temp.clone();
+                        drop(sess);
+                        let _ = std::fs::remove_file(temp);
+                        return None;
+                    }
+                    None => {}
+                }
+            }
             Msg::Finish => {
                 let temp = unsafe { sess.finish() };
                 return Some(temp);
