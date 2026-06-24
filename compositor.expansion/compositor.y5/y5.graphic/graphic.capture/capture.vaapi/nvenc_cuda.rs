@@ -59,6 +59,28 @@ impl Codec {
     }
 }
 
+// --- Per-frame pipeline knobs (compile-time). Defaults are byte-identical to the
+//     stable path: a synchronous copy followed by a full-context sync. ----------
+/// Keep the per-frame `cuCtxSynchronize` after a *synchronous* copy. The copy is
+/// already host-synchronous, so this extra whole-context barrier is largely
+/// redundant and serializes the copy against in-flight NVENC work. `true` =
+/// stable; set `false` to drop it (lets NVENC overlap → higher throughput).
+/// Ignored when [`ASYNC_COPY`] is on. Bench before flipping.
+const PER_FRAME_CTX_SYNC: bool = true;
+/// Copy the dmabuf into the NVENC input frame asynchronously on the ffmpeg CUDA
+/// device's stream (no host sync — NVENC reads on the same stream, so the copy
+/// is ordered before the encode). `false` = stable (sync copy). `true` removes
+/// the per-frame host stall entirely; relies on ffmpeg's nvenc using the device
+/// stream for input, so verify output integrity when enabling.
+const ASYNC_COPY: bool = false;
+
+/// Trade max quality for throughput on the *live* encode: drop NVENC from `p7`
+/// (slowest/best) to `p4`, and force split-frame encoding across the Ada NVENC
+/// units (~2× on av1/hevc; h264 has no split and ignores it). Ideal for the
+/// auto-re-encode workflow where the live capture is a throwaway intermediate.
+/// `false` = stable (p7, split-encode left on `auto`). Bench p4+split vs p7.
+const SPLIT_ENCODE: bool = true;
+
 // --- Encoder tuning (shared with crate::nvenc; see CAPTURE.md). --------------
 const BITRATE: i64 = 40_000_000;
 const MAXRATE: i64 = 60_000_000;
@@ -174,6 +196,8 @@ struct Session {
     hwdev: *mut ffi::AVBufferRef,
     frames: *mut ffi::AVBufferRef,
     codec_ctx: *mut ffi::AVCodecContext,
+    /// The ffmpeg CUDA device's stream (used for the async-copy knob).
+    stream: crate::cuda::CUstream,
     mux: Muxer,
     enc_w: c_int,
     enc_h: c_int,
@@ -302,10 +326,10 @@ impl Session {
             unsafe { egl.destroy_raw(image) };
             return None;
         }
-        let cuda_ctx = unsafe {
+        let (cuda_ctx, stream) = unsafe {
             let dctx = (*hwdev).data as *mut ffi::AVHWDeviceContext;
             let hwctx = (*dctx).hwctx as *mut AvcudaDeviceContextMin;
-            (*hwctx).cuda_ctx
+            ((*hwctx).cuda_ctx, (*hwctx).stream as crate::cuda::CUstream)
         };
         unsafe { cuda.set_current(cuda_ctx) };
 
@@ -386,6 +410,7 @@ impl Session {
             hwdev,
             frames,
             codec_ctx,
+            stream,
             mux,
             enc_w,
             enc_h,
@@ -432,13 +457,23 @@ impl Session {
             m.dst_pitch = (*cf).linesize[0] as usize;
             m.width_in_bytes = self.enc_w as usize * 4;
             m.height = self.enc_h as usize;
-            let r = self.cuda.memcpy2d(&m);
+            let r = if ASYNC_COPY {
+                // Async on the device stream; NVENC reads on the same stream, so
+                // the copy is ordered before the encode — no host sync.
+                self.cuda.memcpy2d_async(&m, self.stream)
+            } else {
+                self.cuda.memcpy2d(&m)
+            };
             if r != 0 {
                 warn!("nvenc-cuda: cuMemcpy2D failed: {r}");
                 ffi::av_frame_free(&mut (cf as *mut _));
                 return;
             }
-            self.cuda.synchronize();
+            // The synchronous copy is already host-synced; the extra full-context
+            // barrier is optional (and skipped entirely for the async path).
+            if !ASYNC_COPY && PER_FRAME_CTX_SYNC {
+                self.cuda.synchronize();
+            }
 
             // Keep PTS strictly monotonic (libav rejects non-increasing PTS);
             // the throttle already guarantees ≥1 spacing, this is just a guard.
@@ -529,11 +564,20 @@ unsafe fn build_encoder(
         c.gop_size = (fps * GOP_SECONDS) as c_int;
         c.max_b_frames = codec.b_frames();
         let p = c.priv_data;
-        ffi::av_opt_set(p, c"preset".as_ptr(), c"p7".as_ptr(), 0);
+        // SPLIT_ENCODE trades the slowest/best preset for throughput: p4 instead
+        // of p7, plus split-frame encoding forced on across the NVENC units.
+        let preset: &CStr = if SPLIT_ENCODE { c"p4" } else { c"p7" };
+        ffi::av_opt_set(p, c"preset".as_ptr(), preset.as_ptr(), 0);
         ffi::av_opt_set(p, c"tune".as_ptr(), c"hq".as_ptr(), 0);
         ffi::av_opt_set(p, c"rc".as_ptr(), c"vbr".as_ptr(), 0);
         let cq_str = std::ffi::CString::new(cq.to_string()).unwrap();
         ffi::av_opt_set(p, c"cq".as_ptr(), cq_str.as_ptr(), 0);
+        if SPLIT_ENCODE {
+            // `1` = "forced": the driver picks the strip count for the number of
+            // NVENC units (2 on Ada). Only av1_nvenc/hevc_nvenc have this option;
+            // h264_nvenc ignores it (av_opt_set fails soft, which we don't check).
+            ffi::av_opt_set(p, c"split_encode_mode".as_ptr(), c"1".as_ptr(), 0);
+        }
         if let Some(profile) = codec.profile() {
             ffi::av_opt_set(p, c"profile".as_ptr(), profile.as_ptr(), 0);
         }
