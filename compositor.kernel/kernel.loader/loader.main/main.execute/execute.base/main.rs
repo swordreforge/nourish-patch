@@ -137,6 +137,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Box::new(compositor_y5_launcher_system_base::base::LauncherSystem),
                     // Owns the window-selection slot (SELECT) + applies SELECT_REQUEST.
                     Box::new(compositor_y5_select_system_base::base::SelectSystem),
+                    // Re-anchors the selection toolbar under the cursor on selection change.
+                    Box::new(compositor_y5_select_overlay_system::base::SelectionOverlaySystem),
                     // Owns the window-grouping slot (GROUP).
                     Box::new(compositor_y5_group_system_base::base::GroupSystem),
                 ],
@@ -191,6 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Box::new(compositor_y5_placeholder_system_base::base::PlaceholderSystem),
                 Box::new(compositor_y5_launcher_system_base::base::LauncherSystem),
                 Box::new(compositor_y5_select_system_base::base::SelectSystem),
+                Box::new(compositor_y5_select_overlay_system::base::SelectionOverlaySystem),
                 Box::new(compositor_y5_group_system_base::base::GroupSystem),
             ]
         };

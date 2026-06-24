@@ -24,8 +24,8 @@ use smithay::utils::{Physical, Point, Rectangle, Size};
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::CoordinateTrait;
 use compositor_orchestration_driver_selection_base::base::{
-    BAR_H, BAR_W, CURSOR_DY, Placement, SCREEN_BOTTOM_MARGIN, SELECTION_OVERLAY,
-    SELECTION_OVERLAY_MUT, SELECTION_OVERLAY_PLACEMENT,
+    BAR_H, BAR_W, Placement, SCREEN_BOTTOM_MARGIN, SELECTION_OVERLAY, SELECTION_OVERLAY_MUT,
+    SELECTION_OVERLAY_PLACEMENT, SELECTION_REANCHOR_MUT, world_loc_under_cursor,
 };
 use compositor_orchestration_draw_layer_base::base::Layer;
 use compositor_support_world_order_track_base::base::DrawLayer;
@@ -51,6 +51,37 @@ pub fn per_frame(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, 
         (Some(id), 0) => destroy(state, id),
         (Some(id), n) => update(state, id, n),
         (None, _) => {}
+    }
+
+    // Apply a re-anchor requested by the selection-change event (system-driven).
+    reanchor_if_pending(state);
+}
+
+/// Consume the one-shot `SELECTION_REANCHOR` flag (raised by the overlay system
+/// on a selection-change event) and move the world toolbar under the live
+/// cursor. Done here, not in the system, because the cursor comes from the seat.
+fn reanchor_if_pending(state: &mut Loop) {
+    if SELECTION_OVERLAY_PLACEMENT != Placement::WorldAtCursor {
+        return;
+    }
+    let target = state.inner.worlds.spawn_target();
+    let pending = state
+        .inner
+        .worlds
+        .get_mut(target)
+        .storage_mut()
+        .try_get_mut(&SELECTION_REANCHOR_MUT)
+        .map(|flag| std::mem::replace(flag, false))
+        .unwrap_or(false);
+    if !pending {
+        return;
+    }
+    let Some(id) = state.inner.kernel.get(&SELECTION_OVERLAY).handle else {
+        return;
+    };
+    let loc = world_loc(state);
+    if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
+        reg.set_location_by_id(id, loc);
     }
 }
 
@@ -153,11 +184,17 @@ fn placement(
 /// on the cursor and sits just below it. World iced stores location in
 /// logical×scale units; the cursor (`pointer.motion`) is logical.
 fn world_loc(state: &Loop) -> Point<i32, Physical> {
-    let scale = state.size_context().scale;
-    let m = state.inner.pointer().motion;
-    let x = m.x * scale - (BAR_W as f64) / 2.0;
-    let y = m.y * scale + CURSOR_DY;
-    Point::from((x.round() as i32, y.round() as i32))
+    // The live cursor in y5-world logical space comes from the seat (the y5
+    // PointerState token is not the live value). World iced location is
+    // logical × scale.
+    let cursor = state
+        .state
+        .seat
+        .seat
+        .get_pointer()
+        .map(|p| p.current_location())
+        .unwrap_or_default();
+    world_loc_under_cursor((cursor.x, cursor.y), state.size_context().scale)
 }
 
 // --- font / registry plumbing ---------------------------------------------
