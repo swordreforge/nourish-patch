@@ -21,6 +21,14 @@ use compositor_orchestration_core_state_base::state::{Loader, Orchestrator as St
 // wiring is encapsulated behind `block_sigchld` + `install`.
 use compositor_kernel_execution_driver_executor_install::install as launch_executor;
 
+/// The shipped version, baked in at COMPILE time from the repo-root `VERSION` file —
+/// the single human-owned constant (`MAJOR.MINOR.PATCH`). `include_str!` makes cargo
+/// track that file, so changing it forces a rebuild and the embedded number can never
+/// drift from the released artifact. CI overwrites this file (never committed) with the
+/// auto-incremented patch before building; a plain local build embeds whatever it holds.
+/// See ci/scripts/version.sh for how the patch is derived.
+pub const VERSION: &str = include_str!("../../../../../VERSION").trim_ascii();
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // FIRST: parse the single COMPOSITOR_ENVIRONMENT JSON into the process-global
     // config. This must run before anything else — including logging, which reads
@@ -38,6 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Start the developer logging process (fan-in buffer + drain/print + gRPC stream).
     // Levels come from COMPOSITOR_LOG_LEVEL.
     compositor_developer_log_process_main::spawn();
+    info!("y5_compositor {VERSION}");
 
     // Arm the persistence engine (spawn its writer thread) before any world flushes.
     compositor_support_system_persist_engine_base::base::init();

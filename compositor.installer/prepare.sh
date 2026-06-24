@@ -43,6 +43,11 @@ done
 
 skipped() { case ",$SKIP," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 
+# Note: the compositor's version is baked in at COMPILE time from the repo-root VERSION
+# file (include_str! in the loader bin), NOT injected here — so nothing in the install
+# path can make the embedded number disagree with the build. CI sets the release number
+# by writing that file before this runs; see ci/scripts/version.sh.
+
 STAGE="$OUT/stage"
 BIN="$STAGE/binaries"
 TPL="$STAGE/templates"
