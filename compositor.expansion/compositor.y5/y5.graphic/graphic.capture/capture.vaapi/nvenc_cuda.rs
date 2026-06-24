@@ -78,8 +78,9 @@ struct DmabufInfo {
 }
 
 enum Msg {
-    /// A fresh frame is in the dmabuf — map + copy + encode it.
-    Tick,
+    /// A fresh frame is in the dmabuf — map + copy + encode it at this PTS
+    /// (encoder timebase, 1/fps).
+    Tick(i64),
     Finish,
     Discard,
 }
@@ -94,7 +95,7 @@ impl NvencCudaEncoder {
     /// Set up the zero-copy pipeline for `dmabuf`. Returns `None` if libEGL/
     /// libcuda/NVENC are unavailable or any stage fails (→ caller falls back to
     /// the readback path).
-    pub fn start(dmabuf: &Dmabuf, fps: u32, codec: Codec) -> Option<Self> {
+    pub fn start(dmabuf: &Dmabuf, fps: u32, codec: Codec, cq: u32) -> Option<Self> {
         let width = dmabuf.width() as i32;
         let height = dmabuf.height() as i32;
         if width < 2 || height < 2 {
@@ -116,7 +117,7 @@ impl NvencCudaEncoder {
         let (init_tx, init_rx) = channel::<bool>();
         let join = std::thread::Builder::new()
             .name("y5-nvenc-cuda".into())
-            .spawn(move || worker(info, fps, codec, rx, init_tx))
+            .spawn(move || worker(info, fps, codec, cq, rx, init_tx))
             .ok()?;
         match init_rx.recv() {
             Ok(true) => Some(NvencCudaEncoder {
@@ -132,8 +133,8 @@ impl NvencCudaEncoder {
 
     /// Signal that the dmabuf holds a fresh frame to encode. Non-blocking,
     /// never drops (unbounded queue).
-    pub fn tick(&self) {
-        let _ = self.tx.send(Msg::Tick);
+    pub fn tick(&self, pts: i64) {
+        let _ = self.tx.send(Msg::Tick(pts));
     }
 
     pub fn finish(mut self) -> Option<PathBuf> {
@@ -181,10 +182,11 @@ fn worker(
     info: DmabufInfo,
     fps: u32,
     codec: Codec,
+    cq: u32,
     rx: Receiver<Msg>,
     init_tx: Sender<bool>,
 ) -> Option<PathBuf> {
-    let mut sess = match unsafe { Session::init(&info, fps, codec) } {
+    let mut sess = match unsafe { Session::init(&info, fps, codec, cq) } {
         Some(s) => {
             let _ = init_tx.send(true);
             s
@@ -196,7 +198,7 @@ fn worker(
     };
     for msg in rx {
         match msg {
-            Msg::Tick => unsafe { sess.encode_one() },
+            Msg::Tick(pts) => unsafe { sess.encode_one(pts) },
             Msg::Finish => {
                 let temp = unsafe { sess.finish() };
                 return Some(temp);
@@ -217,7 +219,7 @@ fn worker(
 }
 
 impl Session {
-    unsafe fn init(info: &DmabufInfo, fps: u32, codec: Codec) -> Option<Session> {
+    unsafe fn init(info: &DmabufInfo, fps: u32, codec: Codec, cq: u32) -> Option<Session> {
         let cuda = Cuda::load()?;
         if unsafe { cuda.init() } != 0 {
             warn!("nvenc-cuda: cuInit failed");
@@ -302,7 +304,7 @@ impl Session {
         }
 
         // NVENC encoder on CUDA frames.
-        let codec_ctx = match unsafe { build_encoder(codec, frames, enc_w, enc_h, fps) } {
+        let codec_ctx = match unsafe { build_encoder(codec, frames, enc_w, enc_h, fps, cq) } {
             Some(c) => c,
             None => {
                 unsafe {
@@ -344,13 +346,13 @@ impl Session {
             mux,
             enc_w,
             enc_h,
-            pts: 0,
+            pts: -1,
             temp,
         })
     }
 
     /// Map the dmabuf via CUDA, copy into a fresh CUDA frame, and encode it.
-    unsafe fn encode_one(&mut self) {
+    unsafe fn encode_one(&mut self, pts: i64) {
         let ef = match unsafe { self.cuda.mapped_egl_frame(self.cures) } {
             Ok(f) => f,
             Err(e) => {
@@ -395,8 +397,11 @@ impl Session {
             }
             self.cuda.synchronize();
 
-            (*cf).pts = self.pts;
-            self.pts += 1;
+            // Keep PTS strictly monotonic (libav rejects non-increasing PTS);
+            // the throttle already guarantees ≥1 spacing, this is just a guard.
+            let pts = pts.max(self.pts + 1);
+            self.pts = pts;
+            (*cf).pts = pts;
             self.mux.pump(self.codec_ctx, cf);
             ffi::av_frame_free(&mut (cf as *mut _));
         }
@@ -450,6 +455,7 @@ unsafe fn build_encoder(
     w: c_int,
     h: c_int,
     fps: u32,
+    cq: u32,
 ) -> Option<*mut ffi::AVCodecContext> {
     unsafe {
         let enc = ffi::avcodec_find_encoder_by_name(codec.encoder_name().as_ptr());
@@ -483,7 +489,8 @@ unsafe fn build_encoder(
         ffi::av_opt_set(p, c"preset".as_ptr(), c"p7".as_ptr(), 0);
         ffi::av_opt_set(p, c"tune".as_ptr(), c"hq".as_ptr(), 0);
         ffi::av_opt_set(p, c"rc".as_ptr(), c"vbr".as_ptr(), 0);
-        ffi::av_opt_set(p, c"cq".as_ptr(), c"19".as_ptr(), 0);
+        let cq_str = std::ffi::CString::new(cq.to_string()).unwrap();
+        ffi::av_opt_set(p, c"cq".as_ptr(), cq_str.as_ptr(), 0);
         if let Some(profile) = codec.profile() {
             ffi::av_opt_set(p, c"profile".as_ptr(), profile.as_ptr(), 0);
         }

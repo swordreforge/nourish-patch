@@ -27,6 +27,8 @@ enum EncMsg {
         w: u32,
         h: u32,
         flip: bool,
+        /// Capture-time PTS (encoder timebase 1/fps).
+        pts: i64,
     },
     /// Flush + finalize the mp4; the worker returns the temp path.
     Finish,
@@ -47,12 +49,12 @@ impl EncoderThread {
     /// if NVENC is unavailable / the encoder fails to open (reported back from
     /// the worker before the first frame, so callers behave exactly like the
     /// old inline `NvencEncoder::start` returning `None`).
-    pub fn spawn_nvenc(width: u32, height: u32, fps: u32) -> Option<Self> {
+    pub fn spawn_nvenc(width: u32, height: u32, fps: u32, cq: u32) -> Option<Self> {
         let (tx, rx) = channel::<EncMsg>();
         let (init_tx, init_rx) = channel::<bool>();
         let join = std::thread::Builder::new()
             .name("y5-nvenc-encode".into())
-            .spawn(move || worker(width, height, fps, rx, init_tx))
+            .spawn(move || worker(width, height, fps, cq, rx, init_tx))
             .ok()?;
         match init_rx.recv() {
             Ok(true) => Some(EncoderThread {
@@ -68,8 +70,14 @@ impl EncoderThread {
 
     /// Queue one BGRA frame for encoding. Never blocks the caller and never
     /// drops the frame (unbounded queue); a no-op if the worker has exited.
-    pub fn send(&self, bgra: Vec<u8>, w: u32, h: u32, flip: bool) {
-        let _ = self.tx.send(EncMsg::Frame { bgra, w, h, flip });
+    pub fn send(&self, bgra: Vec<u8>, w: u32, h: u32, flip: bool, pts: i64) {
+        let _ = self.tx.send(EncMsg::Frame {
+            bgra,
+            w,
+            h,
+            flip,
+            pts,
+        });
     }
 
     /// Flush the encoder, finalize the mp4, and return the temp path.
@@ -91,10 +99,11 @@ fn worker(
     width: u32,
     height: u32,
     fps: u32,
+    cq: u32,
     rx: Receiver<EncMsg>,
     init_tx: Sender<bool>,
 ) -> Option<PathBuf> {
-    let mut enc = match NvencEncoder::start(width, height, fps) {
+    let mut enc = match NvencEncoder::start(width, height, fps, cq) {
         Some(e) => {
             let _ = init_tx.send(true);
             e
@@ -111,11 +120,12 @@ fn worker(
                 w,
                 h,
                 flip,
+                pts,
             } => {
                 if flip {
                     flip_vertical(&mut bgra, w, h);
                 }
-                enc.push(&bgra, w, h);
+                enc.push(&bgra, w, h, pts);
             }
             EncMsg::Finish => return enc.finish(),
             EncMsg::Discard => {

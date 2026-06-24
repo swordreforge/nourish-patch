@@ -22,10 +22,13 @@ use uuid::Uuid;
 use compositor_y5_camera_transform_translate::transform::Transform;
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::CoordinateTrait;
-use compositor_y5_graphic_capture_encode::{AsyncReadback, readback, save_png};
+use compositor_y5_graphic_capture_encode::{
+    AsyncReadback, OptimizedCodec, ReencodeJob, ReencodeStatus, partial_path, readback,
+    reencode_detached, save_fallback, save_png,
+};
 use compositor_y5_graphic_capture_vaapi::{
-    Backend, CaptureEncoder, Codec, EncoderThread, NvencCudaEncoder, VaapiEncoder,
-    backend_from_config,
+    Backend, CaptureEncoder, EncoderThread, NvencCudaEncoder, VaapiEncoder, backend_from_config,
+    capture_background_auto, capture_codec_name, capture_codecs, capture_cq, capture_fps,
 };
 use compositor_y5_graphic_capture_registry::{CaptureSource, OutputId};
 use compositor_y5_graphic_capture_session::message::{
@@ -38,6 +41,7 @@ use compositor_y5_surface_draw_capture::border::RegionBorder;
 use compositor_y5_surface_draw_capture::dialog::ContinueDialog;
 use compositor_y5_surface_draw_capture::dim::RegionDim;
 use compositor_y5_surface_draw_capture::hud::StopHud;
+use compositor_y5_surface_draw_capture::encodialog::EncodingDialog;
 use compositor_y5_surface_draw_capture::savedialog::SaveDialog;
 use compositor_y5_surface_draw_capture::setup::SetupOverlay;
 use compositor_y5_surface_draw_handle::handle::{IcedSpace, load};
@@ -50,10 +54,6 @@ use compositor_support_iced_core_engine_base::IcedUi;
 const KEEPALIVE: Duration = Duration::from_secs(300);
 /// Grace window to click Continue before the capture auto-stops.
 const GRACE: Duration = Duration::from_secs(30);
-/// Target video frame rate (frames are throttled to this in the per-frame hook).
-/// 60 fps for smooth motion; drop to 30 if the render thread can't keep pace.
-/// Tunable. See CAPTURE.md ("Tuning").
-const VIDEO_FPS: u32 = 60;
 
 /// Max width/height (px) of a render-based capture entry. Bounds the dmabuf
 /// within GPU / wgpu (`maxTextureDimension2D` 8192) / NVENC H.264 (4096) limits;
@@ -110,7 +110,9 @@ pub fn per_frame(state: &mut Loop, renderer: &mut GlesRenderer, _size: Size<i32,
         video_frame(state);
         video_keepalive(state, renderer);
     } else if state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).is_saving() {
-        poll_saveas(state);
+        poll_saveas(state, renderer);
+    } else if state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).is_encoding() {
+        poll_encoding(state, renderer);
     }
 }
 
@@ -123,7 +125,7 @@ pub fn handle(state: &mut Loop, renderer: &mut GlesRenderer, msg: CaptureMessage
         CaptureMessage::Cancel => teardown(state),
         CaptureMessage::Stop | CaptureMessage::StopFromDialog => stop(state, renderer),
         CaptureMessage::ContinueCapture => on_continue(state),
-        CaptureMessage::SaveDefault => save_default(state),
+        CaptureMessage::SaveDefault => save_default(state, renderer),
         CaptureMessage::SaveAs => save_as(state),
         CaptureMessage::Discard => discard_saving(state),
         _ => {}
@@ -336,6 +338,7 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
             readback: None,
             region_origin,
             last_frame: None,
+            video_start: None,
             shot_wait: Some(0),
             last_crop: None,
             keepalive_anchor: Instant::now(),
@@ -398,20 +401,25 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
     // Start the hardware video encoder (no software fallback). The backend is
     // chosen by `Y5_CAPTURE_ENCODER`: NVENC (NVIDIA, default) reads back BGRA
     // frames; VAAPI (mesa/AMD/Intel) reads the capture dmabuf zero-copy.
+    let fps = capture_fps();
+    let cq = capture_cq();
     let (encoder, video_readback) = match backend_from_config() {
         Backend::Nvenc => {
             // Prefer the zero-copy path (dmabuf → EGL → CUDA → NVENC): no
-            // readback, no CPU copy. Falls back to the readback encoder thread
-            // if libcuda/libEGL/NVENC-CUDA is unavailable.
-            let zc = capture
-                .dmabuf()
-                .and_then(|d| NvencCudaEncoder::start(&d, VIDEO_FPS, Codec::H264));
+            // readback, no CPU copy. Try the configured codec then its fallbacks
+            // (av1 → h265 → h264) until one's encoder opens; fall back to the
+            // readback encoder thread if libcuda/libEGL is unavailable.
+            let zc = capture.dmabuf().and_then(|d| {
+                capture_codecs()
+                    .into_iter()
+                    .find_map(|c| NvencCudaEncoder::start(&d, fps, c, cq))
+            });
             match zc {
                 Some(z) => (Some(CaptureEncoder::NvencCuda(z)), None),
                 None => {
                     warn!("nvenc zero-copy unavailable — using readback path");
                     let enc = capture.size().and_then(|s| {
-                        EncoderThread::spawn_nvenc(s.w.max(0) as u32, s.h.max(0) as u32, VIDEO_FPS)
+                        EncoderThread::spawn_nvenc(s.w.max(0) as u32, s.h.max(0) as u32, fps, cq)
                     });
                     (enc.map(CaptureEncoder::Nvenc), Some(AsyncReadback::new()))
                 }
@@ -420,7 +428,7 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
         Backend::Vaapi => {
             let enc = capture
                 .dmabuf()
-                .and_then(|dmabuf| VaapiEncoder::start(&dmabuf, VIDEO_FPS));
+                .and_then(|dmabuf| VaapiEncoder::start(&dmabuf, fps));
             (enc.map(CaptureEncoder::Vaapi), None)
         }
     };
@@ -437,6 +445,7 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
         readback: video_readback,
         region_origin,
         last_frame: None,
+            video_start: None,
         shot_wait: None,
         last_crop: None,
         keepalive_anchor: Instant::now(),
@@ -471,6 +480,10 @@ fn teardown(state: &mut Loop) {
             ..
         } => {
             let _ = std::fs::remove_file(temp);
+        }
+        CapturePhase::Encoding { job, lossless, .. } => {
+            job.cancel(); // kills ffmpeg + deletes the partial output
+            let _ = std::fs::remove_file(lossless);
         }
         _ => {}
     }
@@ -517,7 +530,7 @@ fn teardown(state: &mut Loop) {
 ///   the next one (non-blocking).
 fn video_frame(state: &mut Loop) {
     let now = Instant::now();
-    let interval = Duration::from_millis(1000 / VIDEO_FPS as u64);
+    let interval = Duration::from_millis(1000 / capture_fps() as u64);
     let ctx = state
         .inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_REGISTRY_MUT)
         .as_ref()
@@ -530,12 +543,21 @@ fn video_frame(state: &mut Loop) {
         .last_frame
         .map(|t| now.duration_since(t) >= interval)
         .unwrap_or(true);
+    // Capture-time PTS in the encoder timebase (1/fps), anchored at the first
+    // frame. Using real elapsed time (not a frame counter) makes the recorded
+    // timeline match wall-clock regardless of how the achieved rate compares to
+    // the configured max — so `capture_refresh_rate_max` is a true cap, not an
+    // assumed rate (which otherwise sped videos up when the compositor drew
+    // fewer frames/s than the cap).
+    let fps = capture_fps();
+    let start = *a.video_start.get_or_insert(now);
+    let pts = (now.saturating_duration_since(start).as_secs_f64() * fps as f64).round() as i64;
     match a.encoder.as_mut() {
         Some(CaptureEncoder::Vaapi(v)) => {
             if !due {
                 return;
             }
-            v.encode();
+            v.encode(pts);
             a.last_frame = Some(now);
         }
         Some(CaptureEncoder::NvencCuda(z)) => {
@@ -545,7 +567,7 @@ fn video_frame(state: &mut Loop) {
             if !due {
                 return;
             }
-            z.tick();
+            z.tick(pts);
             a.last_frame = Some(now);
         }
         Some(CaptureEncoder::Nvenc(n)) => {
@@ -556,7 +578,7 @@ fn video_frame(state: &mut Loop) {
             //    unbounded → never drops a frame). The vertical flip + encode
             //    run on the worker, off the render thread.
             if let Some(frame) = rb.poll(ctx) {
-                n.send(frame.bgra, frame.width, frame.height, flip);
+                n.send(frame.bgra, frame.width, frame.height, flip, pts);
             }
             // 2. Submit a fresh readback if due and the slot is free.
             if due && !rb.inflight() {
@@ -630,7 +652,9 @@ fn begin_saving(state: &mut Loop, renderer: &mut GlesRenderer) {
     let dlg = load(
         state,
         renderer,
-        SaveDialog::new(label),
+        // Offer the "Optimized encoding" checkbox only in manual mode (auto runs
+        // it in the background with no checkbox).
+        SaveDialog::new(label, !capture_background_auto()),
         rect,
         IcedSpace::Screen,
         Layer::SCENE.bits(),
@@ -645,14 +669,13 @@ fn begin_saving(state: &mut Loop, renderer: &mut GlesRenderer) {
     info!("capture stopped — save dialog up (media={media:?})");
 }
 
-fn save_default(state: &mut Loop) {
+fn save_default(state: &mut Loop, renderer: &mut GlesRenderer) {
     let video = match &state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase {
         CapturePhase::Saving { media, .. } => *media == CaptureMedia::Video,
         _ => return,
     };
-    let path = compositor_y5_graphic_capture_encode::default_path(video);
-    write_pending(state, &path);
-    finish_saving(state);
+    let target = compositor_y5_graphic_capture_encode::default_path(video);
+    commit_save(state, renderer, target);
 }
 
 /// Spawn the XDG portal "Save As" dialog on a background thread; the result is
@@ -679,7 +702,7 @@ fn save_as(state: &mut Loop) {
 }
 
 /// Drain the in-flight Save As result (called each frame during Saving).
-fn poll_saveas(state: &mut Loop) {
+fn poll_saveas(state: &mut Loop, renderer: &mut GlesRenderer) {
     use std::sync::mpsc::TryRecvError;
     let outcome = {
         let CapturePhase::Saving { saveas, .. } = &state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase else {
@@ -697,10 +720,7 @@ fn poll_saveas(state: &mut Loop) {
         *saveas = None;
     }
     match outcome {
-        Some(path) => {
-            write_pending(state, &path);
-            finish_saving(state);
-        }
+        Some(path) => commit_save(state, renderer, path),
         // Portal failed/cancelled: keep the Save dialog up (no-op).
         None => {}
     }
@@ -710,44 +730,187 @@ fn discard_saving(state: &mut Loop) {
     teardown(state);
 }
 
-/// Write the pending artifact to `path`. Leaves the phase unchanged.
-fn write_pending(state: &Loop, path: &std::path::Path) {
-    let CapturePhase::Saving { pending, .. } = &state.inner.kernel.get(&compositor_orchestration_driver_capture_base::base::CAPTURE).phase else {
+/// Commit the chosen `target`: save the screenshot, or for video route to the
+/// plain move / background re-encode / manual encoding-with-progress paths.
+fn commit_save(state: &mut Loop, renderer: &mut GlesRenderer, target: PathBuf) {
+    // Read the checkbox before the dialog is torn down.
+    let optimize_checked = save_dialog_optimized(state);
+    let auto = capture_background_auto();
+
+    let phase = std::mem::replace(&mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase, CapturePhase::Idle);
+    let CapturePhase::Saving { pending, .. } = phase else {
         return;
     };
-    if let Some(parent) = path.parent() {
+    if let Some(parent) = target.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
+
     match pending {
-        PendingSave::Image(frame) => match save_png(frame, path) {
-            Ok(()) => info!("screenshot saved: {}", path.display()),
-            Err(e) => warn!("screenshot save failed: {e}"),
-        },
+        PendingSave::Image(frame) => {
+            match save_png(&frame, &target) {
+                Ok(()) => info!("screenshot saved: {}", target.display()),
+                Err(e) => warn!("screenshot save failed: {e}"),
+            }
+            close_save_dialog(state);
+        }
         PendingSave::Video(temp) => {
-            if std::fs::rename(temp, path).is_ok() {
-                info!("video saved: {}", path.display());
-            } else if std::fs::copy(temp, path).is_ok() {
-                let _ = std::fs::remove_file(temp);
-                info!("video saved: {}", path.display());
+            if auto || optimize_checked {
+                let codec = optimized_codec();
+                if auto {
+                    // Background, no progress UI: writes a `.y5-encoding` partial
+                    // and renames to `target` when done (lossless fallback on fail).
+                    reencode_detached(temp, target, codec);
+                    close_save_dialog(state);
+                } else {
+                    begin_encoding(state, renderer, temp, target, codec);
+                }
             } else {
-                warn!("video save failed: {}", path.display());
+                save_fallback(&temp, &target);
+                info!("video saved: {}", target.display());
+                close_save_dialog(state);
             }
         }
     }
 }
 
-/// Close the Save dialog, remove any leftover temp, return to Idle.
-fn finish_saving(state: &mut Loop) {
-    if let CapturePhase::Saving {
-        pending: PendingSave::Video(temp),
-        ..
-    } = &state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase
-    {
-        let _ = std::fs::remove_file(temp); // no-op if already moved
+/// Manual "Optimized encoding": kick off the re-encode and show the progress
+/// dialog. Falls back to saving the lossless temp if ffmpeg can't start.
+fn begin_encoding(
+    state: &mut Loop,
+    renderer: &mut GlesRenderer,
+    temp: PathBuf,
+    target: PathBuf,
+    codec: OptimizedCodec,
+) {
+    let partial = partial_path(&target);
+    let job = match ReencodeJob::spawn(&temp, partial.clone(), codec) {
+        Some(j) => j,
+        None => {
+            warn!("optimized encode could not start — saving lossless");
+            save_fallback(&temp, &target);
+            close_save_dialog(state);
+            return;
+        }
+    };
+    // Swap the save dialog for the progress dialog (reusing `save_dialog_id`).
+    close_save_dialog(state);
+    let (sw, sh) = output_size(state);
+    let rect = Rectangle::new(
+        Point::from(((sw - DIALOG_W) / 2, (sh - DIALOG_H) / 2)),
+        Size::from((DIALOG_W, DIALOG_H)),
+    );
+    let dlg = load(
+        state,
+        renderer,
+        EncodingDialog::new(),
+        rect,
+        IcedSpace::Screen,
+        Layer::SCENE.bits(),
+    );
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).save_dialog_id = Some(dlg.untyped());
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase = CapturePhase::Encoding {
+        job,
+        target,
+        output: partial,
+        lossless: temp,
+    };
+    info!("optimized encoding started");
+}
+
+/// Per-frame poll of the manual re-encode: update the progress bar; on success
+/// place the optimized file; on failure revert to the save dialog (lossless kept).
+fn poll_encoding(state: &mut Loop, renderer: &mut GlesRenderer) {
+    let status = match &mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase {
+        CapturePhase::Encoding { job, .. } => job.poll(),
+        _ => return,
+    };
+    match status {
+        ReencodeStatus::Running(f) => set_encode_progress(state, (f * 100.0) as u32),
+        ReencodeStatus::Done(output) => {
+            let phase = std::mem::replace(&mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase, CapturePhase::Idle);
+            if let CapturePhase::Encoding { target, lossless, .. } = phase {
+                save_fallback(&output, &target); // place the finished optimized file
+                let _ = std::fs::remove_file(&lossless);
+                info!("optimized video saved: {}", target.display());
+            }
+            close_save_dialog(state);
+        }
+        ReencodeStatus::Failed => {
+            let phase = std::mem::replace(&mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase, CapturePhase::Idle);
+            if let CapturePhase::Encoding { lossless, output, .. } = phase {
+                let _ = std::fs::remove_file(&output);
+                warn!("optimized encode failed — reverting to save (lossless kept)");
+                close_save_dialog(state);
+                respawn_save_dialog(state, renderer, lossless);
+            }
+        }
     }
+}
+
+/// Re-enter the Saving phase with the lossless temp + a fresh save dialog (used
+/// when the optimized re-encode fails, so the recording can still be saved).
+fn respawn_save_dialog(state: &mut Loop, renderer: &mut GlesRenderer, lossless: PathBuf) {
+    let (sw, sh) = output_size(state);
+    let rect = Rectangle::new(
+        Point::from(((sw - DIALOG_W) / 2, (sh - DIALOG_H) / 2)),
+        Size::from((DIALOG_W, DIALOG_H)),
+    );
+    let dlg = load(
+        state,
+        renderer,
+        SaveDialog::new("Video", !capture_background_auto()),
+        rect,
+        IcedSpace::Screen,
+        Layer::SCENE.bits(),
+    );
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).save_dialog_id = Some(dlg.untyped());
+    forward(state, dlg);
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase = CapturePhase::Saving {
+        media: CaptureMedia::Video,
+        pending: PendingSave::Video(lossless),
+        saveas: None,
+    };
+}
+
+/// Push the latest re-encode progress (0..=100) to the encoding dialog.
+fn set_encode_progress(state: &mut Loop, percent: u32) {
+    let Some(id) = state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).save_dialog_id else {
+        return;
+    };
+    if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
+        let _ = reg.dispatch_message(
+            IcedHandle::<EncodingDialog>::from_id(id),
+            CaptureMessage::SetEncodeProgress(percent),
+        );
+    }
+}
+
+/// Read the save dialog's "Optimized encoding" checkbox state (false if absent).
+fn save_dialog_optimized(state: &mut Loop) -> bool {
+    let Some(id) = state.inner.kernel.get(&compositor_orchestration_driver_capture_base::base::CAPTURE).save_dialog_id else {
+        return false;
+    };
+    let Some(reg) = state.inner.surface_mut().registry.as_ref() else {
+        return false;
+    };
+    reg.instance::<SaveDialog>(IcedHandle::from_id(id))
+        .map(|inst| inst.ui().optimized())
+        .unwrap_or(false)
+}
+
+/// Destroy the save/encoding dialog and clear its handle. Leaves the phase as-is.
+fn close_save_dialog(state: &mut Loop) {
     destroy(state, state.inner.kernel.get(&compositor_orchestration_driver_capture_base::base::CAPTURE).save_dialog_id);
     state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).save_dialog_id = None;
-    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase = CapturePhase::Idle;
+}
+
+/// Map the configured codec to the software re-encode codec.
+fn optimized_codec() -> OptimizedCodec {
+    match capture_codec_name() {
+        "h264" => OptimizedCodec::H264,
+        "h265" => OptimizedCodec::H265,
+        _ => OptimizedCodec::Av1,
+    }
 }
 
 fn destroy_indicators(state: &mut Loop) {
