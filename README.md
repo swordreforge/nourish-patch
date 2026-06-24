@@ -29,8 +29,8 @@ Nourish is a Linux desktop where your screen is a window onto **one endless canv
 Spread your work out, zoom in to focus, zoom out to see everything — nothing gets buried,
 nothing gets lost. Close the lid, come back tomorrow, and find it just as you left it.
 
-It's free, open source, and runs on Fedora 44 today — stable enough that we drive it daily,
-NVIDIA included.
+It's free, open source, and stable to be used as daily driver.
+It's performant, and renders using Vulkan. optionally, you can set automatic fallback or explicitly select Gles on systems where Vulkan is not supported.
 
 ## Glossary
 
@@ -71,7 +71,7 @@ saved to disk, so it survives a full reboot too.
 canvas. Keep "work" and "play" apart — each one remembers itself between sessions.
 
 🎥 &nbsp;**Capture anything.** Screenshot or record a window, a region that follows your pan
-and zoom, or the whole screen — even with a transparent background for clean overlays.
+and zoom, or the whole screen — even with a transparent background for clean overlays. You can capture 4K@120 smoothly without any performance drawbacks.
 
 🖥️ &nbsp;**Runs on your hardware.** NVIDIA, Intel, or AMD; a stable Vulkan renderer with a
 GLES fallback for older cards. Built natively on Wayland, and older X11 apps run too.
