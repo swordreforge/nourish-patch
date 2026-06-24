@@ -164,6 +164,9 @@ impl Orchestrator {
         // input/draw systems can read it via `cx.kernel`.
         kernel_data.insert(&compositor_orchestration_storage_state_base::state::NESTED, nested);
 
+        // Selection-overlay driver: the align/distribute toolbar instance.
+        kernel_data.insert(&compositor_orchestration_driver_selection_base::base::SELECTION_OVERLAY, Default::default());
+
         Self {
             environment,
             __set_lock: None,

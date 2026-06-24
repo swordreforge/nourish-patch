@@ -391,12 +391,10 @@ compositor_kernel_winit_scene_compose_base = { path = "../compositor.kernel/kern
 compositor_kernel_winit_window_factory_base = { path = "../compositor.kernel/kernel.winit/winit.window/window.factory/factory.base" }
 compositor_kernel_winit_wire_entry_base = { path = "../compositor.kernel/kernel.winit/winit.wire/wire.entry/entry.base" }
 compositor_monitor_compositor_iced_base = { path = "../compositor.extension/compositor.monitor/monitor.compositor/compositor.iced/iced.base" }
-compositor_monitor_devtool_example_base = { path = "../compositor.extension/compositor.monitor/monitor.devtool/devtool.example/example.base" }
-compositor_monitor_devtool_font_base = { path = "../compositor.extension/compositor.monitor/monitor.devtool/devtool.font/font.base" }
-compositor_monitor_devtool_render_base = { path = "../compositor.extension/compositor.monitor/monitor.devtool/devtool.render/render.base" }
-compositor_monitor_devtool_scene_base = { path = "../compositor.extension/compositor.monitor/monitor.devtool/devtool.scene/scene.base" }
 compositor_monitor_launcher_ui_base = { path = "../compositor.extension/compositor.monitor/monitor.launcher/launcher.ui/ui.base" }
 compositor_monitor_runtime_surface_base = { path = "../compositor.extension/compositor.monitor/monitor.runtime/runtime.surface/surface.base" }
+compositor_monitor_selection_font_base = { path = "../compositor.extension/compositor.monitor/monitor.selection/selection.font/font.base" }
+compositor_monitor_selection_scene_base = { path = "../compositor.extension/compositor.monitor/monitor.selection/selection.scene/scene.base" }
 compositor_monitor_server_protocol_base = { path = "../compositor.extension/compositor.monitor/monitor.server/server.protocol/protocol.base" }
 compositor_orchestration_bus_legacy_base = { path = "orchestration.bus/bus.legacy/legacy.base" }
 compositor_orchestration_core_state_base = { path = "orchestration.core/core.state/state.base" }
@@ -416,6 +414,7 @@ compositor_orchestration_driver_lid_base = { path = "orchestration.driver/driver
 compositor_orchestration_driver_logind_base = { path = "orchestration.driver/driver.logind/logind.base" }
 compositor_orchestration_driver_remote_base = { path = "orchestration.driver/driver.remote/remote.base" }
 compositor_orchestration_driver_resume_base = { path = "orchestration.driver/driver.resume/resume.base" }
+compositor_orchestration_driver_selection_base = { path = "orchestration.driver/driver.selection/selection.base" }
 compositor_orchestration_environment_interface_lifecycle = { path = "orchestration.environment/environment.interface/interface.lifecycle" }
 compositor_orchestration_environment_type_base = { path = "orchestration.environment/environment.type/type.base" }
 compositor_orchestration_input_drive_base = { path = "orchestration.input/input.drive/drive.base" }
@@ -764,6 +763,8 @@ compositor_y5_placeholder_surface_base = { path = "../compositor.expansion/compo
 compositor_y5_placeholder_system_base = { path = "../compositor.expansion/compositor.y5/y5.placeholder/placeholder.system/system.base" }
 compositor_y5_select_box_base = { path = "../compositor.expansion/compositor.y5/y5.select/select.box/box.base" }
 compositor_y5_select_interface_base = { path = "../compositor.expansion/compositor.y5/y5.select/select.interface/interface.base" }
+compositor_y5_select_overlay_interface = { path = "../compositor.expansion/compositor.y5/y5.select/select.overlay/overlay.interface" }
+compositor_y5_select_overlay_system = { path = "../compositor.expansion/compositor.y5/y5.select/select.overlay/overlay.system" }
 compositor_y5_select_state_base = { path = "../compositor.expansion/compositor.y5/y5.select/select.state/state.base" }
 compositor_y5_select_system_base = { path = "../compositor.expansion/compositor.y5/y5.select/select.system/system.base" }
 compositor_y5_surface_draw_capture = { path = "../compositor.expansion/compositor.y5/y5.surface/surface.draw/draw.capture" }

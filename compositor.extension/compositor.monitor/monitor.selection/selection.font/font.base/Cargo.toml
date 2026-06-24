@@ -1,21 +1,23 @@
 [package]
-name = "compositor_monitor_devtool_scene_base"
+name = "compositor_monitor_selection_font_base"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-compositor_developer_debug_instance_record = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 bitflags = { workspace = true }
 smithay = { workspace = true }
 iced_core    = { workspace = true }
 iced_widget  = { workspace = true }
 iced_runtime = { workspace = true }
 iced_wgpu    = { workspace = true }
+iced_graphics    = { workspace = true }
 tonic = { workspace = true }
 prost = { workspace = true }
 tonic-prost = { workspace = true }
 tokio-stream = { workspace = true }
-compositor_monitor_devtool_font_base = { workspace = true }
+
 
 #use_system_lib: Tells Smithay to look for the actual .so files on your Fedora system (the NVIDIA drivers).
 #backend_egl: Specifically turns on the NVIDIA-friendly EGL code path.

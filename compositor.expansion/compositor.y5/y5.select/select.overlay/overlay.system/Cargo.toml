@@ -1,0 +1,17 @@
+[package]
+name = "compositor_y5_select_overlay_system"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+smithay = { workspace = true }
+compositor_support_system_trait_system_base = { workspace = true }
+compositor_support_system_buffer_token_base = { workspace = true }
+compositor_y5_select_system_base = { workspace = true }
+compositor_orchestration_seat_system_pointer = { workspace = true }
+compositor_orchestration_smithay_data_base = { workspace = true }
+compositor_y5_surface_system_base = { workspace = true }
+compositor_orchestration_driver_selection_base = { workspace = true }
+
+[lib]
+path = "lib.rs"

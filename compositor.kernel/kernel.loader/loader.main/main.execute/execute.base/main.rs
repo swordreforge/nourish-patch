@@ -391,15 +391,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe { std::env::set_var("WAYLAND_DISPLAY", &wayland_socket_name_for_children) };
     info!("WAYLAND_DISPLAY set to {:?} for child processes", wayland_socket_name_for_children);
 
-    info!("Overlay - Spawn");
     // After WlrLayerShellState::new and event loop is running:
     compositor_orchestration_environment_interface_lifecycle::lifecycle::announce_session(
         wayland_socket_name_default_subprocess_2.to_str().unwrap(),
         &environment.DesktopName,
-    );
-
-    let _overlay_handle = compositor_monitor_devtool_render_base::spawn_overlay_thread(
-        rpc_transport_tx_base.subscribe(),
     );
 
     // move to loop factory ( it can spawn. )
