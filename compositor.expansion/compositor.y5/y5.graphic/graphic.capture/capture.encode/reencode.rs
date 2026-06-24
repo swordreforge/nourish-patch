@@ -79,6 +79,7 @@ impl ReencodeJob {
         output: PathBuf,
         codec: OptimizedCodec,
         cfr: bool,
+        format: &str,
     ) -> Option<ReencodeJob> {
         let total_us = probe_duration_us(input).unwrap_or(0);
 
@@ -87,6 +88,7 @@ impl ReencodeJob {
             .arg(input)
             .args(codec.encode_args())
             .args(cfr_args(input, cfr))
+            .args(["-f", format])
             .arg(&output)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -178,13 +180,23 @@ impl ReencodeJob {
     }
 }
 
-/// In-progress filename for `target`: `<stem>.y5-encoding.<ext>`. Keeps the real
-/// extension last so ffmpeg picks the right muxer, and clearly marks the file as
-/// unfinished (Chrome-`.crdownload`-style) so it isn't opened/moved mid-encode.
+/// In-progress filename for `target`: `<stem>.y5-encoding.tmp`. The real media
+/// extension is withheld until the encode finishes (the file is renamed to
+/// `target` on success), so a half-written file never looks like a playable one.
+/// Because the name has no media extension, the muxer is forced with `-f`
+/// ([`ffmpeg_format`]).
 pub fn partial_path(target: &Path) -> PathBuf {
     let stem = target.file_stem().and_then(|s| s.to_str()).unwrap_or("capture");
-    let ext = target.extension().and_then(|s| s.to_str()).unwrap_or("mp4");
-    target.with_file_name(format!("{stem}.y5-encoding.{ext}"))
+    target.with_file_name(format!("{stem}.y5-encoding.tmp"))
+}
+
+/// The ffmpeg muxer name to force for `target`'s extension (since the partial
+/// output is written to a generic `.tmp` path ffmpeg can't infer the format from).
+pub fn ffmpeg_format(target: &Path) -> &'static str {
+    match target.extension().and_then(|e| e.to_str()) {
+        Some("webm") => "webm",
+        _ => "mp4",
+    }
 }
 
 /// Auto-mode (`background_encoder="ffmpeg"`) background re-encode, fire-and-forget.
@@ -195,7 +207,9 @@ pub fn partial_path(target: &Path) -> PathBuf {
 pub fn reencode_detached(temp: PathBuf, target: PathBuf, codec: OptimizedCodec, cfr: bool) {
     std::thread::spawn(move || {
         let partial = partial_path(&target);
-        if run_blocking(&temp, &partial, codec, cfr) && std::fs::rename(&partial, &target).is_ok() {
+        let fmt = ffmpeg_format(&target);
+        if run_blocking(&temp, &partial, codec, cfr, fmt) && std::fs::rename(&partial, &target).is_ok()
+        {
             let _ = std::fs::remove_file(&temp);
             info!("reencode(auto): {} done", target.display());
         } else {
@@ -214,12 +228,13 @@ pub fn save_fallback(temp: &Path, target: &Path) {
 }
 
 /// Spawn ffmpeg and block until exit; `true` on success with non-empty output.
-fn run_blocking(input: &Path, output: &Path, codec: OptimizedCodec, cfr: bool) -> bool {
+fn run_blocking(input: &Path, output: &Path, codec: OptimizedCodec, cfr: bool, format: &str) -> bool {
     let status = Command::new("ffmpeg")
         .args(["-y", "-loglevel", "error", "-i"])
         .arg(input)
         .args(codec.encode_args())
         .args(cfr_args(input, cfr))
+        .args(["-f", format])
         .arg(output)
         .stdin(Stdio::null())
         .stdout(Stdio::null())

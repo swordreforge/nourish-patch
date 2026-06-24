@@ -12,6 +12,7 @@ use crate::load_sym;
 
 pub type CUresult = i32;
 pub type CUcontext = *mut c_void;
+pub type CUstream = *mut c_void;
 pub type CUarray = *mut c_void;
 pub type CUgraphicsResource = *mut c_void;
 pub type CUdeviceptr = u64;
@@ -112,6 +113,7 @@ type FnEglRegister =
 type FnGetEglFrame =
     unsafe extern "C" fn(*mut CUeglFrame, CUgraphicsResource, c_uint, c_uint) -> CUresult;
 type FnMemcpy2D = unsafe extern "C" fn(*const CudaMemcpy2D) -> CUresult;
+type FnMemcpy2DAsync = unsafe extern "C" fn(*const CudaMemcpy2D, CUstream) -> CUresult;
 type FnUnregister = unsafe extern "C" fn(CUgraphicsResource) -> CUresult;
 
 /// Resolved CUDA driver entry points.
@@ -123,6 +125,7 @@ pub struct Cuda {
     egl_register: FnEglRegister,
     get_egl_frame: FnGetEglFrame,
     memcpy2d: FnMemcpy2D,
+    memcpy2d_async: FnMemcpy2DAsync,
     unregister: FnUnregister,
 }
 
@@ -137,6 +140,7 @@ impl Cuda {
             egl_register: load_sym!(lib, "cuGraphicsEGLRegisterImage", FnEglRegister),
             get_egl_frame: load_sym!(lib, "cuGraphicsResourceGetMappedEglFrame", FnGetEglFrame),
             memcpy2d: load_sym!(lib, "cuMemcpy2D_v2", FnMemcpy2D),
+            memcpy2d_async: load_sym!(lib, "cuMemcpy2DAsync_v2", FnMemcpy2DAsync),
             unregister: load_sym!(lib, "cuGraphicsUnregisterResource", FnUnregister),
             _lib: lib,
         };
@@ -164,6 +168,12 @@ impl Cuda {
     }
     pub unsafe fn memcpy2d(&self, m: &CudaMemcpy2D) -> CUresult {
         unsafe { (self.memcpy2d)(m) }
+    }
+    /// Async 2D copy on `stream`. NVENC reads the frame on the ffmpeg CUDA
+    /// device's stream, so issuing the copy on that same stream orders it before
+    /// the encode without a host-side sync.
+    pub unsafe fn memcpy2d_async(&self, m: &CudaMemcpy2D, stream: CUstream) -> CUresult {
+        unsafe { (self.memcpy2d_async)(m, stream) }
     }
     pub unsafe fn unregister(&self, res: CUgraphicsResource) {
         unsafe {

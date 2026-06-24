@@ -20,7 +20,8 @@ pub mod video;
 pub use frame::Frame;
 pub use readback::{AsyncReadback, readback};
 pub use reencode::{
-    OptimizedCodec, ReencodeJob, ReencodeStatus, partial_path, reencode_detached, save_fallback,
+    OptimizedCodec, ReencodeJob, ReencodeStatus, ffmpeg_format, partial_path, reencode_detached,
+    save_fallback,
 };
 pub use save::{default_path, save_png};
 pub use video::VideoEncoder;
