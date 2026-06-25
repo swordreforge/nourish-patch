@@ -121,17 +121,21 @@ impl VaapiEncoder {
     }
 
     unsafe fn init(&mut self, dmabuf: &Dmabuf, w: c_int, h: c_int) -> Result<(), String> {
-        // 1. VAAPI/DRM device on the render node.
+        // 1. DRM device on the render node. The capture dmabuf is wrapped as a
+        //    DRM_PRIME hw frame, and a DRM_PRIME frames context can ONLY live on a
+        //    DRM-type device — allocating it on a VAAPI device makes
+        //    `av_hwframe_ctx_init` return ENOSYS ("function not implemented").
+        //    The VAAPI device is derived later by `hwmap=derive_device=vaapi`.
         let node = CString::new(RENDER_NODE).unwrap();
         let r = ffi::av_hwdevice_ctx_create(
             &mut self.drm_device,
-            ffi::AV_HWDEVICE_TYPE_VAAPI,
+            ffi::AV_HWDEVICE_TYPE_DRM,
             node.as_ptr(),
             ptr::null_mut(),
             0,
         );
         if r < 0 {
-            return Err(format!("av_hwdevice_ctx_create(vaapi): {}", averr(r)));
+            return Err(format!("av_hwdevice_ctx_create(drm): {}", averr(r)));
         }
 
         // 2. Fill the persistent DRM_PRIME descriptor from the dmabuf.
@@ -227,30 +231,36 @@ impl VaapiEncoder {
         }
         (*self.drm_frame).hw_frames_ctx = ffi::av_buffer_ref(self.drm_frames);
 
-        let args = CString::new(format!(
-            "video_size={w}x{h}:pix_fmt={}:time_base=1/{}:pixel_aspect=1/1",
-            ffi::AV_PIX_FMT_DRM_PRIME,
-            self.fps
-        ))
-        .unwrap();
-        let name_src = c"in";
-        let r = ffi::avfilter_graph_create_filter(
-            &mut self.src,
-            buffersrc,
-            name_src.as_ptr(),
-            args.as_ptr(),
-            ptr::null_mut(),
-            self.graph,
-        );
-        if r < 0 {
-            return Err(format!("create buffersrc: {}", averr(r)));
+        // A buffersrc carrying a HW pixel format must have its `hw_frames_ctx`
+        // set BEFORE the filter is initialized. So: alloc (uninitialized) →
+        // set parameters (format/size/time_base + the DRM frames ctx) → init.
+        // (`avfilter_graph_create_filter` initializes immediately, which errors
+        // with "Setting BufferSourceContext.pix_fmt to a HW format requires
+        // hw_frames_ctx to be non-NULL".)
+        self.src = ffi::avfilter_graph_alloc_filter(self.graph, buffersrc, c"in".as_ptr());
+        if self.src.is_null() {
+            return Err("avfilter_graph_alloc_filter(buffersrc) failed".into());
         }
-        // Attach the hw_frames_ctx to the buffersrc.
         let par = ffi::av_buffersrc_parameters_alloc();
-        if !par.is_null() {
-            (*par).hw_frames_ctx = ffi::av_buffer_ref(self.drm_frames);
-            ffi::av_buffersrc_parameters_set(self.src, par);
-            ffi::av_free(par as *mut c_void);
+        if par.is_null() {
+            return Err("av_buffersrc_parameters_alloc failed".into());
+        }
+        (*par).format = ffi::AV_PIX_FMT_DRM_PRIME as c_int;
+        (*par).width = w;
+        (*par).height = h;
+        (*par).time_base = ffi::AVRational {
+            num: 1,
+            den: self.fps as c_int,
+        };
+        (*par).hw_frames_ctx = ffi::av_buffer_ref(self.drm_frames);
+        let r = ffi::av_buffersrc_parameters_set(self.src, par);
+        ffi::av_free(par as *mut c_void);
+        if r < 0 {
+            return Err(format!("av_buffersrc_parameters_set: {}", averr(r)));
+        }
+        let r = ffi::avfilter_init_str(self.src, ptr::null());
+        if r < 0 {
+            return Err(format!("avfilter_init_str(buffersrc): {}", averr(r)));
         }
 
         let name_sink = c"out";
