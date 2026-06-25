@@ -30,7 +30,7 @@ const MAX_ZOOM: f64 = 50.0;
 /// - `PAN_END_IDLE_FRAMES`: fallback lift detection (pan-free frames) for when no
 ///   terminating axis event arrives; the real touchpad path launches immediately
 ///   off the libinput 0,0 finger event, so this only backstops odd devices.
-const PAN_LAUNCH_GAIN: f64 = 1.5;
+const PAN_LAUNCH_GAIN: f64 = 2.5;
 const PAN_FRICTION: f64 = 3.6;
 const PAN_MIN_SPEED: f64 = 8.0;
 const PAN_END_IDLE_FRAMES: u32 = 3;
