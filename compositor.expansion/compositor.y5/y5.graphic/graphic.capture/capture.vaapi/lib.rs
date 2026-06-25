@@ -46,6 +46,15 @@ pub fn backend_from_config() -> Backend {
     }
 }
 
+/// The DRM render node the capture/encode pipeline targets (`render_node`
+/// config, e.g. `/dev/dri/renderD128`). Used for the VAAPI encode device and for
+/// VAAPI hardware *decode* in the background re-encode.
+pub fn capture_render_node() -> String {
+    compositor_developer_environment_config_base::base::get()
+        .render_node
+        .clone()
+}
+
 /// Live capture frame rate (`capture_refresh_rate_max`, clamped to 30..=120).
 pub fn capture_fps() -> u32 {
     compositor_developer_environment_config_base::base::get()

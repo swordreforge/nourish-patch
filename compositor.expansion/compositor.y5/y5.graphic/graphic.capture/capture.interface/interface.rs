@@ -30,7 +30,7 @@ use compositor_y5_graphic_capture_encode::{
 use compositor_y5_graphic_capture_vaapi::{
     Backend, CaptureEncoder, EncoderThread, NvencCudaEncoder, VaapiEncoder, backend_from_config,
     capture_background_auto, capture_cfr, capture_codec_name, capture_codecs, capture_cq,
-    capture_fps, capture_nvenc_readback_fallback,
+    capture_fps, capture_nvenc_readback_fallback, capture_render_node,
 };
 use compositor_y5_graphic_capture_registry::{CaptureSource, OutputId};
 use compositor_y5_graphic_capture_session::message::{
@@ -385,9 +385,14 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
             }
         }
         Backend::Vaapi => {
-            let enc = capture
-                .dmabuf()
-                .and_then(|dmabuf| VaapiEncoder::start(&dmabuf, fps));
+            // Same codec preference + fallback as NVENC (`av1 → hevc → h264`):
+            // try each VAAPI encoder until one opens. GPUs without AV1/HEVC encode
+            // (e.g. Kaby Lake) land on h264_vaapi.
+            let enc = capture.dmabuf().and_then(|dmabuf| {
+                capture_codecs()
+                    .into_iter()
+                    .find_map(|c| VaapiEncoder::start(&dmabuf, fps, c))
+            });
             (enc.map(CaptureEncoder::Vaapi), None)
         }
     };
@@ -803,7 +808,7 @@ fn commit_save(state: &mut Loop, renderer: &mut GlesRenderer, target: PathBuf) {
                 if auto {
                     // Background, no progress UI: writes a `.y5-encoding` partial
                     // and renames to `target` when done (lossless fallback on fail).
-                    reencode_detached(temp, target, codec, cfr);
+                    reencode_detached(temp, target, codec, cfr, capture_render_node());
                     close_save_dialog(state);
                 } else {
                     begin_encoding(state, renderer, temp, target, codec, cfr);
@@ -828,7 +833,14 @@ fn begin_encoding(
     cfr: bool,
 ) {
     let partial = partial_path(&target);
-    let job = match ReencodeJob::spawn(&temp, partial.clone(), codec, cfr, ffmpeg_format(&target)) {
+    let job = match ReencodeJob::spawn(
+        &temp,
+        partial.clone(),
+        codec,
+        cfr,
+        ffmpeg_format(&target),
+        &capture_render_node(),
+    ) {
         Some(j) => j,
         None => {
             warn!("optimized encode could not start — saving lossless");

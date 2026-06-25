@@ -20,8 +20,8 @@ use smithay::backend::allocator::dmabuf::Dmabuf;
 
 use crate::common::{AVERROR, AVERROR_EOF, EAGAIN, averr, y5_avfmt_get_pb, y5_avfmt_set_pb};
 use crate::ffi;
+use crate::nvenc_cuda::Codec;
 
-const RENDER_NODE: &str = "/dev/dri/renderD128";
 const MAX_PLANES: usize = 4;
 
 // `lseek(fd, 0, SEEK_END)` reports a dmabuf's size (needed for the DRM object
@@ -70,6 +70,7 @@ pub struct VaapiEncoder {
     stream_index: c_int,
     pts: i64,
     fps: u32,
+    codec: Codec,
     width: u32,
     height: u32,
     temp: PathBuf,
@@ -77,9 +78,11 @@ pub struct VaapiEncoder {
 }
 
 impl VaapiEncoder {
-    /// Set up the pipeline for the given capture dmabuf (BGRA). Returns `None`
-    /// on any failure (no VAAPI, unsupported format, etc.).
-    pub fn start(dmabuf: &Dmabuf, fps: u32) -> Option<Self> {
+    /// Set up the pipeline for the given capture dmabuf (BGRA), encoding with
+    /// `codec`'s VAAPI encoder. Returns `None` on any failure (no VAAPI, codec
+    /// unsupported on this GPU, etc.) — the caller walks a fallback list
+    /// (`av1 → hevc → h264`), so a GPU without AV1/HEVC encode lands on H.264.
+    pub fn start(dmabuf: &Dmabuf, fps: u32, codec: Codec) -> Option<Self> {
         let width = dmabuf.width();
         let height = dmabuf.height();
         let w = (width & !1) as i32;
@@ -109,6 +112,7 @@ impl VaapiEncoder {
             stream_index: 0,
             pts: -1,
             fps: fps.max(1),
+            codec,
             width: w as u32,
             height: h as u32,
             temp: temp.clone(),
@@ -137,7 +141,7 @@ impl VaapiEncoder {
         //    DRM-type device — allocating it on a VAAPI device makes
         //    `av_hwframe_ctx_init` return ENOSYS ("function not implemented").
         //    The VAAPI device is derived later by `hwmap=derive_device=vaapi`.
-        let node = CString::new(RENDER_NODE).unwrap();
+        let node = CString::new(crate::capture_render_node()).unwrap();
         let r = ffi::av_hwdevice_ctx_create(
             &mut self.drm_device,
             ffi::AV_HWDEVICE_TYPE_DRM,
@@ -352,9 +356,17 @@ impl VaapiEncoder {
     }
 
     unsafe fn build_encoder(&mut self, w: c_int, h: c_int) -> Result<(), String> {
-        let codec = ffi::avcodec_find_encoder_by_name(c"h264_vaapi".as_ptr());
+        // Codec → VAAPI encoder + profile. Not every GPU exposes every encoder
+        // (e.g. Kaby Lake has no AV1/VP9 encode), so a missing encoder or a failed
+        // open returns Err and the caller falls back to the next codec.
+        let (name, profile): (&CStr, Option<&CStr>) = match self.codec {
+            Codec::H264 => (c"h264_vaapi", Some(VAAPI_PROFILE)),
+            Codec::Hevc => (c"hevc_vaapi", Some(c"main")),
+            Codec::Av1 => (c"av1_vaapi", None),
+        };
+        let codec = ffi::avcodec_find_encoder_by_name(name.as_ptr());
         if codec.is_null() {
-            return Err("h264_vaapi encoder not found".into());
+            return Err(format!("vaapi encoder {name:?} not found"));
         }
         self.codec_ctx = ffi::avcodec_alloc_context3(codec);
         if self.codec_ctx.is_null() {
@@ -389,11 +401,13 @@ impl VaapiEncoder {
         // h264_vaapi-private options (rc mode + profile); ignored if unsupported.
         let p = c.priv_data;
         ffi::av_opt_set(p, c"rc_mode".as_ptr(), VAAPI_RC_MODE.as_ptr(), 0);
-        ffi::av_opt_set(p, c"profile".as_ptr(), VAAPI_PROFILE.as_ptr(), 0);
+        if let Some(prof) = profile {
+            ffi::av_opt_set(p, c"profile".as_ptr(), prof.as_ptr(), 0);
+        }
 
         let r = ffi::avcodec_open2(self.codec_ctx, codec, ptr::null_mut());
         if r < 0 {
-            return Err(format!("avcodec_open2(h264_vaapi): {}", averr(r)));
+            return Err(format!("avcodec_open2({name:?}): {}", averr(r)));
         }
         Ok(())
     }
