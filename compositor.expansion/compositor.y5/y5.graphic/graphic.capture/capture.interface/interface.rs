@@ -872,6 +872,8 @@ fn begin_encoding(
         lossless: temp,
     };
     info!("optimized encoding started");
+    // Kick the first poll; the Running branch keeps the loop alive thereafter.
+    state.schedule_redraw();
 }
 
 /// Per-frame poll of the manual re-encode: update the progress bar; on success
@@ -882,7 +884,16 @@ fn poll_encoding(state: &mut Loop, renderer: &mut GlesRenderer) {
         _ => return,
     };
     match status {
-        ReencodeStatus::Running(f) => set_encode_progress(state, (f * 100.0) as u32),
+        ReencodeStatus::Running(f) => {
+            set_encode_progress(state, (f * 100.0) as u32);
+            // Keep the render loop awake. Unlike active capture (POST_SCENE tap)
+            // or the Save portal (window events), a background ffmpeg produces no
+            // events, so without this the compositor idles and never polls again —
+            // the encode finishes but its `.tmp` is never renamed and the dialog
+            // never closes. Self-sustains: each Running poll schedules the next
+            // frame; Done/Failed stops scheduling and the loop idles normally.
+            state.schedule_redraw();
+        }
         ReencodeStatus::Done(output) => {
             let phase = std::mem::replace(&mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase, CapturePhase::Idle);
             if let CapturePhase::Encoding { target, lossless, .. } = phase {
