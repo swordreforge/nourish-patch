@@ -29,7 +29,6 @@ use smithay::backend::input::{ButtonState, KeyState};
 use smithay::desktop::Window;
 use smithay::input::keyboard::Keycode;
 use smithay::input::pointer::ButtonEvent;
-use smithay::output::Output;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::utils::{Logical, Point, Rectangle, Size, SERIAL_COUNTER};
 use std::collections::HashSet;
@@ -443,19 +442,11 @@ fn build_snap_map(cx: &mut SystemCx, exclude: &HashSet<Uuid>) -> SnapMap {
         }
     }
 
-    let outputs: Vec<Output> = space.outputs().cloned().collect();
-    for output in &outputs {
-        if let Some(geo) = space.output_geometry(output) {
-            map.vertical.push(geo.loc.x as f64);
-            map.vertical.push((geo.loc.x + geo.size.w) as f64);
-            map.horizontal.push(geo.loc.y as f64);
-            map.horizontal.push((geo.loc.y + geo.size.h) as f64);
-        }
-    }
-
-    // The camera viewport edges — the visible screen boundary in world space, which
-    // pans/scales with the camera (unlike the fixed output geometry above). Added as
-    // always-on lines so a window/placeholder can snap to the edge of what's shown.
+    // The screen-boundary snap lines are the camera VIEWPORT edges — the visible
+    // world region (camera-centered, `screen / zoom`), in the same world-logical
+    // frame the grab math runs in, so they track pan/zoom and stay on the boundary
+    // the user actually sees. (The output geometry is a fixed origin rect that only
+    // coincides with the viewport at zoom 1.0 / centered — wrong rect once panned.)
     if snap::SNAP_VIEWPORT_EDGES {
         if let Some(vp) = base_viewport {
             map.vertical.push(vp.loc.x as f64);
