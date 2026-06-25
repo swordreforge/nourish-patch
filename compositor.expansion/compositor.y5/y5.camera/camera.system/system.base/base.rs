@@ -21,15 +21,19 @@ use std::any::Any;
 const MIN_ZOOM: f64 = 0.02;
 const MAX_ZOOM: f64 = 50.0;
 
-/// Momentum-pan tuning (touchpad two-finger swipe). `PAN_FRICTION` is the
-/// exponential decay rate of the coast velocity (1/seconds — larger = stops
-/// sooner); `PAN_MIN_SPEED` is the world-units/second floor below which the
-/// coast snaps to rest; `PAN_END_IDLE_FRAMES` is how many pan-free frames mark
-/// the fingers as lifted (detected by absence of pan, so it needs no terminating
-/// axis event).
-const PAN_FRICTION: f64 = 4.5;
-const PAN_MIN_SPEED: f64 = 12.0;
-const PAN_END_IDLE_FRAMES: u32 = 2;
+/// Momentum-pan tuning (touchpad two-finger swipe).
+/// - `PAN_LAUNCH_GAIN`: multiplies the swipe velocity at release. >1 makes the
+///   fling punchier AND travel farther (the "snappy" knob).
+/// - `PAN_FRICTION`: exponential decay rate of the coast velocity (1/seconds —
+///   the damping knob; larger = settles sooner, smaller = longer glide).
+/// - `PAN_MIN_SPEED`: world-units/second floor below which the coast snaps to rest.
+/// - `PAN_END_IDLE_FRAMES`: fallback lift detection (pan-free frames) for when no
+///   terminating axis event arrives; the real touchpad path launches immediately
+///   off the libinput 0,0 finger event, so this only backstops odd devices.
+const PAN_LAUNCH_GAIN: f64 = 1.5;
+const PAN_FRICTION: f64 = 3.6;
+const PAN_MIN_SPEED: f64 = 8.0;
+const PAN_END_IDLE_FRAMES: u32 = 3;
 
 #[derive(Clone, Copy, Debug)]
 pub struct CameraMoved {
@@ -67,6 +71,9 @@ enum CamCmd {
     /// velocity with friction once the fingers lift. Carries the frame delta
     /// (seconds) so the physics is framerate-independent.
     PanInertiaTick(f64),
+    /// Touchpad lift-off (terminating 0,0 finger axis): arm an immediate coast
+    /// launch on the next tick instead of waiting out the idle-frame fallback.
+    PanEnd,
     /// Cancel any momentum/coast (e.g. a navigator travel takes over).
     PanStop,
 }
@@ -152,6 +159,10 @@ impl System for CameraSystem {
                 // doesn't fight the pan.
                 cancel_travel(cx);
                 cx.write(&CAM_BUF, CamCmd::PanBy(*horizontal, *vertical));
+            } else {
+                // libinput `Finger` source terminates the scroll with a 0,0 event:
+                // fingers lifted → launch the coast immediately (snappy release).
+                cx.write(&CAM_BUF, CamCmd::PanEnd);
             }
             return InputFlow::Consume;
         }
@@ -287,11 +298,17 @@ impl System for CameraSystem {
                     camera.pan_accum = Point::from((0.0, 0.0));
                     camera.pan_idle_frames = 0;
                 } else if camera.panning {
-                    // Pan-free frame(s): treat as fingers lifting → begin to coast.
+                    // Pan-free frame: count toward the idle-fallback lift detection.
                     camera.pan_idle_frames += 1;
-                    if camera.pan_idle_frames >= PAN_END_IDLE_FRAMES {
-                        camera.panning = false;
-                    }
+                }
+                // Launch the coast when the touchpad signalled lift-off (snappy) or
+                // the idle fallback fires. Apply the launch gain ONCE here, AFTER
+                // velocity is measured above, so the boost survives.
+                if camera.panning && (camera.pan_ending || camera.pan_idle_frames >= PAN_END_IDLE_FRAMES) {
+                    camera.panning = false;
+                    camera.pan_ending = false;
+                    camera.pan_velocity =
+                        Point::from((camera.pan_velocity.x * PAN_LAUNCH_GAIN, camera.pan_velocity.y * PAN_LAUNCH_GAIN));
                 }
                 if !camera.panning && (camera.pan_velocity.x != 0.0 || camera.pan_velocity.y != 0.0) {
                     let px = camera.transform.position().x;
@@ -307,11 +324,20 @@ impl System for CameraSystem {
                     }
                 }
             }
+            CamCmd::PanEnd => {
+                // Fingers lifted: arm the immediate coast launch (the next
+                // PanInertiaTick measures the final velocity, then launches). Only
+                // while a swipe is live, so a stray terminating event is harmless.
+                if camera.panning {
+                    camera.pan_ending = true;
+                }
+            }
             CamCmd::PanStop => {
                 camera.pan_velocity = Point::from((0.0, 0.0));
                 camera.pan_accum = Point::from((0.0, 0.0));
                 camera.panning = false;
                 camera.pan_idle_frames = 0;
+                camera.pan_ending = false;
             }
         }
     }
