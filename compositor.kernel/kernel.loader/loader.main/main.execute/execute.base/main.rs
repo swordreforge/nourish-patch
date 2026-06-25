@@ -135,7 +135,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "main",
                 vec![
                     Box::new(compositor_y5_navigator_system_base::base::NavigatorSystem),
-                    Box::new(compositor_y5_camera_system_base::base::CameraSystem),
+                    Box::new(compositor_y5_camera_system_base::base::CameraSystem::default()),
                     Box::new(compositor_background_two_system_base::base::TwoSystem),
                     Box::new(compositor_background_three_system_base::base::ThreeSystem),
                     Box::new(compositor_y5_window_system_base::base::WindowSystem),
@@ -193,7 +193,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let test_systems = || -> Vec<Box<dyn compositor_support_system_trait_system_base::base::System>> {
             vec![
                 Box::new(compositor_y5_navigator_system_base::base::NavigatorSystem),
-                Box::new(compositor_y5_camera_system_base::base::CameraSystem),
+                Box::new(compositor_y5_camera_system_base::base::CameraSystem::default()),
                 Box::new(compositor_background_two_system_base::base::TwoSystem),
                 Box::new(compositor_y5_window_system_base::base::WindowSystem),
                 Box::new(compositor_y5_surface_system_base::base::SurfaceSystem),

@@ -59,6 +59,10 @@ pub struct Environment {
     pub window_client_size_fallback: bool,
     /// `false` = fit only the root toplevel; `true` = fit the whole surface tree.
     pub window_subsurface_shrinks: bool,
+    /// `true` (default) = natural scrolling: invert the touchpad finger-axis
+    /// direction for canvas pan, window scroll, and multi-finger swipe navigation
+    /// (a discrete mouse wheel is unaffected). `false` = use the raw direction.
+    pub input_natural_scroll: bool,
 }
 
 static ENV: OnceLock<Environment> = OnceLock::new();
@@ -149,5 +153,6 @@ pub fn default_settings() -> Environment {
         capture_variable_frame_rate: false,
         window_client_size_fallback: false,
         window_subsurface_shrinks: false,
+        input_natural_scroll: true,
     }
 }
