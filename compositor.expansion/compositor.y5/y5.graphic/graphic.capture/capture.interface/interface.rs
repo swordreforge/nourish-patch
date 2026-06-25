@@ -727,16 +727,27 @@ fn save_as(state: &mut Loop) {
 /// Drain the in-flight Save As result (called each frame during Saving).
 fn poll_saveas(state: &mut Loop, renderer: &mut GlesRenderer) {
     use std::sync::mpsc::TryRecvError;
-    let outcome = {
+    // `None` → portal still running; `Some(v)` → it returned (`v` is `None` if
+    // cancelled/failed).
+    let resolved: Option<Option<PathBuf>> = {
         let CapturePhase::Saving { saveas, .. } = &state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase else {
             return;
         };
         let Some(rx) = saveas else { return };
         match rx.try_recv() {
-            Ok(v) => v,
-            Err(TryRecvError::Empty) => return,
-            Err(TryRecvError::Disconnected) => None,
+            Ok(v) => Some(v),
+            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Disconnected) => Some(None),
         }
+    };
+    let Some(outcome) = resolved else {
+        // Result not in yet. The portal runs on a background thread and generates
+        // no compositor events, so keep the loop awake to catch the result the
+        // instant it arrives (same reason as the encoding poll). Without this, a
+        // result landing while the compositor is idle isn't picked up until some
+        // unrelated event happens to wake it.
+        state.schedule_redraw();
+        return;
     };
     // Clear the in-flight receiver either way.
     if let CapturePhase::Saving { saveas, .. } = &mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase {
