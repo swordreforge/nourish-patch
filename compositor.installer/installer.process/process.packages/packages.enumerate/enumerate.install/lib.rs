@@ -30,6 +30,17 @@ pub fn enable_rpmfusion_nonfree(dry_run: bool) -> Result<(), String> {
     enable_rpmfusion("nonfree", dry_run)
 }
 
+/// Swap Fedora's codec-stripped `ffmpeg-free` for RPM Fusion's full `ffmpeg`
+/// (`--allowerasing`, since the full libs replace the `-free` ones). Needed for screen
+/// capture on every machine — NVENC and VAAPI both encode through FFmpeg. Needs RPM
+/// Fusion (free) enabled first. Opt-in.
+pub fn swap_ffmpeg_full(dry_run: bool) -> Result<(), String> {
+    run_sudo(
+        &["dnf".into(), "swap".into(), "-y".into(), "ffmpeg-free".into(), "ffmpeg".into(), "--allowerasing".into()],
+        dry_run,
+    )
+}
+
 /// Install an RPM Fusion `<kind>-release` rpm (`kind` = "free" | "nonfree").
 fn enable_rpmfusion(kind: &str, dry_run: bool) -> Result<(), String> {
     let rel = fedora_release();

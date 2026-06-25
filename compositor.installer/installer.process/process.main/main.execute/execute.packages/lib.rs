@@ -38,23 +38,18 @@ pub fn select_and_install(dry_run: bool) -> Result<(), String> {
             .map_err(|e| format!("package install failed: {e}"))?;
     }
 
-    // RPM-Fusion VA-API drivers — REQUIRED by the compositor's Vulkan renderer + capture,
-    // but RPM-Fusion-only, so explicit prompts that enable the repo(s) on demand.
+    // RPM-Fusion capture / VA-API support — REQUIRED for screen capture (full FFmpeg) and
+    // the Vulkan renderer (VA-API driver), but RPM-Fusion-only, so explicit prompts that
+    // enable the repo(s) on demand (keeping the strict base install above clean).
     let intel = gpu == pkg::Gpu::Intel;
-    if prompt::yes_no(
-        "mesa-va-drivers-freeworld (RPM Fusion)",
-        "Mesa VAAPI driver — REQUIRED by the compositor's Vulkan renderer and VA-API \
-         capture. Enables RPM Fusion (free) and installs it. Recommended.",
-        true,
-    ) {
+    if prompt::yes_no("Full FFmpeg (RPM Fusion)", "Swap Fedora's codec-stripped ffmpeg-free for the full ffmpeg — REQUIRED for screen capture on every machine (NVENC + VAAPI both encode through it). Enables RPM Fusion (free).", true) {
+        pkg::enable_rpmfusion_free(dry_run).map_err(|e| format!("RPM Fusion (free) failed: {e}"))?;
+        pkg::swap_ffmpeg_full(dry_run).map_err(|e| format!("ffmpeg swap failed: {e}"))?;
+    }
+    if prompt::yes_no("mesa-va-drivers-freeworld (RPM Fusion)", "Mesa VAAPI driver — REQUIRED by the compositor's Vulkan renderer + VA-API capture. Enables RPM Fusion (free). Recommended.", true) {
         install_va(&[MESA_VA_FREEWORLD.to_string()], false, dry_run)?;
     }
-    if prompt::yes_no(
-        "intel-media-driver (RPM Fusion)",
-        "Intel iHD VA-API driver — what Gen8+ Intel iGPUs (e.g. Kaby Lake) need for the \
-         Vulkan renderer + capture. Enables RPM Fusion (nonfree). Recommended on Intel only.",
-        intel,
-    ) {
+    if prompt::yes_no("intel-media-driver (RPM Fusion)", "Intel iHD VA-API driver — Gen8+ Intel iGPUs (e.g. Kaby Lake) need it for the Vulkan renderer + capture. Enables RPM Fusion (nonfree). Recommended on Intel only.", intel) {
         install_va(&[INTEL_MEDIA_DRIVER.to_string()], true, dry_run)?;
     }
 
