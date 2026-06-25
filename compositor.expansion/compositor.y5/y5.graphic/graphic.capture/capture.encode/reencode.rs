@@ -80,11 +80,14 @@ impl ReencodeJob {
         codec: OptimizedCodec,
         cfr: bool,
         format: &str,
+        render_node: &str,
     ) -> Option<ReencodeJob> {
         let total_us = probe_duration_us(input).unwrap_or(0);
 
         let mut cmd = Command::new("ffmpeg");
-        cmd.args(["-y", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-i"])
+        cmd.args(["-y", "-loglevel", "error", "-nostats", "-progress", "pipe:1"])
+            .args(input_decode_args(input, render_node))
+            .arg("-i")
             .arg(input)
             .args(codec.encode_args())
             .args(cfr_args(input, cfr))
@@ -204,11 +207,18 @@ pub fn ffmpeg_format(target: &Path) -> &'static str {
 /// `target` on success. On any failure, falls back to saving the lossless `temp`
 /// as `target` (a recording is never lost). Returns immediately; runs on its own
 /// thread, so no progress bar / state-machine polling is involved.
-pub fn reencode_detached(temp: PathBuf, target: PathBuf, codec: OptimizedCodec, cfr: bool) {
+pub fn reencode_detached(
+    temp: PathBuf,
+    target: PathBuf,
+    codec: OptimizedCodec,
+    cfr: bool,
+    render_node: String,
+) {
     std::thread::spawn(move || {
         let partial = partial_path(&target);
         let fmt = ffmpeg_format(&target);
-        if run_blocking(&temp, &partial, codec, cfr, fmt) && std::fs::rename(&partial, &target).is_ok()
+        if run_blocking(&temp, &partial, codec, cfr, fmt, &render_node)
+            && std::fs::rename(&partial, &target).is_ok()
         {
             let _ = std::fs::remove_file(&temp);
             info!("reencode(auto): {} done", target.display());
@@ -228,9 +238,18 @@ pub fn save_fallback(temp: &Path, target: &Path) {
 }
 
 /// Spawn ffmpeg and block until exit; `true` on success with non-empty output.
-fn run_blocking(input: &Path, output: &Path, codec: OptimizedCodec, cfr: bool, format: &str) -> bool {
+fn run_blocking(
+    input: &Path,
+    output: &Path,
+    codec: OptimizedCodec,
+    cfr: bool,
+    format: &str,
+    render_node: &str,
+) -> bool {
     let status = Command::new("ffmpeg")
-        .args(["-y", "-loglevel", "error", "-i"])
+        .args(["-y", "-loglevel", "error"])
+        .args(input_decode_args(input, render_node))
+        .arg("-i")
         .arg(input)
         .args(codec.encode_args())
         .args(cfr_args(input, cfr))
@@ -292,6 +311,74 @@ fn probe_avg_fps(input: &Path) -> Option<f64> {
     let n: f64 = n.trim().parse().ok()?;
     let d: f64 = d.trim().parse().ok()?;
     if d == 0.0 { None } else { Some(n / d) }
+}
+
+/// Decode-side input args for the re-encode. Some ffmpeg builds (notably
+/// Fedora's `ffmpeg-free`) ship without patent-encumbered **software** decoders
+/// (H.264/HEVC), so re-encoding a hardware-H.264/HEVC capture would fail at the
+/// *decode* step with "Decoder not found". When the input's codec has no software
+/// decoder available, fall back to **VAAPI hardware decode** (`-hwaccel vaapi`),
+/// which decodes on the GPU driver and auto-downloads to system memory for the
+/// software encoder. Empty (plain software decode) otherwise — notably AV1/VP9
+/// captures, whose decoders are royalty-free and present everywhere. Best-effort:
+/// if VAAPI also can't decode, ffmpeg errors and the caller saves the lossless temp.
+fn input_decode_args(input: &Path, render_node: &str) -> Vec<String> {
+    // Only the patent-encumbered codecs (H.264/HEVC) can be missing a *software*
+    // decoder on a stripped ffmpeg. AV1/VP9/etc. (and thus the NVIDIA AV1 capture
+    // path) always decode in software, so skip the probe entirely — the common
+    // path stays a plain software re-encode with no added work.
+    let Some(codec) = probe_codec_name(input) else { return Vec::new() };
+    if !matches!(codec.as_str(), "h264" | "hevc" | "h265") || software_decoder_available(&codec) {
+        return Vec::new();
+    }
+    info!("reencode: no software '{codec}' decoder — using VAAPI hwdecode for input");
+    // Pin the same render node the capture/VAAPI encoder uses, so a dual-GPU box
+    // (e.g. Intel iGPU + NVIDIA) decodes on the GPU that actually owns the frames
+    // rather than ffmpeg's default pick.
+    vec![
+        "-hwaccel".into(),
+        "vaapi".into(),
+        "-hwaccel_device".into(),
+        render_node.to_string(),
+    ]
+}
+
+/// The input stream's codec name (e.g. `h264`, `hevc`, `av1`) via `ffprobe`.
+fn probe_codec_name(input: &Path) -> Option<String> {
+    let out = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "default=nw=1:nk=1",
+        ])
+        .arg(input)
+        .output()
+        .ok()?;
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if s.is_empty() { None } else { Some(s) }
+}
+
+/// Whether the local ffmpeg has a software decoder for `codec`. Parses
+/// `ffmpeg -decoders` (each row is `flags <name> <description>`, so the decoder
+/// token is surrounded by spaces). Defaults to `true` if the probe itself fails
+/// (can't tell → assume software decode and let ffmpeg try).
+fn software_decoder_available(codec: &str) -> bool {
+    let Ok(out) = Command::new("ffmpeg")
+        .args(["-hide_banner", "-decoders"])
+        .stderr(Stdio::null())
+        .output()
+    else {
+        return true;
+    };
+    let needle = format!(" {codec} ");
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .any(|l| l.contains(&needle))
 }
 
 /// Probe a media file's duration in microseconds via `ffprobe`. `None` if
