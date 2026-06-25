@@ -15,7 +15,7 @@
 #
 # Usage: ./prepare.sh [options]
 #   --debug            build the installer in debug (faster) instead of release
-#   --skip=a,b,...     skip components: compositor,devtool,installer,polkit,mx,xwayland
+#   --skip=a,b,...     skip components: compositor,devtool,settings,installer,polkit,mx,xwayland
 #   --out=DIR          output dir (default: compositor.installer/dist)
 #   -h, --help         this help
 #
@@ -108,6 +108,18 @@ else
     install -m644 "$HERE/component/xwayland-satellite/xwayland.service" "$TPL/xwayland/xwayland.service"
 fi
 
+# 5b) Settings tool — installed to /usr/bin/y5.compositor.settings, the only supported
+#     way to author ~/.config/y5.compositor/settings.json (the session wrappers no longer
+#     write it). Cargo target names can't contain '.', so the built binary is
+#     `y5-compositor-settings`; we stage it under the dotted command name.
+if skipped settings; then
+    log "skip: settings tool"
+else
+    log "building settings tool (y5.compositor.settings)"
+    ( cd "$HERE/component/settings-editor" && cargo build --release )
+    install -m755 "$HERE/component/settings-editor/target/release/y5-compositor-settings" "$BIN/y5.compositor.settings"
+fi
+
 # 6) The interactive installer itself.
 if skipped installer; then
     log "skip: installer"
@@ -153,6 +165,7 @@ Contents
   install.sh                         launcher (sets Y5_INSTALL_STAGE, runs y5-install)
   binaries/y5.compositor             the compositor (system session)
   binaries/y5.compositor.dev         the compositor (dev / experimental sessions)
+  binaries/y5.compositor.settings    the settings tool (installed to /usr/bin)
   binaries/compositor-developer-tool the developer log-viewer window
   binaries/y5-polkit-agent           polkit authentication agent
   binaries/mx-gesture-daemon         MX Master gesture daemon
@@ -160,8 +173,11 @@ Contents
   templates/                         PAM, udev and config templates
 
 Note: the compositor reads all of its configuration from a single settings file,
-~/.config/y5.compositor/settings.json, which each session's wrapper script under
-/usr/bin writes (from the values chosen during install) before launch.
+~/.config/y5.compositor/settings.json. The installer seeds it once from your answers;
+after that the session wrappers NEVER overwrite it, so your edits stick. Re-author it
+anytime with the `y5.compositor.settings` tool (installed to /usr/bin); a session
+refuses to start if the file is missing. Run the installer as your normal user (not
+sudo) so the file lands in your home — it uses sudo itself for the system steps.
 EOF
 
 # 9) Convenience launcher inside the artifact.

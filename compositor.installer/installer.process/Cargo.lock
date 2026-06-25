@@ -115,6 +115,7 @@ name = "compositor_installer_process_main_execute_configure"
 version = "0.1.0"
 dependencies = [
  "compositor_installer_process_config_parse_base",
+ "compositor_installer_process_packages_enumerate_base",
 ]
 
 [[package]]
@@ -122,6 +123,7 @@ name = "compositor_installer_process_main_execute_info"
 version = "0.1.0"
 dependencies = [
  "compositor_installer_process_config_parse_base",
+ "compositor_installer_process_packages_enumerate_base",
 ]
 
 [[package]]
