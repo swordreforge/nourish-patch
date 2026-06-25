@@ -25,8 +25,8 @@ const MAX_ZOOM: f64 = 50.0;
 /// exponential decay rate of the coast velocity (1/seconds — larger = stops
 /// sooner); `PAN_MIN_SPEED` is the world-units/second floor below which the
 /// coast snaps to rest; `PAN_END_IDLE_FRAMES` is how many pan-free frames mark
-/// the fingers as lifted (works for both Finger and Continuous axis sources,
-/// which don't both guarantee a terminating event).
+/// the fingers as lifted (detected by absence of pan, so it needs no terminating
+/// axis event).
 const PAN_FRICTION: f64 = 4.5;
 const PAN_MIN_SPEED: f64 = 12.0;
 const PAN_END_IDLE_FRAMES: u32 = 2;
