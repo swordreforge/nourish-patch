@@ -24,14 +24,20 @@ const MAX_ZOOM: f64 = 50.0;
 /// Momentum-pan tuning (touchpad two-finger swipe).
 /// - `PAN_LAUNCH_GAIN`: multiplies the swipe velocity at release. >1 makes the
 ///   fling punchier AND travel farther (the "snappy" knob).
-/// - `PAN_FRICTION`: exponential decay rate of the coast velocity (1/seconds —
-///   the damping knob; larger = settles sooner, smaller = longer glide).
+/// - `PAN_FRICTION`: exponential (viscous) decay rate (1/seconds). Proportional to
+///   speed, so it shapes the main glide but asymptotes — it alone leaves a long
+///   faded tail.
+/// - `PAN_DAMPING`: constant (Coulomb) deceleration (world-units/second²). Speed-
+///   independent, so it's negligible at speed but dominates at the end, bringing
+///   the coast to a firm stop in finite time — this is the knob that kills the
+///   faded tail.
 /// - `PAN_MIN_SPEED`: world-units/second floor below which the coast snaps to rest.
 /// - `PAN_END_IDLE_FRAMES`: fallback lift detection (pan-free frames) for when no
 ///   terminating axis event arrives; the real touchpad path launches immediately
 ///   off the libinput 0,0 finger event, so this only backstops odd devices.
 const PAN_LAUNCH_GAIN: f64 = 2.5;
 const PAN_FRICTION: f64 = 3.6;
+const PAN_DAMPING: f64 = 400.0;
 const PAN_MIN_SPEED: f64 = 8.0;
 const PAN_END_IDLE_FRAMES: u32 = 3;
 
@@ -317,8 +323,20 @@ impl System for CameraSystem {
                     let ny = py + camera.pan_velocity.y * dt;
                     camera.transform.position = Point::from((nx, ny));
                     cx.channels.send(&CAMERA_MOVED_TX, CameraMoved { x: nx, y: ny });
+                    // Viscous (exponential) decay shapes the glide...
                     let decay = (-PAN_FRICTION * dt).exp();
-                    camera.pan_velocity = Point::from((camera.pan_velocity.x * decay, camera.pan_velocity.y * decay));
+                    let mut vx = camera.pan_velocity.x * decay;
+                    let mut vy = camera.pan_velocity.y * decay;
+                    // ...then a constant deceleration (Coulomb damping) firms up the
+                    // end: subtract a fixed speed step along the direction of travel,
+                    // so the tail dies in finite time instead of fading out.
+                    let speed = vx.hypot(vy);
+                    if speed > 0.0 {
+                        let scale = (speed - PAN_DAMPING * dt).max(0.0) / speed;
+                        vx *= scale;
+                        vy *= scale;
+                    }
+                    camera.pan_velocity = Point::from((vx, vy));
                     if camera.pan_velocity.x.hypot(camera.pan_velocity.y) < PAN_MIN_SPEED {
                         camera.pan_velocity = Point::from((0.0, 0.0));
                     }
