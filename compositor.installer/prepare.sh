@@ -166,7 +166,8 @@ Contents
   binaries/y5.compositor             the compositor (system session)
   binaries/y5.compositor.dev         the compositor (dev / experimental sessions)
   binaries/y5.compositor.settings    the settings tool (installed to /usr/bin)
-  binaries/compositor-developer-tool the developer log-viewer window
+  binaries/compositor-developer-tool the developer log viewer (installed as
+                                     y5.compositor.monitor, + app-launcher entry)
   binaries/y5-polkit-agent           polkit authentication agent
   binaries/mx-gesture-daemon         MX Master gesture daemon
   binaries/xwayland-satellite        patched Xwayland satellite (X11 app support)

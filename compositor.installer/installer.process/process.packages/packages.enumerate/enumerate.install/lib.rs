@@ -17,15 +17,26 @@ pub fn dnf_install(packages: &[String], dry_run: bool) -> Result<(), String> {
     run_sudo(&argv, dry_run)
 }
 
-/// Enable the RPM Fusion **free** repository (its `-release` rpm), so packages that
-/// Fedora can't ship — notably `mesa-va-drivers-freeworld` (hardware VA-API video) —
-/// become installable. Opt-in only; never called unless the user explicitly asks.
+/// Enable the RPM Fusion **free** repo (its `-release` rpm), so `mesa-va-drivers-freeworld`
+/// (hardware VA-API video) becomes installable. Opt-in only.
 pub fn enable_rpmfusion_free(dry_run: bool) -> Result<(), String> {
+    enable_rpmfusion("free", dry_run)
+}
+
+/// Enable the RPM Fusion **nonfree** repo, so `intel-media-driver` (the iHD VA-API driver
+/// for Gen8+ Intel iGPUs, e.g. Kaby Lake) becomes installable. The nonfree `-release` rpm
+/// depends on the free one, so enable free first. Opt-in only.
+pub fn enable_rpmfusion_nonfree(dry_run: bool) -> Result<(), String> {
+    enable_rpmfusion("nonfree", dry_run)
+}
+
+/// Install an RPM Fusion `<kind>-release` rpm (`kind` = "free" | "nonfree").
+fn enable_rpmfusion(kind: &str, dry_run: bool) -> Result<(), String> {
     let rel = fedora_release();
     let url = format!(
-        "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{rel}.noarch.rpm"
+        "https://mirrors.rpmfusion.org/{kind}/fedora/rpmfusion-{kind}-release-{rel}.noarch.rpm"
     );
-    println!("Enabling RPM Fusion (free) for Fedora {rel}...");
+    println!("Enabling RPM Fusion ({kind}) for Fedora {rel}...");
     run_sudo(&["dnf".into(), "install".into(), "-y".into(), url], dry_run)
 }
 

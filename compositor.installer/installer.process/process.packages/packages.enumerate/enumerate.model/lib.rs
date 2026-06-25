@@ -37,12 +37,15 @@ pub fn detect_gpu() -> Gpu {
         .filter(|l| l.contains("vga") || l.contains("3d controller") || l.contains("display controller"))
         .collect::<Vec<_>>()
         .join("\n");
+    // Intel is checked before AMD on purpose: every PCI line says "<vendor> Corporation",
+    // and a bare "ati" substring matches "corpor-ati-on" — so an Intel iGPU ("Intel
+    // Corporation …") would otherwise be misread as AMD. Intel never says "amd"/"radeon".
     if gpu_lines.contains("nvidia") {
         Gpu::Nvidia
-    } else if gpu_lines.contains("amd") || gpu_lines.contains("ati") || gpu_lines.contains("radeon") {
-        Gpu::Amd
     } else if gpu_lines.contains("intel") {
         Gpu::Intel
+    } else if gpu_lines.contains("amd") || gpu_lines.contains("radeon") || gpu_lines.contains("ati ") {
+        Gpu::Amd
     } else {
         Gpu::Unknown
     }

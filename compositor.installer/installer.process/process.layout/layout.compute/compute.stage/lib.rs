@@ -60,6 +60,11 @@ pub fn user_systemd_dir() -> PathBuf {
     home().join(".config/systemd/user")
 }
 
+/// `Action::Place` shorthand.
+pub fn place(dest: PathBuf, source: Source, mode: u32, root: bool) -> Action {
+    Action::Place { dest, source, mode, root }
+}
+
 /// True when the current process is uid 0. No libc dep — asks `id -u`.
 pub fn is_root() -> bool {
     std::process::Command::new("id")

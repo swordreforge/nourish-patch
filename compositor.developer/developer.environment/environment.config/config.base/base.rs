@@ -121,3 +121,33 @@ pub fn init() {
 pub fn get() -> &'static Environment {
     ENV.get().expect("environment not initialized; call init() first in main()")
 }
+
+/// Canonical complete starting settings — the single source of default values shared by
+/// the configuration TOOLS: the `y5.compositor.settings` editor and the installer's seed.
+/// NOT used by the compositor at runtime — [`init`] still requires a fully-populated file
+/// and never falls back to these, so a real config can't be silently half-default. Living
+/// here (with the struct) means the editor and the installer agree on one set of values
+/// across the full 19-field schema, so any seeded file is always complete and valid.
+pub fn default_settings() -> Environment {
+    Environment {
+        renderer: "vulkan".to_string(),
+        renderer_fallback: true,
+        renderer_sync: String::new(),
+        hdr: false,
+        depth: 8,
+        vrr: false,
+        render_node: "/dev/dri/renderD128".to_string(),
+        desktop_name: "Y5Compositor".to_string(),
+        log_level: "info,warn,error".to_string(),
+        vk_diag: String::new(),
+        capture_encoder: "nvenc".to_string(),
+        capture_codec: "av1".to_string(),
+        capture_quality: "optimized".to_string(),
+        capture_refresh_rate_max: 120,
+        capture_background_encoder: "ffmpeg".to_string(),
+        capture_nvenc_allow_readback_fallback: false,
+        capture_variable_frame_rate: false,
+        window_client_size_fallback: false,
+        window_subsurface_shrinks: false,
+    }
+}
