@@ -24,6 +24,17 @@ use crate::ffi;
 const RENDER_NODE: &str = "/dev/dri/renderD128";
 const MAX_PLANES: usize = 4;
 
+// `lseek(fd, 0, SEEK_END)` reports a dmabuf's size (needed for the DRM object
+// descriptor). In libc, always linked — no extra crate dependency.
+unsafe extern "C" {
+    fn lseek(fd: c_int, offset: i64, whence: c_int) -> i64;
+}
+const SEEK_END: c_int = 2;
+
+/// No-op `AVBuffer` free callback: the wrapped DRM descriptor is owned by the
+/// encoder's `Box`, not by libav, so dropping the buffer must not free it.
+unsafe extern "C" fn noop_buffer_free(_opaque: *mut c_void, _data: *mut u8) {}
+
 // --- Encoder tuning knobs (VAAPI). All compile-time constants; see CAPTURE.md. ---
 // Kept conservative: VAAPI drivers vary, and unsupported options fail soft
 // (av_opt_set is ignored), but rejected B-frames/profiles can fail encoder open.
@@ -150,6 +161,23 @@ impl VaapiEncoder {
         (*self.drm_frame).width = w;
         (*self.drm_frame).height = h;
         (*self.drm_frame).data[0] = (&mut *self.desc) as *mut _ as *mut u8;
+        // Make the frame REFERENCE-COUNTED by wrapping the (persistent) descriptor
+        // in an AVBuffer with a no-op free (the Box<AVDRMFrameDescriptor> owns the
+        // memory; this buffer must not free it). Without a `buf[0]`, libav treats
+        // the frame as non-refcounted, so `av_buffersrc_add_frame(KEEP_REF)`
+        // allocate-and-copies every frame — churning the DRM hwframe pool until it
+        // ENOMEMs ("Cannot allocate memory"). A real `buf[0]` makes KEEP_REF a
+        // cheap new reference.
+        (*self.drm_frame).buf[0] = ffi::av_buffer_create(
+            (&mut *self.desc) as *mut _ as *mut u8,
+            std::mem::size_of::<ffi::AVDRMFrameDescriptor>(),
+            Some(noop_buffer_free),
+            ptr::null_mut(),
+            0,
+        );
+        if (*self.drm_frame).buf[0].is_null() {
+            return Err("av_buffer_create(drm descriptor) failed".into());
+        }
 
         // 4. Filter graph: buffer(drm_prime) → hwmap→vaapi → nv12 → buffersink.
         self.build_filtergraph(w, h)?;
@@ -179,13 +207,25 @@ impl VaapiEncoder {
         let fourcc: u32 = format.code as u32;
         let modifier: u64 = format.modifier.into();
 
+        let height = dmabuf.height();
         let desc = &mut *self.desc;
         // One object per fd (planes may share an fd; deduping is optional — VAAPI
         // import accepts one object per plane fd).
         desc.nb_objects = nplanes as c_int;
         for i in 0..nplanes {
-            desc.objects[i].fd = fds.get(i).copied().unwrap_or(fds[0]);
-            desc.objects[i].size = 0; // unknown; VAAPI tolerates 0
+            let fd = fds.get(i).copied().unwrap_or(fds[0]);
+            desc.objects[i].fd = fd;
+            // The object size MUST be the real dmabuf size. NVIDIA never reached
+            // this path, but MESA's VAAPI dmabuf import rejects `size = 0` with
+            // ENOMEM ("Cannot allocate memory") when the frame flows through
+            // `hwmap`. `lseek(SEEK_END)` returns a dmabuf's size; fall back to
+            // stride*height if that ever fails.
+            let sz = lseek(fd, 0, SEEK_END);
+            desc.objects[i].size = if sz > 0 {
+                sz as _
+            } else {
+                (strides.get(i).copied().unwrap_or(0) as u64 * height as u64) as _
+            };
             desc.objects[i].format_modifier = modifier;
         }
         desc.nb_layers = 1;
