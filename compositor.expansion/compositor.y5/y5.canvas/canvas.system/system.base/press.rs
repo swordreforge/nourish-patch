@@ -356,7 +356,8 @@ fn anchor_flags(rect: Rectangle<i32, Logical>, cursor: Point<f64, Logical>) -> (
 }
 
 /// Build the snap map for a grab. `sources` get the rects of every window + every
-/// active visible placeholder NOT in `exclude`; the screen edges go into the
+/// active visible placeholder NOT in `exclude`; the screen edges (output geometry +
+/// the camera viewport extent, see [`snap::SNAP_VIEWPORT_EDGES`]) go into the
 /// always-on `vertical`/`horizontal` lines. All in storage/world space — the same
 /// space the grab geometry math runs in. Window rects use `element_location` +
 /// `geometry().size`, matching the start-geo snapshot in `trigger_candidates` so
@@ -449,6 +450,18 @@ fn build_snap_map(cx: &mut SystemCx, exclude: &HashSet<Uuid>) -> SnapMap {
             map.vertical.push((geo.loc.x + geo.size.w) as f64);
             map.horizontal.push(geo.loc.y as f64);
             map.horizontal.push((geo.loc.y + geo.size.h) as f64);
+        }
+    }
+
+    // The camera viewport edges — the visible screen boundary in world space, which
+    // pans/scales with the camera (unlike the fixed output geometry above). Added as
+    // always-on lines so a window/placeholder can snap to the edge of what's shown.
+    if snap::SNAP_VIEWPORT_EDGES {
+        if let Some(vp) = base_viewport {
+            map.vertical.push(vp.loc.x as f64);
+            map.vertical.push((vp.loc.x + vp.size.w) as f64);
+            map.horizontal.push(vp.loc.y as f64);
+            map.horizontal.push((vp.loc.y + vp.size.h) as f64);
         }
     }
 
