@@ -7,6 +7,13 @@ use compositor_orchestration_seat_pointer_texture::pointer_load::CursorThemeCach
 
 pub struct PointerState {
     pub motion: Point<f64, Logical>,
+    /// Whether `motion` (the physical-space accumulator) has been seeded to the
+    /// drawn cursor position. Its `(0,0)` default is physical top-left, but the
+    /// cursor is rendered at the seat's world location (`(0,0)` -> screen center
+    /// at boot); without seeding, the first relative delta would accumulate from
+    /// the corner and the cursor would jump there. Seeded once when the output
+    /// is registered (see `display.output::register`).
+    pub initialized: bool,
     pub element: PointerElement,
 }
 
@@ -25,6 +32,7 @@ impl PointerState {
 
         return PointerState {
             motion: Point::new(0.0, 0.0),
+            initialized: false,
             element: pointer_element,
         };
     }

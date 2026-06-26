@@ -1,13 +1,27 @@
 use std::os::unix::raw::dev_t;
 
 use compositor_y5_graphic_display_backend::backend::Backend;
+use smithay::utils::Point;
 use smithay::{output::Output, wayland::dmabuf::DmabufFeedbackBuilder};
 use compositor_orchestration_core_state_base::Loop;
+use compositor_support_smithay_dispatch_wire_trait::wire_trait::WireTrait;
 
 pub fn register(_loop: &mut Loop, output: &Output) {
     let _global = output.create_global::<compositor_support_smithay_dispatch_state_base::state::Dispatch>(&_loop.state.output.display_handle);
 
     _loop.inner.space_state_mut().state.map_output(output, (0, 0));
+
+    // Seed the pointer's physical accumulator to the drawn cursor position, once,
+    // now that the output geometry is known. The cursor renders at the seat's
+    // world location (`(0,0)` -> screen center), but the relative-motion
+    // accumulator (`PointerState.motion`) defaults to physical top-left; without
+    // this seed the first mouse move would accumulate from the corner and the
+    // cursor would jump there. `apply_pointer` re-projects world `(0,0)` through
+    // the live camera to the matching physical point.
+    if !_loop.inner.pointer().initialized {
+        _loop.inner.apply_pointer(Point::from((0.0, 0.0)));
+        _loop.inner.pointer_mut().initialized = true;
+    }
 }
 
 pub fn register_dmabuf(_loop: &mut Loop, backend_loader: &mut dyn Backend) {
