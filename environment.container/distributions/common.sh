@@ -35,6 +35,12 @@ distro_validate() {
 # NO external worktree link). Override with Y5_DIST_SRC. Produced by prepare_source below.
 DIST_SRC="${Y5_DIST_SRC:-$_DIST_DIR/.src}"
 
+# Per-distro cargo target cache, persisted on the host and mounted into the build at /y5-target.
+# Keeps the compiled dependency graph warm so a CHANGED clone rebuilds incrementally instead of
+# from scratch. One dir per distro (different distros have incompatible ABIs/toolchains, so they
+# must not share). Override the base with Y5_DIST_CACHE.
+DIST_CACHE="${Y5_DIST_CACHE:-$_DIST_DIR/.cache}"
+
 # Materialize DIST_SRC by cloning the local repo. This MUST run where the repo's FULL git data
 # exists. In a linked git worktree, .git is a file pointing at an external gitdir
 # (e.g. /home/y5/nourish/.git) — a machine that only has the worktree's files (the host) can't

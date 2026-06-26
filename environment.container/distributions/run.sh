@@ -27,6 +27,23 @@ podman image exists "$IMAGE" || "$HERE/image.sh" "$DISTRO" "$PROFILE"
 
 podman rm -f -t 0 "$NAME" 2>/dev/null || true
 
+# --- GPU via the NVIDIA Container Toolkit (CDI) ----------------------------------------------
+# The host GPU is passed as a CDI device produced by `nvidia-ctk cdi generate` (writes a spec to
+# /etc/cdi/, which podman resolves). CDI injects the host's NVIDIA userspace, so the distro images
+# only ship mesa + the Vulkan loader. Pick a specific GPU with Y5_CDI_DEVICE=nvidia.com/gpu=0.
+CDI_DEVICE="${Y5_CDI_DEVICE:-nvidia.com/gpu=all}"
+cdi_preflight() {
+    # OK if nvidia-ctk lists the device, or a spec dir already references an nvidia.com/gpu device.
+    if command -v nvidia-ctk >/dev/null 2>&1 && nvidia-ctk cdi list 2>/dev/null | grep -qF "$CDI_DEVICE"; then
+        return 0
+    fi
+    grep -rqsF "nvidia.com/gpu" /etc/cdi /var/run/cdi 2>/dev/null && return 0
+    echo "WARNING: NVIDIA CDI device '$CDI_DEVICE' not found — GPU passthrough will fail." >&2
+    echo "  Generate the spec on the host:  sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml" >&2
+    echo "  Then verify:                    nvidia-ctk cdi list" >&2
+}
+cdi_preflight
+
 # Honor a host-set log level; default to the usual dev verbosity otherwise.
 LOG_LEVEL="${COMPOSITOR_LOG_LEVEL:-info,warn,error,trace}"
 
@@ -42,10 +59,11 @@ podman run -it --rm \
     --init \
     --env-file "$ENV_CONTAINER" \
     -e COMPOSITOR_LOG_LEVEL="$LOG_LEVEL" \
-    --device nvidia.com/gpu=all \
+    --device "$CDI_DEVICE" \
     -v "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/tmp/wayland-host:ro" \
     -v "$HERE/exec.sh:/usr/local/bin/exec.sh:ro" \
+    -v "$HERE/gpu-setup.sh:/usr/local/bin/gpu-setup.sh:ro" \
     -v "$REPO_ROOT/environment/compositor-env.sh:/working.directory/environment/compositor-env.sh:ro" \
     --security-opt label=disable \
     -w /working.directory \
-    "$IMAGE" /bin/bash
+    "$IMAGE" /bin/bash -c '/usr/local/bin/gpu-setup.sh || true; exec bash -i'

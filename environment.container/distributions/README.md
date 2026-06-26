@@ -27,6 +27,7 @@ distributions/
   debian-latest/Containerfile
   arch-latest/Containerfile
   .src/               # self-contained source clone (gitignored)
+  .cache/<distro>/    # per-distro cargo target cache — warm incremental rebuilds (gitignored)
   out/                # extracted binaries (gitignored)
 ```
 
@@ -89,15 +90,53 @@ first (it lives under the worktree, so a shared filesystem carries it over; othe
 ```
 
 `run.sh` reuses the GPU/session env from `../container.env` (NVIDIA EGL paths,
-`COMPOSITOR_RENDER_NODE`, `WAYLAND_DISPLAY=wayland-host`) and passes the host GPU via the CDI
-`nvidia.com/gpu=all` device — the NVIDIA userspace is injected by CDI, so the distro images only
-ship mesa + the Vulkan loader. The compositor it launches (via `exec.sh`) is the binary that was
-**compiled on that distro** (the image bakes it in), so re-run `image.sh` after changing code.
+`COMPOSITOR_RENDER_NODE`, `WAYLAND_DISPLAY=wayland-host`) and passes the host GPU via a **CDI
+device from the NVIDIA Container Toolkit** (`nvidia-ctk`). The NVIDIA userspace is injected by CDI,
+so the distro images only ship mesa + the Vulkan loader. Prerequisite on the host (once):
+
+```bash
+sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml   # generate the CDI spec
+nvidia-ctk cdi list                                          # verify nvidia.com/gpu=... devices
+```
+
+`run.sh` defaults to `--device nvidia.com/gpu=all` and preflights that the device is registered
+(warning with the command above if not). Target a specific GPU with `Y5_CDI_DEVICE=nvidia.com/gpu=0`.
+The compositor it launches (via `exec.sh`) is the binary that was **compiled on that distro** (the
+image bakes it in), so re-run `image.sh` after changing code.
+
+### NVIDIA gbm backend (`gpu-setup.sh`)
+
+`container.env` sets `GBM_BACKEND=nvidia-drm`, so mesa needs `nvidia-drm_gbm.so` in the distro's
+gbm dir. CDI injects the backend lib (`libnvidia-allocator.so`) but creates the symlink against the
+**host's** gbm path — wrong for a Debian/Ubuntu image (`/usr/lib/x86_64-linux-gnu/gbm`). Without it
+you get `MESA-LOADER: failed to open nvidia-drm` → mesa falls back to `DRM_IOCTL_MODE_CREATE_DUMB`
+on a render node → `Permission denied` and a `CreateBo` panic. `gpu-setup.sh` (run by `exec.sh`
+and at shell start, idempotent) links `nvidia-drm_gbm.so` → the injected allocator so allocations
+take the NVIDIA path. It no-ops where the symlink already exists (e.g. a Fedora image on a Fedora
+host). Check the render node it uses is your NVIDIA card: `cat /sys/class/drm/renderD12*/device/vendor`
+(`0x10de` = NVIDIA); set `COMPOSITOR_RENDER_NODE=/dev/dri/renderDXXX` if needed.
 
 `exec.sh` writes the required `settings.json` from the `COMPOSITOR_*` env (via the repo's
 `environment/compositor-env.sh`, which has every required field). `run.sh` mounts that settings
 writer **live** over the image's copy, so a settings-writer fix takes effect immediately — no
 image rebuild needed for that part (only a code/binary change needs a rebuild).
+
+## Incremental rebuilds (per-distro target cache)
+
+When the clone changes, the image's `git clone` layer changes and its `cargo build` re-runs — but
+it does **not** start from scratch. `image.sh` mounts a **per-distro** cargo target dir from the
+host (`.cache/<distro>/`) at `/y5-target` (the Containerfiles set `Y5_TARGET_DIR` to match), so the
+compiled artifacts persist between builds. The (large, vendored) dependency graph stays compiled;
+cargo only rebuilds what actually changed. Each distro gets its own cache dir — they have
+incompatible ABIs/toolchains and must not share. Override the base with `Y5_DIST_CACHE=/path`;
+`podman` never commits this dir into the image, so images stay small.
+
+> Caveat: `git clone` gives every file a fresh mtime, so cargo re-checks (and may recompile) the
+> local workspace crates even when their content is unchanged — but the dependency graph (the bulk
+> of the build) is reused. To also skip unchanged local crates, restore commit mtimes after the
+> clone (e.g. `git-restore-mtime`); ask and I can add that to the Containerfiles.
+
+Clear a cache with `rm -rf .cache/<distro>` (or all of `.cache/`).
 
 ## Adding a distro
 

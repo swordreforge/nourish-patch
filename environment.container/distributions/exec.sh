@@ -7,6 +7,11 @@
 # Usage (inside the container shell):  exec.sh
 set -euo pipefail
 
+# Ensure the NVIDIA gbm backend (nvidia-drm_gbm.so) resolves in this distro's gbm dir — CDI
+# injects the lib but not always the symlink. Without it, GBM_BACKEND=nvidia-drm fails and mesa
+# falls back to DRM_IOCTL_MODE_CREATE_DUMB on a render node → EACCES panic. (Idempotent.)
+/usr/local/bin/gpu-setup.sh || true
+
 # Turn the COMPOSITOR_* env knobs into the settings.json the binary requires (incl. every
 # required field). run.sh mounts the live environment/compositor-env.sh over the image's copy,
 # so settings-writer fixes take effect without rebuilding.

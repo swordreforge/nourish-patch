@@ -11,12 +11,15 @@ RUN --mount=type=cache,target=/var/cache/pacman/pkg \
         wayland wayland-protocols \
         mesa libglvnd vulkan-icd-loader ffmpeg \
         dbus libpulse \
-        foot
+        foot ttf-dejavu
 
 # --- build stage: clone the local repo + compile winit ----------------------------------
 FROM deps AS build
 ARG PROFILE=debug
 WORKDIR /working.directory
+# Compile into the host-mounted cache (image.sh: -v <.cache>/<distro>:/y5-target) so a changed
+# clone rebuilds incrementally — the compiled dependency graph persists between builds.
+ENV Y5_TARGET_DIR=/y5-target
 
 # /repo is bind-mounted at build time from the prepared self-contained clone
 # (image.sh passes `-v <DIST_SRC>:/repo:ro`). Clone it into the image (offline; no network).

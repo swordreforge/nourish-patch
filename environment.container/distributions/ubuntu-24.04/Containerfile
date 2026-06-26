@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/var/cache/apt \
         libavcodec-dev libavformat-dev libavutil-dev libavfilter-dev libavdevice-dev \
         libswscale-dev libswresample-dev \
         libdbus-1-dev libpulse-dev \
-        foot
+        foot fonts-dejavu-core
 
 # Rust toolchain (stable, edition-2024-capable) via rustup, installed system-wide.
 ENV RUSTUP_HOME=/usr/local/rustup \
@@ -31,6 +31,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
 FROM deps AS build
 ARG PROFILE=debug
 WORKDIR /working.directory
+# Compile into the host-mounted cache (image.sh: -v <.cache>/<distro>:/y5-target) so a changed
+# clone rebuilds incrementally — the compiled dependency graph persists between builds.
+ENV Y5_TARGET_DIR=/y5-target
 
 # /repo is bind-mounted at build time from the prepared self-contained clone
 # (image.sh passes `-v <DIST_SRC>:/repo:ro`). Clone it into the image (offline; no network).

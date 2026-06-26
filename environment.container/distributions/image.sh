@@ -30,10 +30,16 @@ if [ ! -d "$DIST_SRC/.git" ]; then
     prepare_source
 fi
 
-echo ">> building $IMAGE  (distro=$DISTRO profile=$PROFILE, source $DIST_SRC)" >&2
+# Per-distro cargo target cache (persists on the host across rebuilds → incremental compile
+# when the clone changes). Mounted at /y5-target; the Containerfile sets Y5_TARGET_DIR to match.
+TARGET_CACHE="$DIST_CACHE/$DISTRO"
+mkdir -p "$TARGET_CACHE"
+
+echo ">> building $IMAGE  (distro=$DISTRO profile=$PROFILE, source $DIST_SRC, target cache $TARGET_CACHE)" >&2
 podman build \
     --build-arg PROFILE="$PROFILE" \
     -v "$DIST_SRC:/repo:ro" \
+    -v "$TARGET_CACHE:/y5-target" \
     --security-opt label=disable \
     -t "$IMAGE" \
     -f "$HERE/$DISTRO/Containerfile" \
