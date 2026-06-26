@@ -4,7 +4,7 @@ use iced_core::{
 };
 use iced_wgpu::Renderer;
 use iced_widget::{column, container};
-use crate::selection::{ScaleToFitOption, SelectionAction, SelectionState};
+use crate::selection::{CloseMode, ScaleToFitOption, SelectionAction, SelectionState};
 use compositor_support_iced_core_engine_base::IcedUi;
 use compositor_support_iced_core_engine_base::ui::EventFlags;
 
@@ -32,9 +32,9 @@ pub enum Message {
     AltChanged(bool),
     ExecuteSelection(Vec<SelectionAction>, bool),
     ExecuteScaleToFit(ScaleToFitOption),
-    /// Close every selected window. `true` = force (SIGKILL via `pkill`), set
-    /// when Alt was held at click time; `false` = graceful stop.
-    CloseSelected(bool),
+    /// Close every selected window at the strength chosen by the modifiers held
+    /// at click time (none = protocol close, Alt = SIGTERM, Alt+Shift = SIGKILL).
+    CloseSelected(CloseMode),
 }
 
 impl Default for Overlay {

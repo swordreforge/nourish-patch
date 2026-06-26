@@ -35,7 +35,7 @@ use compositor_orchestration_driver_selection_base::base::{
 use compositor_orchestration_draw_layer_base::base::Layer;
 use compositor_support_world_order_track_base::base::DrawLayer;
 use compositor_monitor_compositor_iced_base::{HandleId, IcedHandle, IcedSpace};
-use compositor_monitor_selection_scene_base::selection::SelectionAction;
+use compositor_monitor_selection_scene_base::selection::{CloseMode, SelectionAction};
 use compositor_monitor_selection_scene_base::ui::{Message, Overlay};
 use compositor_y5_surface_draw_handle::handle::load;
 use compositor_y5_surface_protocol_base::protocol::{
@@ -222,36 +222,51 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, forward: Selection
                 state,
             );
         }
-        SelectionForward::CloseWindows(force) => close_selected(state, force),
+        SelectionForward::CloseWindows(mode) => close_selected(state, mode),
     }
 }
 
 // --- close selected windows -----------------------------------------------
 
-/// Terminate every selected window's client process. Two strengths, and both
-/// target the exact pid that owns the window (resolved from the surface
-/// credentials) — never the command line, so other instances of the same app
-/// are left alone:
+/// Dismiss every selected window at the chosen [`CloseMode`]. Three strengths:
 ///
-/// - `force` (Alt held): SIGKILL the pid directly (`kill -9 <pid>`).
-/// - graceful (default): the apps are launched by the compositor and best-effort
-///   adopted into a transient systemd user `.scope` under `app.slice` (see
-///   `introspection.execution.launch`). We prefer `systemctl --user stop <scope>`
-///   so the whole cgroup is brought down cleanly via systemd's SIGTERM→SIGKILL
-///   sequence; if the process isn't in such a scope (systemd unavailable / never
-///   adopted), we fall back to a plain SIGTERM on the pid.
+/// - `Request` (no modifier): ask the window to close via the `xdg_toplevel.close`
+///   protocol event — the equivalent of clicking its title-bar X. This targets
+///   the *surface*, not the process, so windows that share one client process
+///   (Chrome's windows, a terminal's windows) close just the chosen one and the
+///   app runs its own teardown (save prompts, session save). Windows with no xdg
+///   toplevel (XWayland) have no such event, so we fall back to a graceful
+///   SIGTERM on the owning pid there.
+/// - `Terminate` (Alt): SIGTERM the owning process. The apps are launched by the
+///   compositor and best-effort adopted into a transient systemd user `.scope`
+///   under `app.slice` (see `introspection.execution.launch`); we prefer
+///   `systemctl --user stop <scope>` so the whole cgroup comes down cleanly via
+///   systemd's SIGTERM→SIGKILL sequence, falling back to a plain SIGTERM on the
+///   pid when the process isn't in such a scope.
+/// - `Kill` (Alt+Shift): SIGKILL the pid directly (`kill -9 <pid>`).
 ///
-/// All killers are spawned and detached (never waited on) so the render loop is
-/// not blocked — the compositor's SIGCHLD reaper collects them.
-fn close_selected(state: &Loop, force: bool) {
+/// The signal paths target the exact pid that owns the window (resolved from the
+/// surface credentials) — never the command line, so other instances of the same
+/// app are left alone. All killers are spawned and detached (never waited on) so
+/// the render loop is not blocked — the compositor's SIGCHLD reaper collects them.
+fn close_selected(state: &Loop, mode: CloseMode) {
     let display_handle = state.inner.loader.display_handle.clone();
     let windows = state.inner.select().Selection.clone();
     for window in &windows {
+        // Polite per-surface close: ask the client to dismiss just this window.
+        if mode == CloseMode::Request {
+            if let Some(toplevel) = window.toplevel() {
+                toplevel.send_close();
+                continue;
+            }
+            // No xdg toplevel (XWayland): no close event — fall through to a
+            // graceful SIGTERM on the owning pid.
+        }
         let Some(pid) = window_pid(window, &display_handle) else {
             warn!("close: selected window has no client pid; skipping");
             continue;
         };
-        if force {
+        if mode == CloseMode::Kill {
             force_kill(pid);
         } else {
             graceful_close(pid);
@@ -366,7 +381,7 @@ fn install_handler(state: &mut Loop, handle: IcedHandle<Overlay>) {
                         Some(SelectionForward::Execute(actions.clone(), *alt))
                     }
                     Message::ExecuteScaleToFit(opt) => Some(SelectionForward::ScaleToFit(*opt)),
-                    Message::CloseSelected(force) => Some(SelectionForward::CloseWindows(*force)),
+                    Message::CloseSelected(mode) => Some(SelectionForward::CloseWindows(*mode)),
                     _ => None,
                 };
                 if let Some(forward) = forward {

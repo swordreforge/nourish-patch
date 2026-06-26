@@ -56,6 +56,40 @@ pub struct ScaleToFitOption {
 }
 //
 
+/// How aggressively the close button should dismiss the selected windows,
+/// chosen by the modifiers held at click time:
+///
+/// - `Request` (no modifier): ask the window to close via the `xdg_toplevel.close`
+///   protocol event. Targets the *surface*, not the process, so windows that
+///   share a client process (Chrome windows, a terminal's windows) close just
+///   the chosen one and the app runs its own teardown.
+/// - `Terminate` (Alt): SIGTERM the owning process (systemd scope stop, else
+///   `kill -TERM`). The former default.
+/// - `Kill` (Alt+Shift): SIGKILL the owning process (`kill -9`). The former Alt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloseMode {
+    Request,
+    Terminate,
+    Kill,
+}
+
+impl CloseMode {
+    /// Derive the close strength from the modifier state held at click time.
+    pub fn from_modifiers(alt: bool, shift: bool) -> Self {
+        match (alt, shift) {
+            (false, _) => CloseMode::Request,
+            (true, false) => CloseMode::Terminate,
+            (true, true) => CloseMode::Kill,
+        }
+    }
+
+    /// Whether this mode kills the owning process (Alt held) rather than asking
+    /// the window to close — drives the destructive skull/red affordance.
+    pub fn is_destructive(self) -> bool {
+        !matches!(self, CloseMode::Request)
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct SelectionState {
     /// Multi-select: any combination of AlignLeft/Center/Right active.
@@ -214,13 +248,17 @@ impl Overlay {
             }
         };
 
-        // --- Close: terminate every selected window. Holding Alt turns this
-        // into a force-kill (SIGKILL via `pkill -9 -f`); the icon becomes a
-        // skull and the button reddens to signal the destructive variant. The
-        // force flag is baked in here (the view re-renders on AltChanged), so
-        // the click carries whatever modifier was held at render time. ---
-        let force = self.selection.alt_held;
-        let close_glyph = if force { font_map::Skull } else { font_map::WindowClosed };
+        // --- Close: dismiss every selected window. The strength is chosen by
+        // the modifiers held at render time (baked into the message, since the
+        // view re-renders on Shift/AltChanged):
+        //   none      -> ask the window to close (xdg_toplevel.close protocol)
+        //   Alt       -> SIGTERM the owning process
+        //   Alt+Shift -> SIGKILL the owning process
+        // Holding Alt (either kill variant) swaps the icon to a skull and
+        // deepens the red to signal the process-killing, destructive intent. ---
+        let mode = CloseMode::from_modifiers(self.selection.alt_held, self.selection.shift_held);
+        let destructive = mode.is_destructive();
+        let close_glyph = if destructive { font_map::Skull } else { font_map::WindowClosed };
         let close_button: Element<'_, Message, Theme, Renderer> = button(
             container(
                 text(close_glyph)
@@ -235,9 +273,9 @@ impl Overlay {
             .height(Length::Fixed(36.0)),
         )
         .padding(0)
-        .on_press(Message::CloseSelected(force))
+        .on_press(Message::CloseSelected(mode))
         .style(move |_theme, status| {
-            let bg = match (status, force) {
+            let bg = match (status, destructive) {
                 (button::Status::Hovered, _) => Color::from_rgb(0.86, 0.20, 0.22),
                 (button::Status::Pressed, _) => Color::from_rgb(0.74, 0.12, 0.14),
                 (_, true) => Color::from_rgb(0.80, 0.12, 0.14),
