@@ -214,6 +214,45 @@ impl Overlay {
             }
         };
 
+        // --- Close: terminate every selected window. Holding Alt turns this
+        // into a force-kill (SIGKILL via `pkill -9 -f`); the icon becomes a
+        // skull and the button reddens to signal the destructive variant. The
+        // force flag is baked in here (the view re-renders on AltChanged), so
+        // the click carries whatever modifier was held at render time. ---
+        let force = self.selection.alt_held;
+        let close_glyph = if force { font_map::Skull } else { font_map::WindowClosed };
+        let close_button: Element<'_, Message, Theme, Renderer> = button(
+            container(
+                text(close_glyph)
+                    .font(MATERIAL_FAMILY)
+                    .size(20)
+                    .center()
+                    .style(|_theme| text::Style { color: Some(Color::WHITE) }),
+            )
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
+            .width(Length::Fixed(36.0))
+            .height(Length::Fixed(36.0)),
+        )
+        .padding(0)
+        .on_press(Message::CloseSelected(force))
+        .style(move |_theme, status| {
+            let bg = match (status, force) {
+                (button::Status::Hovered, _) => Color::from_rgb(0.86, 0.20, 0.22),
+                (button::Status::Pressed, _) => Color::from_rgb(0.74, 0.12, 0.14),
+                (_, true) => Color::from_rgb(0.80, 0.12, 0.14),
+                _ => Color::from_rgb(0.90, 0.32, 0.34),
+            };
+            button::Style {
+                snap: true,
+                background: Some(Background::Color(bg)),
+                text_color: Color::WHITE,
+                border: Border { radius: 6.0.into(), ..Default::default() },
+                shadow: Shadow::default(),
+            }
+        })
+        .into();
+
         let alignment_group = column![
             row![
                 icon_button(
@@ -341,6 +380,11 @@ impl Overlay {
                 );
             }
         }
+
+        // Destructive close action sits at the end of the toolbar, fenced off
+        // from the layout tools by a separator.
+        toolbar_left = toolbar_left.push(separator());
+        toolbar_left = toolbar_left.push(close_button);
 
         // The commit panel — only present when toggles exist.
         let commit_panel: Element<'_, Message, Theme, Renderer> = if self.selection.has_any_toggle()

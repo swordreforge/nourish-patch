@@ -32,6 +32,9 @@ pub enum Message {
     AltChanged(bool),
     ExecuteSelection(Vec<SelectionAction>, bool),
     ExecuteScaleToFit(ScaleToFitOption),
+    /// Close every selected window. `true` = force (SIGKILL via `pkill`), set
+    /// when Alt was held at click time; `false` = graceful stop.
+    CloseSelected(bool),
 }
 
 impl Default for Overlay {

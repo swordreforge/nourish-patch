@@ -16,9 +16,13 @@
 //! so when nothing is selected it captures no pointer/keyboard and draws no
 //! cursor — there is simply no surface.
 
+use std::process::Command;
 use std::sync::Once;
 
 use smithay::backend::renderer::gles::GlesRenderer;
+use smithay::desktop::Window;
+use smithay::reexports::wayland_server::{DisplayHandle, Resource};
+use smithay::wayland::seat::WaylandFocus;
 use smithay::utils::{Physical, Point, Rectangle, Size};
 
 use compositor_orchestration_core_state_base::Loop;
@@ -218,6 +222,106 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, forward: Selection
                 state,
             );
         }
+        SelectionForward::CloseWindows(force) => close_selected(state, force),
+    }
+}
+
+// --- close selected windows -----------------------------------------------
+
+/// Terminate every selected window's client process. Two strengths:
+///
+/// - `force` (Shift held): SIGKILL via `pkill -9 -f <cmdline>`, nuking the app
+///   and any sibling processes sharing that command line.
+/// - graceful (default): the apps are launched by the compositor and best-effort
+///   adopted into a transient systemd user `.scope` under `app.slice` (see
+///   `introspection.execution.launch`). We prefer `systemctl --user stop <scope>`
+///   so the whole cgroup is brought down cleanly via systemd's SIGTERM→SIGKILL
+///   sequence; if the process isn't in such a scope (systemd unavailable / never
+///   adopted), we fall back to a plain SIGTERM on the pid.
+///
+/// All killers are spawned and detached (never waited on) so the render loop is
+/// not blocked — the compositor's SIGCHLD reaper collects them.
+fn close_selected(state: &Loop, force: bool) {
+    let display_handle = state.inner.loader.display_handle.clone();
+    let windows = state.inner.select().Selection.clone();
+    for window in &windows {
+        let Some(pid) = window_pid(window, &display_handle) else {
+            warn!("close: selected window has no client pid; skipping");
+            continue;
+        };
+        if force {
+            force_kill(pid);
+        } else {
+            graceful_close(pid);
+        }
+    }
+}
+
+/// The pid of a window's Wayland client, via the toplevel surface credentials.
+fn window_pid(window: &Window, display_handle: &DisplayHandle) -> Option<i32> {
+    let surface = window.wl_surface()?;
+    let client = surface.client()?;
+    client.get_credentials(display_handle).ok().map(|c| c.pid)
+}
+
+/// SIGKILL the process (and cmdline-siblings) via `pkill -9 -f`. Falls back to a
+/// direct `kill -9 <pid>` when the command line can't be read.
+fn force_kill(pid: i32) {
+    match cmdline_of(pid) {
+        Some(pattern) => {
+            spawn_detached(Command::new("pkill").args(["-9", "-f", "--", &pattern]))
+        }
+        None => spawn_detached(Command::new("kill").args(["-9", &pid.to_string()])),
+    }
+}
+
+/// Gracefully stop the process: `systemctl --user stop <scope>` if it lives in a
+/// transient app scope, else SIGTERM the pid directly.
+fn graceful_close(pid: i32) {
+    match user_scope_of(pid) {
+        Some(scope) => {
+            spawn_detached(Command::new("systemctl").args(["--user", "stop", &scope]))
+        }
+        None => spawn_detached(Command::new("kill").args(["-TERM", &pid.to_string()])),
+    }
+}
+
+/// The leaf `*.scope` unit a pid belongs to, if it sits under `app.slice`
+/// (i.e. a window the compositor launched and adopted into systemd). Read from
+/// the cgroup-v2 unified line of `/proc/<pid>/cgroup` (`0::<path>`).
+fn user_scope_of(pid: i32) -> Option<String> {
+    let content = std::fs::read_to_string(format!("/proc/{pid}/cgroup")).ok()?;
+    for line in content.lines() {
+        let Some(path) = line.splitn(3, ':').nth(2) else { continue };
+        if !path.contains("app.slice") {
+            continue;
+        }
+        if let Some(leaf) = path.rsplit('/').next() {
+            if leaf.ends_with(".scope") {
+                return Some(leaf.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// The process's full command line (NUL-joined argv → spaces), as `pkill -f`
+/// sees it. `None` if `/proc/<pid>/cmdline` is empty or unreadable.
+fn cmdline_of(pid: i32) -> Option<String> {
+    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+    let joined = raw
+        .split(|b| *b == 0)
+        .filter(|s| !s.is_empty())
+        .map(String::from_utf8_lossy)
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!joined.is_empty()).then_some(joined)
+}
+
+/// Spawn a killer command and detach; failures are logged, never fatal.
+fn spawn_detached(cmd: &mut Command) {
+    if let Err(e) = cmd.spawn() {
+        warn!("close: failed to spawn killer: {e}");
     }
 }
 
@@ -279,6 +383,7 @@ fn install_handler(state: &mut Loop, handle: IcedHandle<Overlay>) {
                         Some(SelectionForward::Execute(actions.clone(), *alt))
                     }
                     Message::ExecuteScaleToFit(opt) => Some(SelectionForward::ScaleToFit(*opt)),
+                    Message::CloseSelected(force) => Some(SelectionForward::CloseWindows(*force)),
                     _ => None,
                 };
                 if let Some(forward) = forward {
