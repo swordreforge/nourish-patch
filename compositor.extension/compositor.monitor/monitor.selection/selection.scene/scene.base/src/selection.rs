@@ -250,15 +250,19 @@ impl Overlay {
 
         // --- Close: dismiss every selected window. The strength is chosen by
         // the modifiers held at render time (baked into the message, since the
-        // view re-renders on Shift/AltChanged):
-        //   none      -> ask the window to close (xdg_toplevel.close protocol)
-        //   Alt       -> SIGTERM the owning process
-        //   Alt+Shift -> SIGKILL the owning process
-        // Holding Alt (either kill variant) swaps the icon to a skull and
-        // deepens the red to signal the process-killing, destructive intent. ---
+        // view re-renders on Shift/AltChanged), each with its own glyph:
+        //   none      -> ask the window to close (xdg_toplevel.close protocol)  [door]
+        //   Alt       -> SIGTERM the owning process                             [power-off]
+        //   Alt+Shift -> SIGKILL the owning process                             [skull]
+        // Holding Alt (either process-killing variant) deepens the red to
+        // signal the destructive intent. ---
         let mode = CloseMode::from_modifiers(self.selection.alt_held, self.selection.shift_held);
         let destructive = mode.is_destructive();
-        let close_glyph = if destructive { font_map::Skull } else { font_map::WindowClosed };
+        let close_glyph = match mode {
+            CloseMode::Request => font_map::WindowClosed,
+            CloseMode::Terminate => font_map::PowerOff,
+            CloseMode::Kill => font_map::Skull,
+        };
         let close_button: Element<'_, Message, Theme, Renderer> = button(
             container(
                 text(close_glyph)
