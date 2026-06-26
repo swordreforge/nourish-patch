@@ -17,6 +17,7 @@ use compositor_introspection_extraction_window_base::default_registry;
 use compositor_introspection_sampler_window_base::sampler::{SampleBatch, SampleResult, Sampler};
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::{Loader, Orchestrator as State};
+use compositor_support_smithay_dispatch_wire_trait::wire_trait::WireTrait;
 // App-launch executor (kernel.execution driver) — all worker/reaper/channel
 // wiring is encapsulated behind `block_sigchld` + `install`.
 use compositor_kernel_execution_driver_executor_install::install as launch_executor;
@@ -311,6 +312,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // After udev and winit have initialized, activate the environment
     //
     info!("Backend initialization - Complete");
+
+    // Initial seat-pointer placement. The cursor renders at the seat's world
+    // location (`(0,0)` -> screen center), but the relative-motion accumulator
+    // (`PointerState.motion`) defaults to physical top-left; without this the
+    // first mouse move would accumulate from the corner and the cursor would jump
+    // there. This must run AFTER the backend maps the output — `apply_pointer`
+    // re-projects world `(0,0)` through the live camera + output geometry, which
+    // don't exist when the seat is constructed. Single-output, so it runs once.
+    state.inner.apply_pointer(smithay::utils::Point::from((0.0, 0.0)));
 
     // ---------------------------------------------------------------------
     // Driver instances: PRE-CREATE + ASSERT, never construct during render.
