@@ -91,7 +91,7 @@ echo "" >&2
 # Collapse the individual COMPOSITOR_* knobs into the settings file the compositor reads.
 # shellcheck disable=SC1091
 . "$HERE/compositor-env.sh"
-compositor_write_settings
+#compositor_write_settings
 
 BIN="$("$HERE/build.sh" "$BACKEND" "$PROFILE")"
 echo ">> running $BIN  [backend=$BACKEND profile=$PROFILE renderer=${COMPOSITOR_RENDERER:-vulkan}]" >&2
