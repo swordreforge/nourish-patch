@@ -228,10 +228,12 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, forward: Selection
 
 // --- close selected windows -----------------------------------------------
 
-/// Terminate every selected window's client process. Two strengths:
+/// Terminate every selected window's client process. Two strengths, and both
+/// target the exact pid that owns the window (resolved from the surface
+/// credentials) — never the command line, so other instances of the same app
+/// are left alone:
 ///
-/// - `force` (Shift held): SIGKILL via `pkill -9 -f <cmdline>`, nuking the app
-///   and any sibling processes sharing that command line.
+/// - `force` (Alt held): SIGKILL the pid directly (`kill -9 <pid>`).
 /// - graceful (default): the apps are launched by the compositor and best-effort
 ///   adopted into a transient systemd user `.scope` under `app.slice` (see
 ///   `introspection.execution.launch`). We prefer `systemctl --user stop <scope>`
@@ -264,15 +266,9 @@ fn window_pid(window: &Window, display_handle: &DisplayHandle) -> Option<i32> {
     client.get_credentials(display_handle).ok().map(|c| c.pid)
 }
 
-/// SIGKILL the process (and cmdline-siblings) via `pkill -9 -f`. Falls back to a
-/// direct `kill -9 <pid>` when the command line can't be read.
+/// SIGKILL the exact pid that owns the window.
 fn force_kill(pid: i32) {
-    match cmdline_of(pid) {
-        Some(pattern) => {
-            spawn_detached(Command::new("pkill").args(["-9", "-f", "--", &pattern]))
-        }
-        None => spawn_detached(Command::new("kill").args(["-9", &pid.to_string()])),
-    }
+    spawn_detached(Command::new("kill").args(["-9", &pid.to_string()]));
 }
 
 /// Gracefully stop the process: `systemctl --user stop <scope>` if it lives in a
@@ -303,19 +299,6 @@ fn user_scope_of(pid: i32) -> Option<String> {
         }
     }
     None
-}
-
-/// The process's full command line (NUL-joined argv → spaces), as `pkill -f`
-/// sees it. `None` if `/proc/<pid>/cmdline` is empty or unreadable.
-fn cmdline_of(pid: i32) -> Option<String> {
-    let raw = std::fs::read(format!("/proc/{pid}/cmdline")).ok()?;
-    let joined = raw
-        .split(|b| *b == 0)
-        .filter(|s| !s.is_empty())
-        .map(String::from_utf8_lossy)
-        .collect::<Vec<_>>()
-        .join(" ");
-    (!joined.is_empty()).then_some(joined)
 }
 
 /// Spawn a killer command and detach; failures are logged, never fatal.

@@ -14,8 +14,8 @@ pub enum SelectionForward {
     Execute(Vec<SelectionAction>, bool),
     /// Scale the single selected window to fit the given aspect option.
     ScaleToFit(ScaleToFitOption),
-    /// Close every selected window. `true` = force-kill (SIGKILL via `pkill`),
-    /// `false` = graceful stop (systemd scope / SIGTERM).
+    /// Close every selected window by its owning pid. `true` = force-kill
+    /// (SIGKILL the pid), `false` = graceful stop (systemd scope / SIGTERM).
     CloseWindows(bool),
 }
 
