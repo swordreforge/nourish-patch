@@ -1,0 +1,4 @@
+# Self-contained source clone materialized by prepare-source.sh (run in the sandbox)
+/.src
+# Binaries extracted by build.sh
+/out
