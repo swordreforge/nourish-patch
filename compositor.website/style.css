@@ -101,8 +101,13 @@ a:hover{ text-decoration:underline; }
 /* ---------- Hero & the aurora signature ---------- */
 .hero{
   position:relative;
-  height:100svh;             /* full viewport; the fixed header floats over the top */
+  height:100svh;             /* full viewport; video is centred, galaxy-black fills around it */
   overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+  /* deep-space "galaxial" black: faint core glow fading to pure night at the edges */
+  background:
+    radial-gradient(130% 90% at 50% 42%,
+      var(--night-3) 0%, var(--night-2) 38%, var(--night) 78%);
 }
 .sky{ position:absolute; inset:0; pointer-events:none; }
 .aurora{
@@ -133,13 +138,14 @@ a:hover{ text-decoration:underline; }
 .hero-actions{
   display:flex; gap:.9rem; justify-content:center; flex-wrap:wrap; margin-top:1.6rem;
 }
-/* Hero (Shot M0) = a plain full-viewport video that scrolls completely past. The
+/* Hero (Shot M0) = a plain full-width video that scrolls completely past. It spans
+   the full viewport width and keeps its own aspect ratio (never cropped). The
    "Nourish" title, description and globe live in the .intro section below. */
 .hero-media-fill{
-  position:absolute; inset:0;
+  display:block;
   width:100%; height:100%;
-  object-fit:cover;
-  background:var(--night-2);
+  object-fit:contain;        /* full width, never cropped, centred on both axes */
+  background:transparent;    /* let the galaxy-black .hero background show in the letterbox */
 }
 
 /* Intro — the "space" backdrop section that carries the title, description and
