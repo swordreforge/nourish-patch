@@ -151,6 +151,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Box::new(compositor_y5_select_overlay_system::base::SelectionOverlaySystem),
                     // Owns the window-grouping slot (GROUP).
                     Box::new(compositor_y5_group_system_base::base::GroupSystem),
+                    // Seeds the overview-mode slot (Super+Tab overlay).
+                    Box::new(compositor_y5_overview_system_base::base::OverviewSystem),
                 ],
                 &kernel_data,
             ),
@@ -205,6 +207,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Box::new(compositor_y5_select_system_base::base::SelectSystem),
                 Box::new(compositor_y5_select_overlay_system::base::SelectionOverlaySystem),
                 Box::new(compositor_y5_group_system_base::base::GroupSystem),
+                Box::new(compositor_y5_overview_system_base::base::OverviewSystem),
             ]
         };
         let w2 = worlds.add(compositor_support_world_kind_build_base::base::spatial(uuid::Uuid::now_v7(), "test-2", test_systems(), &kernel_data));

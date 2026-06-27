@@ -35,4 +35,5 @@ pub enum SurfaceMessageType {
     Capture(CaptureMessage),
     Picker(PickerSurfaceMessage),
     Selection(SelectionForward),
+    Overview(compositor_y5_overview_state_base::base::OverviewSurfaceMessage),
 }

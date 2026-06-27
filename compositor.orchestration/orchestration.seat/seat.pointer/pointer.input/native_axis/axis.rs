@@ -8,6 +8,17 @@ pub fn input_received<I: InputBackend>(
     event: &I::PointerAxisEvent,
     _loop: &mut Loop,
 ) {
+    // Overview overlay open → axis scrolls the grid and is swallowed (windows and
+    // iced get nothing). Positive vertical (wheel/finger down) reveals lower rows;
+    // the render path clamps the offset to the content.
+    if _loop.inner.overview().visible {
+        let dy = event
+            .amount(Axis::Vertical)
+            .unwrap_or_else(|| event.amount_v120(Axis::Vertical).unwrap_or(0.0) * 15.0 / 120.0);
+        _loop.inner.overview_mut().scroll += dy * 4.0;
+        return;
+    }
+
     let source = event.source();
 
     let horizontal_amount = event

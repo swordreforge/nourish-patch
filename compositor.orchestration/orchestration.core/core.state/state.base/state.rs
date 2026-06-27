@@ -287,6 +287,17 @@ impl Orchestrator {
         self.worlds.get_mut(target).storage_mut().get_mut(&compositor_y5_surface_system_base::base::SURFACE_MUT)
     }
 
+    /// FOCUS ACCESSOR: the focused world's overview-mode slot (Super+Tab overlay).
+    pub fn overview(&self) -> &compositor_y5_overview_state_base::base::Overview {
+        let target = self.worlds.spawn_target();
+        self.worlds.get(target).storage().get(&compositor_y5_overview_state_base::base::OVERVIEW)
+    }
+
+    pub fn overview_mut(&mut self) -> &mut compositor_y5_overview_state_base::base::Overview {
+        let target = self.worlds.spawn_target();
+        self.worlds.get_mut(target).storage_mut().get_mut(&compositor_y5_overview_state_base::base::OVERVIEW_MUT)
+    }
+
     /// FOCUS ACCESSOR: the focused world's pointer slot (cursor world coords).
     pub fn pointer(&self) -> &compositor_orchestration_seat_pointer_state::state::PointerState {
         let target = self.worlds.spawn_target();
