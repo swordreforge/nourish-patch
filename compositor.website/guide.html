@@ -19,7 +19,6 @@
   <a class="nav-brand" href="index.html">
     <span class="nav-mark" aria-hidden="true">✻</span>
     <span class="nav-name">Nourish</span>
-    <span class="nav-by">by Snowies</span>
   </a>
   <nav class="nav-links" aria-label="Main">
     <a href="index.html">Home</a>
@@ -37,19 +36,6 @@
 
 <main id="main" class="guide">
 
-<header class="guide-hero">
-  <h1>The Nourish guide</h1>
-  <p class="lede">How to install Nourish, and how to configure it once you're
-  in. Written for people, not programmers.</p>
-  <p class="note">Nourish is young — version 0.0.1. To explore what it can do,
-  see the <a href="index.html#highlights">feature highlights</a> on the home
-  page.</p>
-  <nav class="toc" aria-label="On this page">
-    <a href="#install">Install</a>
-    <a href="#configure">Configure</a>
-  </nav>
-</header>
-
 <!-- ========== INSTALL ========== -->
 <article class="guide-section" id="install">
   <h2>Installing Nourish</h2>
@@ -57,9 +43,9 @@
   <div class="tabs" data-tabs>
     <div class="tablist" role="tablist" aria-label="Installation method">
       <button class="tab" type="button" role="tab" id="tab-install-quick"
-              aria-controls="panel-install-quick" aria-selected="true">One-command install</button>
+              aria-controls="panel-install-quick" aria-selected="true">One-command install <span class="tab-hint">Fedora</span></button>
       <button class="tab" type="button" role="tab" id="tab-install-source"
-              aria-controls="panel-install-source" aria-selected="false">Manual from source</button>
+              aria-controls="panel-install-source" aria-selected="false">Manual from source <span class="tab-hint">Other distributions</span></button>
     </div>
 
     <!-- Tab 1 — prebuilt one-command install -->
@@ -67,17 +53,17 @@
              id="panel-install-quick" aria-labelledby="tab-install-quick">
       <h3>What you need</h3>
       <p>Nourish ships today as a prebuilt package for <strong>Fedora 44</strong>
-      — a free, popular, beginner-friendly version of Linux. If your computer
-      runs Windows or macOS, you'd install Fedora alongside it or on a spare
-      machine first. You'll also want a reasonably modern graphics card (NVIDIA,
-      Intel, or AMD). Don't want to commit your whole machine yet? You can run
-      Nourish in a window <em>inside</em> your existing Linux desktop to try it.</p>
+      — a free, popular, beginner-friendly version of Linux. Don't want to commit
+      your whole machine yet? You can run Nourish in a
+      <a href="#panel-install-source">window <em>inside</em> your existing Linux
+      desktop to try it</a>.</p>
 
       <h3>The one-command install</h3>
       <p>Open the Terminal app and paste this. It downloads the prebuilt
       release, unpacks it, and launches a friendly interactive installer —
       it only pulls the runtime libraries Nourish needs (no developer
-      toolchain), and it's safe to re-run.</p>
+      toolchain), and it's safe to re-run. In fact, running it again later is
+      exactly how you <strong>update</strong> Nourish to the latest release.</p>
       <pre class="code"><button class="copy" data-copy>Copy</button><code>curl -fsSL https://nourish.snowies.com/release/latest/fedora44/package.tar.gz | tar -xz && y5-install/install.sh</code></pre>
 
       <p>Want to see exactly what it would do, changing nothing?</p>
@@ -100,24 +86,21 @@
              id="panel-install-source" aria-labelledby="tab-install-source">
       <h3>Build it yourself</h3>
       <p>The full source lives on
-      <a href="https://github.com/y5-snowies/nourish" rel="noopener">GitHub</a>.
-      Nourish is a set of independent Cargo workspaces rather than one — there's
-      no top-level <code>Cargo.toml</code> — and the build goes through the
-      helper scripts under <code>environment/</code>. Start by cloning and
-      running it nested inside your current Wayland session:</p>
+      <a href="https://github.com/y5-snowies/nourish" rel="noopener">GitHub</a>.</p>
       <pre class="code"><button class="copy" data-copy>Copy</button><code>git clone https://github.com/y5-snowies/nourish
 cd nourish
+
+# The compositor needs ~/.config/y5.compositor/settings.json to start.
+# Author it first by running the settings tool straight from source:
+cargo run --release --manifest-path compositor.installer/component/settings-editor/Cargo.toml
+
 # Build &amp; run the compositor nested in your current Wayland session:
 environment/run-host.sh winit release</code></pre>
 
       <p>When you're ready to install it as a real login session, build the
-      binary — or package a full release bundle (compositor + components +
-      installer) just like the prebuilt download:</p>
-      <pre class="code"><button class="copy" data-copy>Copy</button><code># Build the compositor binary for system use:
-environment/build-system.sh system
-
-# Or build a complete release install bundle:
-ci/scripts/package-installer.sh</code></pre>
+      compositor binary:</p>
+      <pre class="code"><button class="copy" data-copy>Copy</button><code># Build &amp; install the compositor binary to /usr/bin/y5.compositor:
+environment/build-release.sh system</code></pre>
 
       <p class="note">Building from source needs the Rust toolchain plus the
       system development libraries (Wayland, libinput, Mesa/Vulkan, ffmpeg, …).
@@ -126,6 +109,88 @@ ci/scripts/package-installer.sh</code></pre>
       equivalent packages. Building from source links against your own
       distribution's system library versions — which is exactly why it works
       beyond Fedora.</p>
+
+      <details>
+        <summary>Setting up desktop and service files</summary>
+        <p>The prebuilt installer generates these for you. Building by hand, you
+        create three small files so your display manager lists Nourish and can
+        launch it. Adjust the names if you prefer; just keep them consistent.</p>
+
+        <p>A wrapper script at <code>/usr/bin/y5-session</code> — it sets the
+        session identity and execs the compositor (it never writes
+        <code>settings.json</code>; that's yours, authored with
+        <code>y5.compositor.settings</code>):</p>
+        <pre class="code"><button class="copy" data-copy>Copy</button><code>#!/bin/bash
+# /usr/bin/y5-session — ExecStart of y5.service
+
+export XDG_CURRENT_DESKTOP=Y5Compositor
+export XDG_SESSION_TYPE=wayland
+
+# The compositor reads ALL of its config from settings.json and panics if it's
+# missing. Configure it with the 'y5.compositor.settings' tool.
+_y5_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/y5.compositor"
+if [ ! -f "$_y5_cfg/settings.json" ]; then
+  echo "y5: no configuration at $_y5_cfg/settings.json" >&amp;2
+  echo "y5: run 'y5.compositor.settings' to configure, then start again." >&amp;2
+  exit 1
+fi
+
+exec /usr/bin/y5.compositor</code></pre>
+
+        <p>A systemd user service at
+        <code>~/.config/systemd/user/y5.service</code> that runs the wrapper:</p>
+        <pre class="code"><button class="copy" data-copy>Copy</button><code>[Unit]
+Description=Y5 Wayland compositor
+BindsTo=graphical-session.target
+Before=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target
+
+[Service]
+Slice=session.slice
+Type=exec
+ExecStart=/usr/bin/y5-session</code></pre>
+
+        <p>And a session entry at
+        <code>/usr/share/wayland-sessions/y5.desktop</code> — this is what shows
+        up in your login screen's session menu:</p>
+        <pre class="code"><button class="copy" data-copy>Copy</button><code>[Desktop Entry]
+Name=Y5
+Comment=Y5 Compositor
+Exec=systemctl --user --wait start y5.service
+Type=Application
+DesktopNames=Y5Compositor</code></pre>
+
+        <p class="note">Install them with the right permissions — the wrapper and
+        session entry are system-wide, the service is per-user:</p>
+        <pre class="code"><button class="copy" data-copy>Copy</button><code>sudo install -m 755 y5-session /usr/bin/y5-session
+sudo install -m 644 y5.desktop /usr/share/wayland-sessions/y5.desktop
+install -Dm 644 y5.service ~/.config/systemd/user/y5.service</code></pre>
+      </details>
+
+      <details>
+        <summary>Lock screen support</summary>
+        <p>The lock screen (<kbd>Super</kbd>+<kbd>L</kbd>) checks your password
+        through PAM, the proper way. Add a PAM service at
+        <code>/etc/pam.d/y5-lock</code> that mirrors your system's normal
+        interactive password policy:</p>
+        <pre class="code"><button class="copy" data-copy>Copy</button><code># /etc/pam.d/y5-lock
+# PAM service for the y5 compositor's lock screen.
+
+# RHEL / Fedora / Arch / openSUSE:
+auth     include    system-auth
+account  include    system-auth
+
+# Debian / Ubuntu — comment the two lines above and uncomment these:
+# auth     include    common-auth
+# account  include    common-account</code></pre>
+        <p>Install it (it must be readable by root):</p>
+        <pre class="code"><button class="copy" data-copy>Copy</button><code>sudo install -m 644 y5-lock /etc/pam.d/y5-lock</code></pre>
+        <p class="note">On NixOS, PAM services are declarative — add
+        <code>security.pam.services.y5-lock = {};</code> to your
+        <code>configuration.nix</code> instead, which produces an equivalent
+        default stack.</p>
+      </details>
     </section>
   </div>
 

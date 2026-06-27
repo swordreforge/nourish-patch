@@ -129,6 +129,7 @@
   /* ---------- Tabbed sections (install methods, configuration) ----------
      Without JS the tablist is hidden and all panels stack (see CSS). Here we
      wire the tabs: click or arrow-key to switch, showing one panel at a time. */
+  var tabActivators = {}; // id (of a tab button OR its panel) -> activate fn
   document.querySelectorAll("[data-tabs]").forEach(function (group) {
     var tabs = Array.prototype.slice.call(group.querySelectorAll("[role=tab]"));
     var panels = tabs.map(function (t) {
@@ -152,6 +153,9 @@
         tabs[n].focus();
         select(n);
       });
+      // Let in-page links target either the tab button or its panel.
+      tabActivators[t.id] = function () { select(i); };
+      if (panels[i]) tabActivators[panels[i].id] = function () { select(i); };
     });
     // Start on whichever tab is pre-marked selected (fallback: the first).
     var start = 0;
@@ -159,6 +163,23 @@
       if (t.getAttribute("aria-selected") === "true") start = i;
     });
     select(start);
+  });
+
+  /* A link like href="#panel-install-source" should both switch to that tab
+     and scroll to it. Activate first (so the target is visible), then let the
+     browser's default hash jump run. Also handle a hash already in the URL. */
+  var activateTabFor = function (hash) {
+    var fn = hash && tabActivators[hash.replace(/^#/, "")];
+    if (fn) { fn(); return true; }
+    return false;
+  };
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest ? e.target.closest('a[href^="#"]') : null;
+    if (a) activateTabFor(a.getAttribute("href"));
+  });
+  if (window.location.hash) activateTabFor(window.location.hash);
+  window.addEventListener("hashchange", function () {
+    activateTabFor(window.location.hash);
   });
 
   /* ---------- Feature loop videos: play only while visible ----------
