@@ -4,6 +4,7 @@ use compositor_y5_launcher_protocol_message::message::LauncherMessage;
 use compositor_y5_lock_interface_surface::message::LockMessage;
 use compositor_y5_placeholder_protocol_base::message::PlaceholderMessage;
 use compositor_y5_picker_surface_view::PickerSurfaceMessage;
+use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_monitor_selection_scene_base::selection::{CloseMode, ScaleToFitOption, SelectionAction};
 
 /// A selection-toolbar action forwarded from the iced UI's message handler to
@@ -36,4 +37,5 @@ pub enum SurfaceMessageType {
     Picker(PickerSurfaceMessage),
     Selection(SelectionForward),
     Overview(compositor_y5_overview_state_base::base::OverviewSurfaceMessage),
+    Settings(SettingsMessage),
 }

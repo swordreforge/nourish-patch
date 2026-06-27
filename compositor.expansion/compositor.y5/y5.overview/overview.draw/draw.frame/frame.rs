@@ -26,6 +26,8 @@ fn solid(rect: Rectangle<i32, Physical>, color: [f32; 4]) -> SolidColorRenderEle
 /// elements for `band`.
 pub fn prepare(state: &mut Loop, gles: &mut GlesRenderer, size: Size<i32, Physical>) -> Vec<BevyRenderElement> {
     compositor_y5_overview_draw_backdrop::backdrop::arm(state, gles, size);
+    // Settings tab: reconcile the embedded settings iced surface (no-op off-tab).
+    compositor_y5_overview_draw_settings::settings::per_frame(state, gles, size);
     if state.inner.overview().visible && state.inner.overview().overlay_ready() && state.inner.overview().is_world() {
         compositor_y5_overview_draw_world::world::prepare_world(state, gles, size)
     } else {

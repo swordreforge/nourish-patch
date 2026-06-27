@@ -74,14 +74,17 @@ impl Overview {
     pub fn is_world(&self) -> bool {
         matches!(self.tab, Tab::World)
     }
+
+    pub fn is_settings(&self) -> bool {
+        matches!(self.tab, Tab::Settings)
+    }
 }
 
 /// The overview slot token (read via the core `overview()` focus accessor).
 pub static OVERVIEW: Token<Overview> = Token::new();
 pub static OVERVIEW_MUT: TokenMut<Overview> = TokenMut::new(&OVERVIEW);
 
-/// Deferred overview action handled by the surface pump (which holds the GLES
-/// renderer the menu-bar surface needs).
+/// Deferred overview action handled by the surface pump (holds the renderer).
 #[derive(Debug, Clone)]
 pub enum OverviewSurfaceMessage {
     /// Reconcile the menu-bar surface to match `visible`.

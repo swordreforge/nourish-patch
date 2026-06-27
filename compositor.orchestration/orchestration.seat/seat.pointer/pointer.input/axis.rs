@@ -26,7 +26,7 @@ pub fn axis<I: InputBackend>(event: &<I as InputBackend>::PointerAxisEvent, _loo
         // Natural scrolling: invert the finger-axis direction for canvas pan
         // (a discrete wheel is left alone). Mirrors the inversion native_axis
         // applies to the window-scroll path, so both agree.
-        if finger && compositor_developer_environment_config_base::base::get().input_natural_scroll {
+        if finger && _loop.inner.preference.input_natural_scroll {
             horizontal = -horizontal;
             vertical = -vertical;
         }
