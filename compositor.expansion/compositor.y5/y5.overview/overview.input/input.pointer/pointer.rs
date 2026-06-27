@@ -41,11 +41,11 @@ pub fn button<I: InputBackend>(event: &<I as InputBackend>::PointerButtonEvent, 
         return true;
     }
     if pressed {
-        let scale = state.size_context().scale;
-        let p = Point::<i32, Physical>::from((
-            (loc.x * scale).round() as i32,
-            (loc.y * scale).round() as i32,
-        ));
+        // Cursor is WORLD space; cells are screen/physical — project via camera.
+        let ctx = state.size_context();
+        let projected: compositor_y5_camera_transform_translate::transform::Transform = (loc, ctx).into();
+        let phys: Point<f64, Physical> = projected.into();
+        let p = Point::<i32, Physical>::from((phys.x.round() as i32, phys.y.round() as i32));
         let cell = state.inner.overview().cells.iter().find(|(_, r)| r.contains(p)).map(|(u, _)| *u);
         if let Some(uuid) = cell {
             compositor_y5_overview_interface_activate::activate::activate(state, uuid);

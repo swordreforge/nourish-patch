@@ -8,6 +8,7 @@ smithay = { workspace = true }
 compositor_orchestration_core_state_base = { workspace = true }
 compositor_monitor_compositor_iced_base = { workspace = true }
 compositor_y5_surface_interface_base = { workspace = true }
+compositor_y5_camera_transform_translate = { workspace = true }
 compositor_y5_picker_seat_pointer = { workspace = true }
 compositor_y5_picker_seat_embed = { workspace = true }
 compositor_y5_overview_interface_activate = { workspace = true }
