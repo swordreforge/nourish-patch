@@ -29,13 +29,14 @@ use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::CoordinateTrait;
 use compositor_orchestration_driver_selection_base::base::{
     BAR_H, BAR_W, Placement, SCREEN_BOTTOM_MARGIN, SELECTION_OVERLAY, SELECTION_OVERLAY_MUT,
-    SELECTION_OVERLAY_PLACEMENT, SELECTION_REANCHOR_MUT, world_loc_under_cursor, world_scale_factor,
-    world_size,
+    SELECTION_OVERLAY_PLACEMENT, SELECTION_REANCHOR_MUT, TIP_GAP, TIP_H, TIP_W, world_loc_under_cursor,
+    world_scale_factor, world_size,
 };
 use compositor_orchestration_draw_layer_base::base::Layer;
 use compositor_support_world_order_track_base::base::DrawLayer;
-use compositor_monitor_compositor_iced_base::{HandleId, IcedHandle, IcedSpace};
+use compositor_monitor_compositor_iced_base::{HandleId, IcedHandle, IcedSpace, Transform};
 use compositor_monitor_selection_scene_base::selection::{CloseMode, SelectionAction};
+use compositor_monitor_selection_scene_base::tip::{TipMessage, TipUi};
 use compositor_monitor_selection_scene_base::ui::{Message, Overlay};
 use compositor_y5_surface_draw_handle::handle::load;
 use compositor_y5_surface_protocol_base::protocol::{
@@ -62,6 +63,80 @@ pub fn per_frame(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, 
     reanchor_if_pending(state);
     // Keep the on-screen size constant as the camera zoom changes.
     resize_on_zoom(state);
+    // Show/hide/position the hover tooltip for the currently-hovered button.
+    drive_tooltip(state, size);
+}
+
+/// Drive the companion tooltip surface each frame: read which button the bar's
+/// `Overlay` reports as hovered, and show the separate tip surface (a distinct
+/// texture) just above the bar with the matching, modifier-aware text — or hide
+/// it when nothing is hovered. Positioned in SCREEN space: for the world-space
+/// bar, the bar's stored world location is projected through the camera.
+fn drive_tooltip(state: &mut Loop, size: Size<i32, Physical>) {
+    let st = state.inner.kernel.get(&SELECTION_OVERLAY);
+    let (Some(toolbar_id), Some(tip_id)) = (st.handle, st.tip_handle) else {
+        return;
+    };
+    let last_tip = st.last_tip.clone();
+
+    let scale = state.size_context().scale;
+    let cam = state.inner.camera().transform.clone();
+    let cam_t = Transform {
+        zoom: cam.zoom,
+        position: Point::from((cam.position.x * scale, cam.position.y * scale)),
+    };
+    let output = size.to_f64();
+
+    let mut new_last_tip = last_tip.clone();
+
+    if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
+        // Visible only while an actual button is hovered (`hovered_tip` is Some).
+        let tip = reg
+            .get(toolbar_id)
+            .and_then(|it| it.get::<Overlay>())
+            .and_then(|inst| inst.ui().hovered_tip());
+
+        match tip {
+            Some((text, alt, shift)) => {
+                let tb = reg.location_of(toolbar_id).unwrap_or_default();
+                // Bar's on-screen top-left (project the world-space bar).
+                let (sx, sy) = match SELECTION_OVERLAY_PLACEMENT {
+                    Placement::ScreenBottomCenter => (tb.x as f64, tb.y as f64),
+                    Placement::WorldAtCursor => {
+                        let s =
+                            cam_t.world_to_screen(output, Point::from((tb.x as f64, tb.y as f64)));
+                        (s.x, s.y)
+                    }
+                };
+                // Stuck to the bar's bottom-left: left edge aligned, just below it.
+                let pos = Point::from((
+                    sx.round() as i32,
+                    (sy + (BAR_H as f64) + (TIP_GAP as f64)).round() as i32,
+                ));
+
+                let content = (text, alt, shift);
+                if last_tip.as_ref() != Some(&content) {
+                    let _ = reg.dispatch_message(
+                        IcedHandle::<TipUi>::from_id(tip_id),
+                        TipMessage::Set {
+                            text: content.0.clone(),
+                            alt: content.1,
+                            shift: content.2,
+                        },
+                    );
+                    new_last_tip = Some(content);
+                }
+                reg.set_location_by_id(tip_id, pos);
+                reg.set_visible_by_id(tip_id, true);
+            }
+            None => {
+                reg.hide_tooltip_by_id(tip_id);
+                new_last_tip = None;
+            }
+        }
+    }
+
+    state.inner.kernel.get_mut(&SELECTION_OVERLAY_MUT).last_tip = new_last_tip;
 }
 
 /// Counter-scale the world toolbar when zoom changes so it keeps a constant
@@ -166,8 +241,31 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
         }
     }
 
+    // Companion hover-tooltip surface: a separate screen-space, click-through
+    // texture that floats above the bar (driven per-frame by `drive_tooltip`).
+    // Using its own texture is the whole point of the registry tooltip surface —
+    // the tip isn't clipped by the bar's texture and needs no headroom inside it.
+    let gpu = state.inner.environment.GPU.clone();
+    let tip_id = state
+        .inner
+        .surface_mut()
+        .registry
+        .as_mut()
+        .and_then(|reg| {
+            reg.create_tooltip(
+                &gpu.as_str(),
+                TipUi::new(),
+                renderer,
+                Size::from((TIP_W, TIP_H)),
+                Layer::SCENE.bits(),
+            )
+            .ok()
+        })
+        .map(|h| h.id);
+
     let st = state.inner.kernel.get_mut(&SELECTION_OVERLAY_MUT);
     st.handle = Some(untyped);
+    st.tip_handle = tip_id;
     st.count = count;
     st.prev_zoom = zoom;
 }
@@ -195,11 +293,17 @@ fn update(state: &mut Loop, id: HandleId, count: i32) {
 }
 
 fn destroy(state: &mut Loop, id: HandleId) {
+    let tip = state.inner.kernel.get(&SELECTION_OVERLAY).tip_handle;
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
         reg.destroy_by_id(id); // also clears keyboard focus / pointer / grab
+        if let Some(tip) = tip {
+            reg.destroy_by_id(tip);
+        }
     }
     let st = state.inner.kernel.get_mut(&SELECTION_OVERLAY_MUT);
     st.handle = None;
+    st.tip_handle = None;
+    st.last_tip = None;
     st.count = 0;
 }
 

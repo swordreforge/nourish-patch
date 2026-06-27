@@ -1,4 +1,7 @@
 {
+  "compositor.orchestration/orchestration.driver/driver.selection/selection.base": [
+    "size"
+  ],
   "compositor.expansion/compositor.y5/y5.audio/audio.controller/controller.interface": [
     "size"
   ],
@@ -50,6 +53,9 @@
     "size"
   ],
   "compositor.expansion/compositor.y5/y5.navigator/navigator.travel/travel.machine": [
+    "size"
+  ],
+  "compositor.expansion/compositor.y5/y5.picker/picker.scene/scene.frame": [
     "size"
   ],
   "compositor.expansion/compositor.y5/y5.overlay/overlay.interface/interface.keyboard": [
