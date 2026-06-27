@@ -79,6 +79,9 @@ pub(crate) trait IcedInstanceAny: Any {
     fn set_location(&mut self, p: Point<i32, Physical>);
     fn queue_event(&mut self, event: IcedEvent);
     fn tick(&mut self) -> bool;
+    /// True if the runtime still wants to be rendered next frame — dirty or
+    /// mid-animation. Drives the host's "keep scheduling frames" decision.
+    fn wants_frame(&self) -> bool;
     fn render(&mut self);
     fn texture_handle(&self) -> &smithay::backend::renderer::gles::GlesTexture;
     /// Strict read-only accessor for the surface's underlying dmabuf, so a
@@ -137,6 +140,9 @@ impl<U: IcedUi> IcedInstanceAny for IcedInstance<U> {
             trace!("tick changed handle={:?}", self.id);
         }
         changed
+    }
+    fn wants_frame(&self) -> bool {
+        self.runtime.is_dirty()
     }
     fn render(&mut self) {
         let view = self.surface.create_render_view();
@@ -199,6 +205,14 @@ pub struct IcedItem {
     type_id: TypeId,
     space: IcedSpace,
     pub layer: u64,
+    /// When false the item is skipped by `elements`/`element_of` and never
+    /// hit-tested. Lets a surface (e.g. a tooltip) be toggled on/off without
+    /// reallocating its texture.
+    visible: bool,
+    /// When true the item is excluded from `hit_test`, so it floats above
+    /// without intercepting pointer input or stealing events from what's
+    /// behind it. Tooltips set this.
+    passthrough: bool,
 }
 
 impl IcedItem {
@@ -208,7 +222,38 @@ impl IcedItem {
             inner: Box::new(inst),
             space,
             layer,
+            visible: true,
+            passthrough: false,
         }
+    }
+
+    // ── Visibility & passthrough ──────────────────────────────────
+
+    pub fn is_visible(&self) -> bool {
+        self.visible
+    }
+
+    /// Show/hide without destroying. Bumps the commit counter so smithay
+    /// damages the item's rect on the transition.
+    pub fn set_visible(&mut self, visible: bool) {
+        if self.visible != visible {
+            self.visible = visible;
+            self.inner.bump_commit();
+        }
+    }
+
+    pub fn is_passthrough(&self) -> bool {
+        self.passthrough
+    }
+
+    pub fn set_passthrough(&mut self, passthrough: bool) {
+        self.passthrough = passthrough;
+    }
+
+    /// True if the runtime still wants to be rendered next frame (dirty or
+    /// mid-animation).
+    pub fn wants_frame(&self) -> bool {
+        self.inner.wants_frame()
     }
 
     // ── Identity ──────────────────────────────────────────────────
