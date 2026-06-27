@@ -419,3 +419,34 @@ kbd{
   /* main.js leaves these paused; keep them quiet and unobtrusive. */
   .guide-video{ opacity:.92; }
 }
+
+/* ---------- Guide: static screenshot (configuration panel) ---------- */
+.guide-shot{
+  display:block;
+  width:100%; height:auto;
+  border-radius:var(--radius);
+  border:1px solid var(--line);
+}
+
+/* ---------- Tabs (install methods, configuration) ----------
+   Progressive enhancement: without JS the tablist is hidden and every
+   panel just stacks (fully readable). main.js (the .js class) turns the
+   tablist on and shows only the active panel. */
+.tabs{ margin:1.6rem 0; }
+.tablist{
+  display:none;
+  flex-wrap:wrap; gap:.4rem;
+  border-bottom:1px solid var(--line);
+  margin-bottom:1.6rem;
+}
+.js .tablist{ display:flex; }
+.tab{
+  appearance:none; -webkit-appearance:none; cursor:pointer;
+  font-family:var(--display); font-weight:600; font-size:.95rem;
+  color:var(--mist); background:transparent;
+  border:0; border-bottom:2px solid transparent;
+  padding:.7rem .9rem; margin-bottom:-1px;
+}
+.tab:hover{ color:var(--snow); }
+.tab[aria-selected="true"]{ color:var(--ice); border-bottom-color:var(--ice); }
+.js .tabpanel:not(.is-active){ display:none; }

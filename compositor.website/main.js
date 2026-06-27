@@ -126,6 +126,41 @@
     });
   });
 
+  /* ---------- Tabbed sections (install methods, configuration) ----------
+     Without JS the tablist is hidden and all panels stack (see CSS). Here we
+     wire the tabs: click or arrow-key to switch, showing one panel at a time. */
+  document.querySelectorAll("[data-tabs]").forEach(function (group) {
+    var tabs = Array.prototype.slice.call(group.querySelectorAll("[role=tab]"));
+    var panels = tabs.map(function (t) {
+      return document.getElementById(t.getAttribute("aria-controls"));
+    });
+    var select = function (i) {
+      tabs.forEach(function (t, j) {
+        var on = i === j;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        if (panels[j]) panels[j].classList.toggle("is-active", on);
+      });
+    };
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () { select(i); });
+      t.addEventListener("keydown", function (e) {
+        var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        var n = (i + d + tabs.length) % tabs.length;
+        tabs[n].focus();
+        select(n);
+      });
+    });
+    // Start on whichever tab is pre-marked selected (fallback: the first).
+    var start = 0;
+    tabs.forEach(function (t, i) {
+      if (t.getAttribute("aria-selected") === "true") start = i;
+    });
+    select(start);
+  });
+
   /* ---------- Feature loop videos: play only while visible ----------
      Activates automatically once placeholders are replaced by
      <video muted loop playsinline> elements. */
