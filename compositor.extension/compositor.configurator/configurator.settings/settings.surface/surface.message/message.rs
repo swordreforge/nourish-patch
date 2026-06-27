@@ -8,13 +8,14 @@ use compositor_configurator_bluetooth_backend_base::base::BtSnapshot;
 
 /// The settings modules shown in the sidebar (design: SYSTEM CONFIGURATION).
 /// `Input` merges the former Cursor + Keys; `System` is the Environment editor.
-/// (Wi-Fi/Bluetooth tab builders still exist but are off the sidebar for now.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
     World,
     Display,
     Audio,
     Input,
+    Network,
+    Bluetooth,
     Performance,
     System,
 }

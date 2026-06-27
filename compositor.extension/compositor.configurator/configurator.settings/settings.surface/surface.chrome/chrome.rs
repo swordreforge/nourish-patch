@@ -14,6 +14,8 @@ use compositor_configurator_settings_surface_cursor::cursor;
 use compositor_configurator_settings_surface_keys::keys as keybinds;
 use compositor_configurator_settings_surface_environment::environment;
 use compositor_configurator_audio_tab_base::base as audio_tab;
+use compositor_configurator_network_tab_base::base as network_tab;
+use compositor_configurator_bluetooth_tab_base::base as bluetooth_tab;
 use compositor_configurator_settings_surface_message::message::{SettingsMessage, Tab};
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
@@ -39,6 +41,8 @@ fn sidebar<'a>(sel: Tab) -> El<'a> {
         module("▦", "DISPLAY", Tab::Display, sel),
         module("♪", "AUDIO", Tab::Audio, sel),
         module("⌨", "INPUT", Tab::Input, sel),
+        module("≋", "NETWORK", Tab::Network, sel),
+        module("❖", "BLUETOOTH", Tab::Bluetooth, sel),
         module("▲", "PERFORMANCE", Tab::Performance, sel),
         module("⚙", "SYSTEM", Tab::System, sel),
     ].spacing(4).padding(14);
@@ -80,8 +84,8 @@ fn confirm<'a>(p: ModeInfo) -> El<'a> {
 pub fn render<'a>(
     tab: Tab, dirty: bool, cursor_sensitivity: f32, natural: bool, env: &'a Environment,
     modes: &'a [ModeInfo], current: Option<ModeInfo>, picked: Option<ModeInfo>, confirming: bool,
-    keys: &'a [KeyRow], audio: &'a AudioState, _wifi: &'a WifiSnapshot, _bt: &'a BtSnapshot,
-    _wifi_selected: Option<&'a str>, _wifi_password: &'a str, devices: &'a [RenderDevice], fps: u32,
+    keys: &'a [KeyRow], audio: &'a AudioState, wifi: &'a WifiSnapshot, bt: &'a BtSnapshot,
+    wifi_selected: Option<&'a str>, wifi_password: &'a str, devices: &'a [RenderDevice], fps: u32,
 ) -> El<'a> {
     let body: El<'a> = match tab {
         Tab::World => world(env),
@@ -91,6 +95,8 @@ pub fn render<'a>(
             container(cursor::build(cursor_sensitivity, natural)).width(Length::FillPortion(3)).height(Length::Fill),
             container(keybinds::build(keys)).width(Length::FillPortion(2)).height(Length::Fill),
         ].spacing(24).height(Length::Fill).into(),
+        Tab::Network => network_tab::build(wifi, wifi_selected, wifi_password),
+        Tab::Bluetooth => bluetooth_tab::build(bt),
         Tab::Performance => performance(fps),
         Tab::System => environment::build(env, devices),
     };
