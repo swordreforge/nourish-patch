@@ -7,7 +7,7 @@ use compositor_developer_environment_preference_base::base as pref;
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_driver_output_base::base::{OutputModeRequest, OUTPUT_MODES_SNAPSHOT, OUTPUT_MODE_REQUEST_MUT};
 use compositor_orchestration_driver_settings_base::base::SETTINGS_MUT;
-use compositor_configurator_settings_surface_message::message::SettingsMessage;
+use compositor_configurator_settings_surface_message::message::{SettingsMessage, Tab};
 use compositor_configurator_network_backend_base::base::{self as wifi, WifiCmd};
 use compositor_configurator_bluetooth_backend_base::base::{self as bt, BtCmd};
 use compositor_orchestration_driver_audio_base::base::AUDIO;
@@ -75,7 +75,12 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             state.inner.kernel.get_mut(&SETTINGS_MUT).open = false;
         }
         // Inbound / UI-local — never forwarded to the handler.
-        SettingsMessage::Tab(_)
+        // Tab IS forwarded (so the compositor knows the visible module): gate the
+        // live-FPS push on the Performance tab being open.
+        SettingsMessage::Tab(t) => {
+            state.inner.kernel.get_mut(&SETTINGS_MUT).fps_wanted = matches!(t, Tab::Performance);
+        }
+        SettingsMessage::Fps(_)
         | SettingsMessage::SyncSystem(..)
         | SettingsMessage::WifiSelect(_)
         | SettingsMessage::WifiPassword(_) => {}

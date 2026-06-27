@@ -38,6 +38,8 @@ pub struct Settings {
     pub wifi_password: String,
     /// Available render nodes with estimated GPU names (System tab picker).
     pub render_devices: Vec<RenderDevice>,
+    /// Live frames-per-second (pushed by the embed), shown on the Display panel.
+    pub fps: u32,
 }
 
 impl Settings {
@@ -60,6 +62,7 @@ impl Settings {
             wifi_selected: None,
             wifi_password: String::new(),
             render_devices: render_devices(),
+            fps: 0,
         }
     }
 }
@@ -70,6 +73,7 @@ impl IcedUi for Settings {
     fn update(&mut self, message: SettingsMessage) {
         match message {
             SettingsMessage::Tab(t) => self.tab = t,
+            SettingsMessage::Fps(f) => self.fps = f,
             SettingsMessage::Cursor(v) => self.cursor_sensitivity = v,
             SettingsMessage::NaturalScroll(b) => self.natural_scroll = b,
             SettingsMessage::Env(e) => {
@@ -140,6 +144,7 @@ impl IcedUi for Settings {
             self.wifi_selected.as_deref(),
             &self.wifi_password,
             &self.render_devices,
+            self.fps,
         )
     }
 }

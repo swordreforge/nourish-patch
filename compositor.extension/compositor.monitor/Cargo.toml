@@ -97,6 +97,7 @@ compositor_configurator_network_backend_base = { path = "../compositor.configura
 compositor_configurator_network_tab_base = { path = "../compositor.configurator/configurator.network/network.tab/tab.base" }
 compositor_configurator_settings_interface_handle = { path = "../compositor.configurator/configurator.settings/settings.interface/interface.handle" }
 compositor_configurator_settings_surface_chrome = { path = "../compositor.configurator/configurator.settings/settings.surface/surface.chrome" }
+compositor_configurator_settings_surface_control = { path = "../compositor.configurator/configurator.settings/settings.surface/surface.control" }
 compositor_configurator_settings_surface_cursor = { path = "../compositor.configurator/configurator.settings/settings.surface/surface.cursor" }
 compositor_configurator_settings_surface_display = { path = "../compositor.configurator/configurator.settings/settings.surface/surface.display" }
 compositor_configurator_settings_surface_environment = { path = "../compositor.configurator/configurator.settings/settings.surface/surface.environment" }
@@ -674,6 +675,7 @@ compositor_y5_overview_draw_grid = { path = "../../compositor.expansion/composit
 compositor_y5_overview_draw_plan = { path = "../../compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.plan" }
 compositor_y5_overview_draw_scene = { path = "../../compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.scene" }
 compositor_y5_overview_draw_settings = { path = "../../compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.settings" }
+compositor_y5_overview_draw_status = { path = "../../compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.status" }
 compositor_y5_overview_draw_world = { path = "../../compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.world" }
 compositor_y5_overview_input_keyboard = { path = "../../compositor.expansion/compositor.y5/y5.overview/overview.input/input.keyboard" }
 compositor_y5_overview_input_pointer = { path = "../../compositor.expansion/compositor.y5/y5.overview/overview.input/input.pointer" }

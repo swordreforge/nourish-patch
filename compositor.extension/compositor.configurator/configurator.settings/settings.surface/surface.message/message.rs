@@ -6,21 +6,25 @@ use compositor_y5_audio_controller_interface::interface::AudioState;
 use compositor_configurator_network_backend_base::base::WifiSnapshot;
 use compositor_configurator_bluetooth_backend_base::base::BtSnapshot;
 
+/// The settings modules shown in the sidebar (design: SYSTEM CONFIGURATION).
+/// `Input` merges the former Cursor + Keys; `System` is the Environment editor.
+/// (Wi-Fi/Bluetooth tab builders still exist but are off the sidebar for now.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
+    World,
     Display,
-    Cursor,
-    Keys,
     Audio,
-    Wifi,
-    Bluetooth,
-    Settings,
+    Input,
+    Performance,
+    System,
 }
 
 #[derive(Clone, Debug)]
 pub enum SettingsMessage {
     /// Switch the visible tab (UI-only, not forwarded).
     Tab(Tab),
+    /// Live frames-per-second, pushed by the embed (UI-only, not forwarded).
+    Fps(u32),
     /// Live cursor speed multiplier (forwarded: applied + persisted at once).
     Cursor(f32),
     /// Live touchpad natural-scroll (forwarded).

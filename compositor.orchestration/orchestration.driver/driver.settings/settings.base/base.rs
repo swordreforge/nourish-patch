@@ -14,6 +14,9 @@ pub struct SettingsState {
     pub open: bool,
     pub handle: Option<HandleId>,
     pub dirty: bool,
+    /// True only while the Performance tab is the visible settings module — the
+    /// gate for pushing live FPS (so other tabs don't buffer per-frame updates).
+    pub fps_wanted: bool,
 }
 
 pub static SETTINGS: Token<SettingsState> = Token::new();

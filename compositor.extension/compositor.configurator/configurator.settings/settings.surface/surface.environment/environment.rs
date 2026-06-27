@@ -1,92 +1,81 @@
-//! The System tab: editable `Environment` fields (settings.json). Each edit emits
-//! the full edited struct (`SettingsMessage::Env`) — the handler writes
-//! settings.json and flags the reboot banner. Each row has a Reset to its default
-//! (`default_settings()`). Bools toggle, enums cycle, free strings use a field.
-use compositor_developer_environment_config_base::base::{default_settings, Environment};
+//! The System module: editable `Environment` fields (settings.json). Enum fields
+//! are dropdowns, booleans are pill toggles, free strings use a field. Each edit
+//! emits the full edited struct; the handler writes settings.json + reboot banner.
+use compositor_developer_environment_config_base::base::Environment;
 use compositor_configurator_hardware_gpu_base::base::RenderDevice;
 use compositor_support_iced_core_engine_base::Renderer;
 use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
-use iced_core::{Element, Length, Theme};
-use iced_widget::{button, row, scrollable, text, text_input, Column};
+use compositor_configurator_settings_surface_control::control;
+use iced_core::{Alignment, Element, Length, Theme};
+use iced_widget::{column, container, pick_list, row, scrollable, text, text_input, toggler, Column};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
 
-fn field_row<'a>(label: &str, value: String, edit: SettingsMessage, reset: SettingsMessage) -> El<'a> {
-    row![
-        button(text(format!("{label}: {value}"))).width(Length::Fill).on_press(edit).style(style::action),
-        button(text("Reset")).on_press(reset).style(style::action),
-    ].spacing(6).into()
+fn cell<'a>(label: &'a str, control_el: El<'a>) -> El<'a> {
+    container(row![text(label).width(Length::Fill), control_el].align_y(Alignment::Center).spacing(10).padding(12))
+        .style(style::card).width(Length::Fill).into()
 }
 
-fn boolean<'a>(label: &str, e: &Environment, v: bool, def: bool, set: fn(&mut Environment, bool)) -> El<'a> {
-    let mut on = e.clone();
-    set(&mut on, !v);
-    let mut rd = e.clone();
-    set(&mut rd, def);
-    field_row(label, if v { "on" } else { "off" }.into(), SettingsMessage::Env(on), SettingsMessage::Env(rd))
+fn opts(xs: &[&str]) -> Vec<String> {
+    xs.iter().map(|s| s.to_string()).collect()
 }
 
-fn cycle<'a>(label: &str, e: &Environment, cur: &str, def: &str, opts: &[&str], set: fn(&mut Environment, String)) -> El<'a> {
-    let i = opts.iter().position(|o| *o == cur).unwrap_or(0);
-    let mut nx = e.clone();
-    set(&mut nx, opts[(i + 1) % opts.len()].to_string());
-    let mut rd = e.clone();
-    set(&mut rd, def.to_string());
-    let shown = if cur.is_empty() { "(off)".to_string() } else { cur.to_string() };
-    field_row(label, shown, SettingsMessage::Env(nx), SettingsMessage::Env(rd))
-}
-
-fn textfield<'a>(label: &'a str, e: &'a Environment, val: &'a str, def: &str, set: fn(&mut Environment, String)) -> El<'a> {
+fn choice<'a>(label: &'a str, e: &Environment, cur: String, options: Vec<String>, set: fn(&mut Environment, String)) -> El<'a> {
     let e2 = e.clone();
-    let mut rd = e.clone();
-    set(&mut rd, def.to_string());
-    row![
-        text(format!("{label}:")),
-        text_input(label, val).width(Length::Fill).on_input(move |s| {
-            let mut e = e2.clone();
-            set(&mut e, s);
-            SettingsMessage::Env(e)
-        }),
-        button(text("Reset")).on_press(SettingsMessage::Env(rd)).style(style::action),
-    ].spacing(6).into()
+    let picker = pick_list(Some(cur), options, |s: &String| s.clone())
+        .on_select(move |s: String| { let mut x = e2.clone(); set(&mut x, s); SettingsMessage::Env(x) })
+        .width(Length::Fixed(170.0))
+        .style(control::picklist)
+        .menu_style(control::menu);
+    cell(label, picker.into())
+}
+
+fn boolean<'a>(label: &'a str, e: &Environment, v: bool, set: fn(&mut Environment, bool)) -> El<'a> {
+    let e2 = e.clone();
+    let t = toggler(v).on_toggle(move |b| { let mut x = e2.clone(); set(&mut x, b); SettingsMessage::Env(x) }).style(control::toggler);
+    cell(label, t.into())
+}
+
+fn textfield<'a>(label: &'a str, e: &'a Environment, val: &'a str, set: fn(&mut Environment, String)) -> El<'a> {
+    let e2 = e.clone();
+    let f = text_input(label, val).width(Length::Fixed(220.0)).on_input(move |s| { let mut x = e2.clone(); set(&mut x, s); SettingsMessage::Env(x) });
+    cell(label, f.into())
 }
 
 pub fn build<'a>(e: &'a Environment, devices: &'a [RenderDevice]) -> El<'a> {
-    let d = default_settings();
-    let mut rows: Vec<El<'a>> = vec![
-        text("System — change requires reboot").size(18).into(),
-        cycle("Renderer", e, &e.renderer, &d.renderer, &["vulkan", "gles"], |x, v| x.renderer = v),
-        boolean("Renderer GLES fallback", e, e.renderer_fallback, d.renderer_fallback, |x, v| x.renderer_fallback = v),
-        cycle("Scanout depth", e, &e.depth.to_string(), &d.depth.to_string(), &["8", "10"], |x, v| x.depth = v.parse().unwrap_or(8)),
-        boolean("Variable refresh (VRR)", e, e.vrr, d.vrr, |x, v| x.vrr = v),
-        cycle("Capture encoder", e, &e.capture_encoder, &d.capture_encoder, &["nvenc", "vaapi"], |x, v| x.capture_encoder = v),
-        cycle("Capture codec", e, &e.capture_codec, &d.capture_codec, &["av1", "h265", "h264"], |x, v| x.capture_codec = v),
-        cycle("Capture quality", e, &e.capture_quality, &d.capture_quality, &["optimized", "lossless"], |x, v| x.capture_quality = v),
-        cycle("Capture fps max", e, &e.capture_refresh_rate_max.to_string(), &d.capture_refresh_rate_max.to_string(), &["30", "60", "90", "120"], |x, v| x.capture_refresh_rate_max = v.parse().unwrap_or(120)),
-        cycle("Capture re-encode", e, &e.capture_background_encoder, &d.capture_background_encoder, &["ffmpeg", ""], |x, v| x.capture_background_encoder = v),
-        boolean("NVENC readback fallback", e, e.capture_nvenc_allow_readback_fallback, d.capture_nvenc_allow_readback_fallback, |x, v| x.capture_nvenc_allow_readback_fallback = v),
-        boolean("Capture variable frame rate", e, e.capture_variable_frame_rate, d.capture_variable_frame_rate, |x, v| x.capture_variable_frame_rate = v),
-        textfield("Render node", e, &e.render_node, &d.render_node, |x, v| x.render_node = v),
-        textfield("Desktop name", e, &e.desktop_name, &d.desktop_name, |x, v| x.desktop_name = v),
-        textfield("Log level", e, &e.log_level, &d.log_level, |x, v| x.log_level = v),
-    ];
-    // Render-device picker (render nodes only, with estimated GPU names). The
-    // free-text "Render node" field above still works for custom paths.
-    rows.push(text("Render device").size(14).into());
-    let current = devices.iter().find(|r| r.node == e.render_node).map(|r| r.name.as_str());
-    rows.push(text(format!("Current: {}", current.unwrap_or("(custom / not listed)"))).size(12).into());
-    for r in devices {
-        let mut e2 = e.clone();
-        e2.render_node = r.node.clone();
-        let mark = if r.node == e.render_node { "●" } else { "○" };
-        rows.push(
-            button(text(format!("{mark} {}  —  {}", r.name, r.node)))
-                .width(Length::Fill)
-                .on_press(SettingsMessage::Env(e2))
-                .style(style::action)
-                .into(),
-        );
+    let head = column![
+        text("SYSTEM").size(16).color(style::ACCENT),
+        text("Build, runtime, and capture — changes require a reboot.").size(11).color(style::MUTED),
+    ].spacing(4);
+    let mut rows: Vec<El<'a>> = vec![head.into()];
+    rows.push(choice("Renderer", e, e.renderer.clone(), opts(&["vulkan", "gles"]), |x, v| x.renderer = v));
+    rows.push(boolean("Renderer GLES fallback", e, e.renderer_fallback, |x, v| x.renderer_fallback = v));
+    rows.push(choice("Scanout depth", e, e.depth.to_string(), opts(&["8", "10"]), |x, v| x.depth = v.parse().unwrap_or(8)));
+    rows.push(boolean("Variable refresh (VRR)", e, e.vrr, |x, v| x.vrr = v));
+    rows.push(choice("Capture encoder", e, e.capture_encoder.clone(), opts(&["nvenc", "vaapi"]), |x, v| x.capture_encoder = v));
+    rows.push(choice("Capture codec", e, e.capture_codec.clone(), opts(&["av1", "h265", "h264"]), |x, v| x.capture_codec = v));
+    rows.push(choice("Capture quality", e, e.capture_quality.clone(), opts(&["optimized", "lossless"]), |x, v| x.capture_quality = v));
+    rows.push(choice("Capture fps max", e, e.capture_refresh_rate_max.to_string(), opts(&["30", "60", "90", "120"]), |x, v| x.capture_refresh_rate_max = v.parse().unwrap_or(120)));
+    rows.push(choice("Capture re-encode", e, e.capture_background_encoder.clone(), opts(&["ffmpeg", ""]), |x, v| x.capture_background_encoder = v));
+    rows.push(boolean("NVENC readback fallback", e, e.capture_nvenc_allow_readback_fallback, |x, v| x.capture_nvenc_allow_readback_fallback = v));
+    rows.push(boolean("Capture variable frame rate", e, e.capture_variable_frame_rate, |x, v| x.capture_variable_frame_rate = v));
+    rows.push(textfield("Desktop name", e, &e.desktop_name, |x, v| x.desktop_name = v));
+    rows.push(textfield("Log level", e, &e.log_level, |x, v| x.log_level = v));
+    // Render device: dropdown of detected render nodes (estimated GPU names).
+    if !devices.is_empty() {
+        let cur = devices.iter().find(|r| r.node == e.render_node).map(|r| r.name.clone()).unwrap_or_else(|| e.render_node.clone());
+        let names: Vec<String> = devices.iter().map(|r| r.name.clone()).collect();
+        let devs = devices.to_vec();
+        let e3 = e.clone();
+        let picker = pick_list(Some(cur), names, |s: &String| s.clone())
+            .on_select(move |name: String| {
+                let mut x = e3.clone();
+                if let Some(d) = devs.iter().find(|r| r.name == name) { x.render_node = d.node.clone(); }
+                SettingsMessage::Env(x)
+            })
+            .width(Length::Fixed(220.0)).style(control::picklist).menu_style(control::menu);
+        rows.push(cell("Render device", picker.into()));
     }
-    scrollable(Column::with_children(rows).spacing(8).padding(4)).into()
+    scrollable(Column::with_children(rows).spacing(10)).height(Length::Fill).into()
 }

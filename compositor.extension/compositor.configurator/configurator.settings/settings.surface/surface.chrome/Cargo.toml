@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 compositor_configurator_settings_surface_message = { workspace = true }
 compositor_configurator_settings_surface_style = { workspace = true }
+compositor_configurator_settings_surface_control = { workspace = true }
 compositor_configurator_settings_surface_cursor = { workspace = true }
 compositor_configurator_settings_surface_display = { workspace = true }
 compositor_configurator_settings_surface_environment = { workspace = true }

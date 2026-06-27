@@ -86,7 +86,7 @@ fn install_handler(state: &mut Loop, handle: IcedHandle<Settings>) {
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
         if let Some(inst) = reg.instance_mut(handle) {
             inst.runtime_mut().set_message_handler(move |m: &SettingsMessage| {
-                if matches!(m, SettingsMessage::Tab(_) | SettingsMessage::SyncSystem(..) | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_)) { return; }
+                if matches!(m, SettingsMessage::SyncSystem(..) | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_)) { return; }
                 let _ = tx.send(SurfaceMessage { message: SurfaceMessageType::Settings(m.clone()) });
             });
         }

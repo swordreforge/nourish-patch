@@ -1,51 +1,35 @@
-//! The Keys tab: every compositor shortcut, each rebindable. Type a combo string
-//! (e.g. "Super+K") in the field; Reset restores the built-in default. Edits
-//! forward to the handler, which parses + persists to keybinding.json.
+//! Keyboard-bindings column (right side of INPUT): each shortcut's label + combo.
+//! Editable rows take a combo string ("Super+K"); built-ins show a static chip.
 use compositor_developer_environment_keybinding_base::base::KeyRow;
 use compositor_support_iced_core_engine_base::Renderer;
 use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
-use iced_core::{Element, Length, Theme};
-use iced_widget::{button, row, scrollable, text, text_input, Column};
+use compositor_configurator_settings_surface_control::control;
+use iced_core::{Alignment, Element, Length, Padding, Theme};
+use iced_widget::{button, column, container, row, scrollable, text, text_input, toggler, Column};
 
-pub fn build<'a>(keys: &'a [KeyRow]) -> Element<'a, SettingsMessage, Theme, Renderer> {
-    let mut rows: Vec<Element<'a, SettingsMessage, Theme, Renderer>> = vec![
-        text("Keyboard shortcuts").size(18).into(),
-        text("Type a combo like \"Super+Shift+K\". Off disables; Reset restores the default.").size(12).into(),
-    ];
-    let mut fixed_header = false;
+type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
+
+pub fn build<'a>(keys: &'a [KeyRow]) -> El<'a> {
+    let mut rows: Vec<El<'a>> = vec![text("KEYBOARD BINDINGS").size(16).color(style::ACCENT).into()];
     for k in keys {
-        if k.editable {
+        let right: El<'a> = if k.editable {
             let id = k.id.clone();
-            // Empty override = disabled. Mark the label and let Off (set empty) /
-            // Reset (restore default) toggle it; typing a combo also re-enables.
-            let label = if k.combo.is_empty() {
-                format!("{}  (off)", k.label)
-            } else {
-                k.label.clone()
-            };
-            rows.push(
-                row![
-                    text(label).width(Length::Fill),
-                    text_input(&k.default, &k.combo)
-                        .width(Length::Fixed(160.0))
-                        .on_input(move |s| SettingsMessage::Rebind(id.clone(), s)),
-                    button(text("Off")).on_press(SettingsMessage::Rebind(k.id.clone(), String::new())).style(style::action),
-                    button(text("Reset")).on_press(SettingsMessage::ResetBind(k.id.clone())).style(style::action),
-                ]
-                .spacing(6)
-                .into(),
-            );
+            let id2 = k.id.clone();
+            // Toggle = enabled: off writes an empty combo (disabled), on restores the default.
+            let enable = toggler(!k.combo.is_empty())
+                .on_toggle(move |on| if on { SettingsMessage::ResetBind(id2.clone()) } else { SettingsMessage::Rebind(id2.clone(), String::new()) })
+                .style(control::toggler);
+            row![
+                enable,
+                text_input(&k.default, &k.combo).width(Length::Fixed(110.0)).on_input(move |s| SettingsMessage::Rebind(id.clone(), s)),
+                button(text("↺").size(12)).on_press(SettingsMessage::ResetBind(k.id.clone())).style(control::action),
+            ].spacing(6).align_y(Alignment::Center).into()
         } else {
-            if !fixed_header {
-                rows.push(text("Built-in (not rebindable)").size(14).into());
-                fixed_header = true;
-            }
-            // Read-only: label + the held combo, no field/reset.
-            rows.push(
-                row![text(k.label.clone()).width(Length::Fill), text(k.combo.clone())].spacing(8).into(),
-            );
-        }
+            container(text(k.combo.clone()).size(12).color(style::ACCENT)).padding(Padding::from([3, 9])).style(style::chip).into()
+        };
+        let line = row![text(k.label.clone()).width(Length::Fill), right].align_y(Alignment::Center).spacing(8).padding(Padding::from([6, 12]));
+        rows.push(container(line).style(style::card).width(Length::Fill).into());
     }
-    scrollable(Column::with_children(rows).spacing(6).padding(4)).into()
+    scrollable(Column::with_children(rows).spacing(8)).height(Length::Fill).into()
 }

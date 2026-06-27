@@ -52,7 +52,7 @@ pub fn open(state: &mut Loop, renderer: &mut GlesRenderer) {
     let handle = compositor_y5_surface_draw_handle::handle::load(
         state,
         renderer,
-        OverviewMenu::new(),
+        OverviewMenu::new(std::env::var("USER").unwrap_or_else(|_| "user".to_string())),
         rect,
         compositor_y5_surface_draw_handle::handle::IcedSpace::Screen,
         compositor_orchestration_draw_layer_base::base::Layer::SCENE.bits(),
@@ -82,7 +82,10 @@ pub fn close(state: &mut Loop) {
 }
 
 fn dispatch(message: &OverviewMessage, tx: &Sender<SurfaceMessage>) {
-    let OverviewMessage::Select(section) = message;
+    let section = match message {
+        OverviewMessage::Select(s) => s,
+        OverviewMessage::Clock(_) => return,
+    };
     let tab = match section {
         Section::World => Tab::World,
         Section::Layout => Tab::Layout,

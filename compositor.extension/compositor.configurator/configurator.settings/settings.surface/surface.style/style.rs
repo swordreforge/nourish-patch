@@ -1,61 +1,58 @@
-//! Shared game-like styling for the settings window: a near-solid full-screen
-//! backdrop, a right-anchored panel, accent tab buttons, and flat action buttons.
+//! Tactical-HUD palette + container styles for the full-width settings surface:
+//! a dark navy field with cyan accents and thin hairline-bordered cards/strips.
+//! Button/slider/toggler styles live in `surface.control`.
 use iced_core::{Background, Border, Color, Theme};
-use iced_widget::button::{Status, Style as Button};
-use iced_widget::container::Style as Panel;
+use iced_widget::container::Style as Container;
 
-const ACCENT: Color = Color { r: 0.16, g: 0.45, b: 0.95, a: 1.0 };
-const TEXT: Color = Color { r: 0.90, g: 0.93, b: 0.97, a: 1.0 };
+pub const ACCENT: Color = Color { r: 0.27, g: 0.78, b: 0.88, a: 1.0 };
+pub const TEXT: Color = Color { r: 0.80, g: 0.86, b: 0.90, a: 1.0 };
+pub const MUTED: Color = Color { r: 0.42, g: 0.50, b: 0.57, a: 1.0 };
+pub const LINE: Color = Color { r: 0.27, g: 0.78, b: 0.88, a: 0.16 };
 
-fn fill(c: Color) -> Option<Background> {
+pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Color {
+    Color { r, g, b, a }
+}
+fn bg(c: Color) -> Option<Background> {
     Some(Background::Color(c))
 }
-
-/// Full-screen dim behind the panel (near-solid so the desktop reads as paused).
-pub fn backdrop(_t: &Theme) -> Panel {
-    Panel {
-        background: fill(Color { r: 0.02, g: 0.03, b: 0.05, a: 0.92 }),
+fn lined(fill: Color, border: Color, width: f32, radius: f32) -> Container {
+    Container {
+        background: bg(fill),
         text_color: Some(TEXT),
+        border: Border { color: border, width, radius: radius.into() },
         ..Default::default()
     }
 }
 
-/// The right-edge settings panel (full height, solid).
-pub fn panel(_t: &Theme) -> Panel {
-    Panel {
-        background: fill(Color { r: 0.09, g: 0.10, b: 0.13, a: 1.0 }),
-        text_color: Some(TEXT),
-        border: Border { color: Color { r: 0.4, g: 0.6, b: 1.0, a: 0.18 }, width: 1.0, radius: 0.0.into() },
-        ..Default::default()
-    }
+/// Full-screen field (slightly translucent so the frozen blur reads through).
+pub fn backdrop(_t: &Theme) -> Container {
+    lined(rgba(0.027, 0.043, 0.059, 0.96), Color::TRANSPARENT, 0.0, 0.0)
 }
-
-/// A tab button — accent-filled when active, faint when idle.
-pub fn tab(active: bool) -> impl Fn(&Theme, Status) -> Button {
-    move |_t, _s| Button {
-        background: fill(if active { ACCENT } else { Color { r: 1.0, g: 1.0, b: 1.0, a: 0.04 } }),
-        text_color: if active { Color::WHITE } else { Color { r: 0.66, g: 0.71, b: 0.80, a: 1.0 } },
-        border: Border { color: Color::TRANSPARENT, width: 0.0, radius: 8.0.into() },
-        ..Default::default()
-    }
+/// A bordered content card / info cell.
+pub fn card(_t: &Theme) -> Container {
+    lined(rgba(0.063, 0.086, 0.110, 0.55), LINE, 1.0, 4.0)
 }
-
-/// A flat action / field button.
-pub fn action(_t: &Theme, _s: Status) -> Button {
-    Button {
-        background: fill(Color { r: 1.0, g: 1.0, b: 1.0, a: 0.05 }),
-        text_color: Color { r: 0.86, g: 0.89, b: 0.94, a: 1.0 },
-        border: Border { color: Color { r: 1.0, g: 1.0, b: 1.0, a: 0.10 }, width: 1.0, radius: 7.0.into() },
-        ..Default::default()
-    }
+/// Left module-sidebar rail.
+pub fn sidebar(_t: &Theme) -> Container {
+    lined(rgba(0.016, 0.027, 0.039, 0.55), LINE, 1.0, 0.0)
 }
-
-/// The primary accent button (Keep).
-pub fn accent(_t: &Theme, _s: Status) -> Button {
-    Button {
-        background: fill(ACCENT),
-        text_color: Color::WHITE,
-        border: Border { color: Color::TRANSPARENT, width: 0.0, radius: 7.0.into() },
-        ..Default::default()
-    }
+/// Top title bar / bottom status strip (hairline rule).
+pub fn strip(_t: &Theme) -> Container {
+    lined(rgba(0.035, 0.055, 0.075, 0.5), LINE, 1.0, 0.0)
+}
+/// A keybinding chip (outlined, faint fill).
+pub fn chip(_t: &Theme) -> Container {
+    lined(rgba(0.27, 0.78, 0.88, 0.07), rgba(0.27, 0.78, 0.88, 0.30), 1.0, 3.0)
+}
+/// A small accent status dot (cyan disc).
+pub fn dot(_t: &Theme) -> Container {
+    lined(ACCENT, Color::TRANSPARENT, 0.0, 5.0)
+}
+/// The filled portion of a meter bar (storage/memory).
+pub fn meter_fill(_t: &Theme) -> Container {
+    lined(ACCENT, Color::TRANSPARENT, 0.0, 2.0)
+}
+/// The empty track of a meter bar.
+pub fn meter_track(_t: &Theme) -> Container {
+    lined(rgba(1.0, 1.0, 1.0, 0.06), LINE, 1.0, 2.0)
 }

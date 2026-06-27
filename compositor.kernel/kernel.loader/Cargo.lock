@@ -1883,6 +1883,7 @@ dependencies = [
 name = "compositor_configurator_audio_tab_base"
 version = "0.0.1"
 dependencies = [
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
@@ -1903,6 +1904,7 @@ name = "compositor_configurator_bluetooth_tab_base"
 version = "0.0.1"
 dependencies = [
  "compositor_configurator_bluetooth_backend_base",
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
@@ -1926,6 +1928,7 @@ name = "compositor_configurator_network_tab_base"
 version = "0.0.1"
 dependencies = [
  "compositor_configurator_network_backend_base",
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
@@ -1961,6 +1964,7 @@ dependencies = [
  "compositor_configurator_hardware_gpu_base",
  "compositor_configurator_network_backend_base",
  "compositor_configurator_network_tab_base",
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_cursor",
  "compositor_configurator_settings_surface_display",
  "compositor_configurator_settings_surface_environment",
@@ -1977,9 +1981,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "compositor_configurator_settings_surface_control"
+version = "0.0.1"
+dependencies = [
+ "compositor_configurator_settings_surface_style",
+ "compositor_developer_debug_instance_record",
+ "iced_core",
+ "iced_widget",
+]
+
+[[package]]
 name = "compositor_configurator_settings_surface_cursor"
 version = "0.0.1"
 dependencies = [
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
@@ -1991,6 +2006,7 @@ dependencies = [
 name = "compositor_configurator_settings_surface_display"
 version = "0.0.1"
 dependencies = [
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_orchestration_driver_output_base",
@@ -2004,6 +2020,7 @@ name = "compositor_configurator_settings_surface_environment"
 version = "0.0.1"
 dependencies = [
  "compositor_configurator_hardware_gpu_base",
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_config_base",
@@ -2016,6 +2033,7 @@ dependencies = [
 name = "compositor_configurator_settings_surface_keys"
 version = "0.0.1"
 dependencies = [
+ "compositor_configurator_settings_surface_control",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_keybinding_base",
@@ -8350,6 +8368,7 @@ dependencies = [
  "compositor_y5_overview_draw_backdrop",
  "compositor_y5_overview_draw_scene",
  "compositor_y5_overview_draw_settings",
+ "compositor_y5_overview_draw_status",
  "compositor_y5_overview_draw_world",
  "compositor_y5_overview_state_base",
  "compositor_y5_picker_interface_embed",
@@ -8418,6 +8437,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "compositor_y5_overview_draw_status"
+version = "0.0.1"
+dependencies = [
+ "compositor_configurator_settings_surface_message",
+ "compositor_configurator_settings_surface_view",
+ "compositor_developer_debug_instance_record",
+ "compositor_monitor_compositor_iced_base",
+ "compositor_monitor_overview_ui_base",
+ "compositor_orchestration_core_state_base",
+ "compositor_orchestration_driver_settings_base",
+ "libc",
+]
+
+[[package]]
 name = "compositor_y5_overview_draw_world"
 version = "0.0.1"
 dependencies = [
@@ -8456,6 +8489,7 @@ dependencies = [
  "compositor_developer_debug_instance_record",
  "compositor_monitor_compositor_iced_base",
  "compositor_orchestration_core_state_base",
+ "compositor_orchestration_driver_settings_base",
  "compositor_y5_camera_transform_translate",
  "compositor_y5_overview_interface_activate",
  "compositor_y5_picker_seat_embed",

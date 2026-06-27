@@ -60,6 +60,19 @@ pub fn axis<I: InputBackend>(event: &<I as InputBackend>::PointerAxisEvent, stat
     }
     if state.inner.overview().is_world() {
         compositor_y5_picker_seat_pointer::pointer::axis::<I>(event, state);
+    } else if state.inner.overview().is_settings() {
+        // Settings screen has its own scroll lists → forward the wheel to the iced
+        // surface (don't swallow it as grid scroll).
+        let handle = state.inner.kernel.get(&compositor_orchestration_driver_settings_base::base::SETTINGS).handle;
+        if let Some(handle) = handle {
+            let dxd = event.amount_v120(Axis::Horizontal).map(|v| (v / 120.0) as i32).unwrap_or(0);
+            let dyd = event.amount_v120(Axis::Vertical).map(|v| (v / 120.0) as i32).unwrap_or(0);
+            let dx = event.amount(Axis::Horizontal).unwrap_or(0.0);
+            let dy = event.amount(Axis::Vertical).unwrap_or(0.0);
+            if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
+                reg.dispatch_axis(Some(handle), dxd, dyd, dx, dy);
+            }
+        }
     } else {
         let dy = event
             .amount(Axis::Vertical)
