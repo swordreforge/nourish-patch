@@ -51,15 +51,15 @@ curl -fsSL https://nourish.snowies.com/release/latest/fedora44/package.tar.gz | 
 ```
 
 The installer is interactive and safe to re-run. For the full walkthrough see
-[`compositor.installer/INSTALL.md`](compositor.installer/INSTALL.md).
+[`https://nourish.snowies.com/guide.html`](https://nourish.snowies.com/guide.html).
 
 Prefer a pinned build? Every release is also published immutably under its version —
 `https://nourish.snowies.com/release/v1.0.0/fedora44/package.tar.gz` — while `latest`
 always points at the newest. Browse them on the
 [releases page](https://github.com/y5-snowies/nourish/releases).
 
-For any other distribution: I currently do not publish individual binaries for different distributions and generally recommend using Fedora.
-If you are using a different distribution, it is easy to build from source which will link against your distribution system libraries versions automatically. (See below)
+For any other distribution, please see [`nourish.snowies.com/guide.html`](https://nourish.snowies.com/guide.html) I currently do not publish individual binaries for different distributions and generally recommend using Fedora.
+If you are using a different distribution, it is easy to build from source which will link against your distribution system libraries versions automatically. 
 
 ## Source
 
@@ -69,6 +69,8 @@ Wayland compositor written in Rust, standing on patched forks of
 [wgpu](https://wgpu.rs) (rendering), and [iced](https://iced.rs) (interface), all kept
 in-tree under `vendor/`.
 
+A thorough guide available [`here`](https://nourish.snowies.com/guide.html).
+
 Note: Y5 was architected and hand-written and only later enchanced with AI. It has a lot of generated code which was pre-directed and reviewed carefully.
 
 ```bash
@@ -76,11 +78,7 @@ Note: Y5 was architected and hand-written and only later enchanced with AI. It h
 environment/run-host.sh winit release
 
 # Build the binary for use
-environment/build-system.sh system
-
-# Build a release install bundle (compositor + components + installer)
-ci/scripts/package-installer.sh
-
+environment/build-release.sh system
 
 If you get any errors about missing libraries, these are system libraries that the project links with. 
 
