@@ -278,5 +278,8 @@
   ],
   "compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.settings": [
     "size"
+  ],
+  "compositor.installer/installer.process/process.main/main.execute/execute.packages": [
+    "size"
   ]
 }
