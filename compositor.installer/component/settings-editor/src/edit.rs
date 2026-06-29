@@ -7,9 +7,9 @@ use crate::term::Nav;
 use compositor_configurator_hardware_gpu_base::base::render_devices;
 use compositor_developer_environment_config_base::base::Environment;
 
-/// `installer` = running as the installer's initial-setup step: Escape is inert
-/// (the user can't back out of a list), matching the no-menu installer flow.
-pub fn interactive(base: Environment, installer: bool) -> Environment {
+/// The settings flow is a straight sequence of required fields — there is no
+/// "back" target mid-flow, so no field (including the GPU list) offers Escape.
+pub fn interactive(base: Environment) -> Environment {
     println!("y5.compositor.settings — every field is required; press Enter to keep the shown value.");
     Environment {
         renderer: choose(
@@ -35,7 +35,7 @@ pub fn interactive(base: Environment, installer: bool) -> Environment {
             base.depth,
         ),
         vrr: yes_no("vrr", "Enable adaptive sync / VRR.", base.vrr),
-        render_node: select_render_node(&base.render_node, installer),
+        render_node: select_render_node(&base.render_node),
         desktop_name: ask(
             "desktop_name",
             "XDG desktop name advertised to clients.",
@@ -99,16 +99,17 @@ pub fn interactive(base: Environment, installer: bool) -> Environment {
 /// Pick the DRM render node from a list of detected GPUs with estimated card names —
 /// the SAME enumeration + naming the in-compositor settings window uses (shared by
 /// path via `gpu.base`). Falls back to a free-text prompt when no render nodes are
-/// present (headless / no `/dev/dri`), so the tool still works there. `installer`
-/// suppresses Escape-to-keep so the list behaves like the rest of the installer flow.
-fn select_render_node(current: &str, installer: bool) -> String {
+/// present (headless / no `/dev/dri`), so the tool still works there. Like the other
+/// fields, the list offers no Escape (`allow_back = false`); EOF/non-TTY keeps the
+/// current value.
+fn select_render_node(current: &str) -> String {
     let devs = render_devices();
     if devs.is_empty() {
         return ask("render_node", "DRM render node path.", current);
     }
     let items: Vec<Item> = devs.iter().map(|d| Item::new(d.name.clone(), d.node.clone())).collect();
     let cur = devs.iter().position(|d| d.node == current);
-    match select_list("Render device (GPU)", &items, cur, !installer) {
+    match select_list("Render device (GPU)", &items, cur, false) {
         Nav::Selected(i) => devs[i].node.clone(),
         Nav::Back => current.to_string(),
     }

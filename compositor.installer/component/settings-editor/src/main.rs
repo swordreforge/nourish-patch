@@ -9,7 +9,7 @@
 //!   y5.compositor.settings                  # interactive menu
 //!   y5.compositor.settings --config-file=P  # interactive, settings path P
 //!   y5.compositor.settings --installer      # installer setup: Settings only, no menu,
-//!                                           #   no preferences, Escape disabled
+//!                                           #   no preferences
 //!   y5.compositor.settings --write-default  # non-interactive, write the template
 
 mod drm_probe;
@@ -49,8 +49,8 @@ fn main() {
 
     if installer {
         // Initial setup driven by the installer: straight into Settings, no menu, no
-        // preferences, Escape inert.
-        let settings = edit::interactive(base, true);
+        // preferences.
+        let settings = edit::interactive(base);
         persist::write_settings(&path, &settings);
         return;
     }
@@ -83,7 +83,7 @@ A normal run shows a menu: Settings (author settings.json) and Set preferences
 OPTIONS:
     --config-file=<PATH>   Use PATH for settings.json instead of the default location.
     --installer            Installer setup: go straight to Settings (no menu, no
-                           preferences, Escape disabled).
+                           preferences).
     --write-default        Non-interactive: write the canonical default settings.
     -h, --help             Show this help.
 ";

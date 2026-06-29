@@ -21,7 +21,7 @@ pub fn run(path: &Path, base: Environment) {
     loop {
         match select_list("y5.compositor.settings", &items, None, true) {
             Nav::Selected(0) => {
-                settings = edit::interactive(settings, false);
+                settings = edit::interactive(settings);
                 persist::write_settings(path, &settings);
             }
             Nav::Selected(1) => preferences::run(),
