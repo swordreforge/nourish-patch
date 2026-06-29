@@ -2985,6 +2985,8 @@ version = "0.0.1"
 dependencies = [
  "bitflags 2.13.0",
  "compositor_developer_debug_instance_record",
+ "compositor_kernel_drm_edid_identity_base",
+ "compositor_kernel_drm_edid_parse_base",
  "compositor_kernel_graphic_preference_output_profile",
  "smithay",
 ]
@@ -3279,6 +3281,7 @@ version = "0.0.1"
 dependencies = [
  "bitflags 2.13.0",
  "compositor_developer_debug_instance_record",
+ "compositor_developer_environment_preference_base",
  "smithay",
 ]
 
