@@ -2,7 +2,6 @@ use iced::widget::{button, column, row, text, text_input};
 use iced::{Alignment, Element, Task};
 use std::collections::HashMap;
 use std::error::Error;
-use std::path::{Path, PathBuf};
 use zbus::{connection, interface, proxy};
 
 // ---- D-Bus Proxy Definitions ----
@@ -46,8 +45,17 @@ trait LoginManager {
         &self,
     ) -> zbus::Result<Vec<(String, u32, String, String, zbus::zvariant::OwnedObjectPath)>>;
 
-    /// The login session a given PID belongs to (object path).
-    fn get_session_by_pid(&self, pid: u32) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
+    fn get_user(&self, uid: u32) -> zbus::Result<zbus::zvariant::OwnedObjectPath>;
+}
+
+#[proxy(
+    interface = "org.freedesktop.login1.User",
+    default_service = "org.freedesktop.login1"
+)]
+trait LoginUser {
+    /// The user's "display" (graphical) session: (session_id, object_path).
+    #[zbus(property)]
+    fn display(&self) -> zbus::Result<(String, zbus::zvariant::OwnedObjectPath)>;
 }
 
 #[proxy(
@@ -55,9 +63,6 @@ trait LoginManager {
     default_service = "org.freedesktop.login1"
 )]
 trait LoginSession {
-    #[zbus(property)]
-    fn id(&self) -> zbus::Result<String>;
-
     #[zbus(property)]
     fn active(&self) -> zbus::Result<bool>;
 
@@ -216,87 +221,32 @@ fn current_uid() -> Option<u32> {
     None
 }
 
-/// Path of the Wayland socket this agent is a client of (the y5 compositor's).
-/// `WAYLAND_DISPLAY` is either an absolute path or a name under `XDG_RUNTIME_DIR`.
-fn wayland_socket_path() -> Option<PathBuf> {
-    let wd = std::env::var("WAYLAND_DISPLAY").ok()?;
-    if wd.starts_with('/') {
-        Some(PathBuf::from(wd))
-    } else {
-        Some(PathBuf::from(std::env::var("XDG_RUNTIME_DIR").ok()?).join(wd))
-    }
-}
+/// Ask logind for the active graphical session of the current user.
+///
+/// Preference order:
+///   1. The user's `Display` (graphical) session — login1 already tracks this.
+///   2. Scan all sessions: the one owned by our uid that is `Active` and of a
+///      graphical type (wayland/x11/mir), or failing that any active one.
+async fn discover_active_session(conn: &connection::Connection) -> Option<String> {
+    let manager = LoginManagerProxy::new(conn).await.ok()?;
+    let uid = current_uid();
 
-/// Inode of the *listening* unix socket bound at `path`, from `/proc/net/unix`.
-/// A bound path can appear on several rows (the listener plus connected endpoints),
-/// so we specifically pick the row carrying the `SO_ACCEPTCON` flag (0x10000) — that
-/// is the listening fd, which only the compositor holds.
-fn listening_socket_inode(path: &Path) -> Option<u64> {
-    const SO_ACCEPTCON: u32 = 0x10000;
-    let target = path.to_str()?;
-    let table = std::fs::read_to_string("/proc/net/unix").ok()?;
-    for line in table.lines().skip(1) {
-        // Fields: Num RefCount Protocol Flags Type St Inode Path
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        if fields.len() < 8 || fields[7] != target {
-            continue;
-        }
-        let flags = u32::from_str_radix(fields[3], 16).unwrap_or(0);
-        if flags & SO_ACCEPTCON != 0 {
-            return fields[6].parse().ok();
-        }
-    }
-    None
-}
-
-/// PID holding a fd to the socket with the given inode — i.e. the compositor.
-/// Same-uid processes expose `/proc/<pid>/fd`, which the agent (same user) can read.
-fn pid_owning_socket(inode: u64) -> Option<u32> {
-    let want = format!("socket:[{inode}]");
-    for entry in std::fs::read_dir("/proc").ok()?.flatten() {
-        let Some(pid) = entry.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else {
-            continue;
-        };
-        let Ok(fds) = std::fs::read_dir(entry.path().join("fd")) else {
-            continue;
-        };
-        for fd in fds.flatten() {
-            if std::fs::read_link(fd.path()).ok().as_deref().and_then(Path::to_str) == Some(&want) {
-                return Some(pid);
+    // 1. The user object's Display property is exactly the active graphical session.
+    if let Some(uid) = uid {
+        if let Ok(user_path) = manager.get_user(uid).await {
+            if let Ok(builder) = LoginUserProxy::builder(conn).path(user_path) {
+                if let Ok(user) = builder.build().await {
+                    if let Ok((sid, _path)) = user.display().await {
+                        if !sid.is_empty() {
+                            return Some(sid);
+                        }
+                    }
+                }
             }
         }
     }
-    None
-}
 
-/// The login session that is actually running the y5 compositor.
-///
-/// polkit routes an auth request to the agent registered for the *requesting
-/// process's* session. That process lives in the compositor's session, which is
-/// NOT necessarily the logind "active"/`Display` session (that one is often the
-/// display-manager's GNOME/GDM login). We pin it down by finding the process that
-/// owns our Wayland socket and asking logind which session that PID is in.
-async fn session_of_compositor(conn: &connection::Connection) -> Option<String> {
-    let socket = wayland_socket_path()?;
-    let inode = listening_socket_inode(&socket)?;
-    let pid = pid_owning_socket(inode)?;
-    let manager = LoginManagerProxy::new(conn).await.ok()?;
-    let sess_path = manager.get_session_by_pid(pid).await.ok()?;
-    let session = LoginSessionProxy::builder(conn)
-        .path(sess_path)
-        .ok()?
-        .build()
-        .await
-        .ok()?;
-    session.id().await.ok().filter(|s| !s.is_empty())
-}
-
-/// Fallback: scan logind for any active graphical session owned by our uid. Used
-/// only if the compositor-socket probe fails (e.g. headless test); on a multi-session
-/// host this can pick the wrong one, so it ranks below the socket probe.
-async fn active_graphical_session(conn: &connection::Connection) -> Option<String> {
-    let manager = LoginManagerProxy::new(conn).await.ok()?;
-    let uid = current_uid();
+    // 2. Fall back to scanning every session for an active graphical one.
     let sessions = manager.list_sessions().await.ok()?;
     let mut active_any: Option<String> = None;
     for (sid, suid, _user, _seat, path) in sessions {
@@ -311,7 +261,8 @@ async fn active_graphical_session(conn: &connection::Connection) -> Option<Strin
         let Ok(session) = builder.build().await else {
             continue;
         };
-        if !session.active().await.unwrap_or(false) {
+        let active = session.active().await.unwrap_or(false);
+        if !active {
             continue;
         }
         let stype = session.type_().await.unwrap_or_default();
@@ -323,18 +274,11 @@ async fn active_graphical_session(conn: &connection::Connection) -> Option<Strin
     active_any
 }
 
-/// Resolve the logind session to register the agent for. Prefer the session that
-/// actually runs the compositor we display on; degrade to active-graphical, then to
-/// cgroup/env heuristics.
+/// Resolve the logind session to register the agent for, preferring live
+/// logind discovery and degrading gracefully to cgroup/env heuristics.
 async fn resolve_session_id(conn: &connection::Connection) -> String {
-    if let Some(sid) = session_of_compositor(conn).await {
-        println!("[Daemon] Session via Wayland compositor socket owner: {sid}");
-        return sid;
-    }
-    if let Some(sid) = active_graphical_session(conn).await {
-        eprintln!(
-            "[Daemon] Compositor-socket probe failed; using active graphical session: {sid}"
-        );
+    if let Some(sid) = discover_active_session(conn).await {
+        println!("[Daemon] Discovered active graphical session via logind: {sid}");
         return sid;
     }
     eprintln!("[Daemon] logind discovery failed; falling back to cgroup/env.");
