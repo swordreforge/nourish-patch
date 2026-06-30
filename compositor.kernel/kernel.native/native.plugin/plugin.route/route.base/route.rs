@@ -5,13 +5,15 @@
 //! - Added(new, preference-allowed)  -> register (bookkeeping; single-GPU
 //!   policy drives only the primary)
 //! - Added(known)                    -> ignore (re-announce)
-//! - Changed(primary)                -> connector rescan + diff; losing the
-//!   ACTIVE connector panics (multi-connector reaction is out of scope and
-//!   silently degrading is not an option); a newly connected connector is
-//!   logged as ignored-by-policy (single-output era)
+//! - Changed(primary)                -> connector rescan + diff; ANY change on the
+//!   driven device returns `true` so the caller reconciles the active output
+//!   (fail over to another connected monitor, or go dark + wait — see
+//!   `display.switch::reconcile`). No longer panics on active-connector loss.
 //! - Removed(primary)                -> panic (the device under the running
 //!   pipe is gone; not self-recovering)
 //! - Removed(secondary)              -> bookkeeping cleanup
+//!
+//! Returns `true` when the caller should reconcile the active output.
 
 use compositor_kernel_drm_connector_diff_base::diff;
 use compositor_kernel_gpu_registry_node_base::node::NodeRegistry;
@@ -28,7 +30,7 @@ pub fn route(
     topology: &mut Topology,
     rank: &GpuRank,
     ctx_rc: &Rc<RefCell<NativeRenderContext>>,
-) {
+) -> bool {
     use compositor_kernel_native_device_delegate_base::delegate::{classify, DeviceClass};
     use compositor_kernel_native_device_select_base::select::{decide, Decision};
 
@@ -57,6 +59,7 @@ pub fn route(
                 },
                 DeviceClass::Unknown => {}
             }
+            false
         }
         DeviceEvent::Changed { device_id } => {
             let is_primary = registry
@@ -65,7 +68,7 @@ pub fn route(
                 .unwrap_or(false);
             if !is_primary {
                 trace!("change on non-driven device; bookkeeping only: {device_id:?}");
-                return;
+                return false;
             }
 
             // Connector rescan on the driven device, through the hosted manager.
@@ -75,6 +78,7 @@ pub fn route(
             let res = compositor_kernel_drm_connector_scan_base::scan::resources(drm);
             let infos = compositor_kernel_drm_connector_scan_base::scan::connectors(drm, &res);
             let new_snapshot = diff::ConnectorSnapshot::take(&infos);
+            let active_connector = ctx.connector;
             drop(manager);
             drop(ctx);
 
@@ -86,20 +90,19 @@ pub fn route(
             topology.set_snapshot(device_id, new_snapshot);
 
             for handle in &changes.disconnected {
-                if topology.is_active_connector(device_id, *handle) {
-                    abort!(
-                        "active connector {handle:?} disconnected; multi-connector reaction is \
-                         out of scope and degrading silently is not an option"
-                    );
+                if *handle == active_connector {
+                    // No longer fatal: the caller reconciles the active output
+                    // (fail over to another monitor, or go dark + wait).
+                    warn!("active connector {handle:?} disconnected; reconciling output");
+                } else {
+                    info!("inactive connector disconnected: {handle:?}");
                 }
-                info!("inactive connector disconnected: {handle:?}");
             }
             for handle in &changes.connected {
-                warn!(
-                    "connector connected; ignored by single-output policy \
-                     (not a failure): {handle:?}"
-                );
+                info!("connector connected: {handle:?}; reconciling output");
             }
+            // Any topology change on the driven device → reconcile (idempotent).
+            !changes.is_empty()
         }
         DeviceEvent::Removed { device_id } => {
             let was_primary = registry
@@ -112,6 +115,7 @@ pub fn route(
             registry.remove(device_id);
             topology.remove_device(device_id);
             info!("secondary DRM device removed; bookkeeping cleaned: {device_id:?}");
+            false
         }
     }
 }
