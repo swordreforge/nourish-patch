@@ -309,32 +309,42 @@ pub fn reconcile(state: &mut Loop, ctx_rc: &Ctx) -> Option<OutputChange> {
         state.loop_handle.remove(b.timer);
     }
     let was_dark = ctx.drm_output.is_none();
-    let (connected, active_ok) = {
+    let connected = {
         let mgr = ctx.drm_output_manager.borrow();
         let drm = mgr.device();
         let res = compositor_kernel_drm_connector_scan_base::scan::resources(drm);
         let infos = compositor_kernel_drm_connector_scan_base::scan::connectors(drm, &res);
-        let connected: Vec<connector::Info> =
-            infos.into_iter().filter(|i| i.state() == connector::State::Connected).collect();
-        let active_ok = connected.iter().any(|i| i.handle() == ctx.connector);
-        (connected, active_ok)
+        infos.into_iter().filter(|i| i.state() == connector::State::Connected).collect::<Vec<_>>()
     };
-    // Still driving a connected output → no output change needed, but a monitor may
-    // have (dis)connected without touching the active one (e.g. a second monitor
-    // plugged in). Refresh the connected-monitor list so the picker stays current.
-    if ctx.drm_output.is_some() && active_ok {
-        write_snapshots(state, &ctx);
-        return Some(OutputChange::Changed);
-    }
+    // The DESIRED output, recomputed on EVERY topology change exactly like startup:
+    // the preferred monitor (`outputs[0]` identity) if it is connected, else the
+    // first connected. This is what makes a reconnected preferred monitor reclaim
+    // the display (not just failover when the active one vanishes).
     let target = {
         let mgr = ctx.drm_output_manager.borrow();
         pick_target(mgr.device(), &connected)
     };
+    let already_desired =
+        ctx.drm_output.is_some() && target.as_ref().map(|t| t.handle()) == Some(ctx.connector);
+    info!(
+        "reconcile: {} connected, currently_dark={}, already_driving_preferred={}",
+        connected.len(),
+        was_dark,
+        already_desired
+    );
+    // Already driving the desired (preferred) output → no switch, just refresh the
+    // connected-monitor list so the picker stays current.
+    if already_desired {
+        write_snapshots(state, &ctx);
+        return Some(OutputChange::Changed);
+    }
     let Some(target) = target else {
         go_dark(state, &mut ctx);
         warn!("no monitor connected — display dark, awaiting hotplug");
         return Some(OutputChange::WentDark);
     };
+    // Drive the desired output: preferred monitor reconnected, failover to another
+    // monitor, or recover from dark — all the same "select + bring up" as startup.
     let requested = {
         let mgr = ctx.drm_output_manager.borrow();
         pref_mode(mgr.device(), &target)
@@ -345,7 +355,7 @@ pub fn reconcile(state: &mut Loop, ctx_rc: &Ctx) -> Option<OutputChange> {
             write_snapshots(state, &ctx);
             drop(ctx);
             state.schedule_redraw();
-            info!("display reconcile: driving recovered output");
+            info!("display reconcile: now driving the preferred connected output");
             Some(if was_dark { OutputChange::Recovered } else { OutputChange::Changed })
         }
         Err(e) => {

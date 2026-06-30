@@ -23,6 +23,7 @@ pub fn register(
         .handle()
         .insert_source(watch, move |event, _, state| {
             let decoded = compositor_kernel_udev_loop_event_base::event::decode(event);
+            info!("udev event received: {decoded:?}");
             let rank = compositor_kernel_graphic_preference_gpu_rank::rank::get();
             let reconcile = compositor_kernel_native_plugin_route_base::route::route(
                 decoded,

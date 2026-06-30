@@ -62,53 +62,42 @@ pub fn route(
             false
         }
         DeviceEvent::Changed { device_id } => {
-            let is_primary = registry
-                .primary()
-                .map(|p| p.dev_id() == device_id)
-                .unwrap_or(false);
+            // Match the udev device against the primary GPU by BOTH its render and
+            // card dev_id — udev reports the CARD node's dev_t for connector hotplug,
+            // but the registry stores the RENDER node. Without this every hotplug was
+            // wrongly dismissed as "non-driven device".
+            let is_primary = registry.is_primary_dev(device_id);
+            info!("udev Changed: device {device_id:?} (primary={is_primary})");
             if !is_primary {
                 trace!("change on non-driven device; bookkeeping only: {device_id:?}");
                 return false;
             }
 
-            // Connector rescan on the driven device, through the hosted manager.
+            // Connector rescan on the driven device (best-effort log of the diff).
             let ctx = ctx_rc.borrow();
             let manager = ctx.drm_output_manager.borrow();
             let drm = manager.device();
             let res = compositor_kernel_drm_connector_scan_base::scan::resources(drm);
             let infos = compositor_kernel_drm_connector_scan_base::scan::connectors(drm, &res);
             let new_snapshot = diff::ConnectorSnapshot::take(&infos);
-            let active_connector = ctx.connector;
             drop(manager);
             drop(ctx);
 
-            let old = topology
-                .snapshot(device_id)
-                .cloned()
-                .unwrap_or_default();
+            let old = topology.snapshot(device_id).cloned().unwrap_or_default();
             let changes = diff::diff(&old, &new_snapshot);
             topology.set_snapshot(device_id, new_snapshot);
-
-            for handle in &changes.disconnected {
-                if *handle == active_connector {
-                    // No longer fatal: the caller reconciles the active output
-                    // (fail over to another monitor, or go dark + wait).
-                    warn!("active connector {handle:?} disconnected; reconciling output");
-                } else {
-                    info!("inactive connector disconnected: {handle:?}");
-                }
-            }
-            for handle in &changes.connected {
-                info!("connector connected: {handle:?}; reconciling output");
-            }
-            // Any topology change on the driven device → reconcile (idempotent).
-            !changes.is_empty()
+            info!(
+                "primary device changed: +{} -{} connector(s) → reconciling output",
+                changes.connected.len(),
+                changes.disconnected.len()
+            );
+            // Always reconcile on a primary change — `reconcile` re-scans the live
+            // connectors and decides (fail over / recover / refresh) authoritatively,
+            // so it does NOT depend on the (separately-keyed) topology diff above.
+            true
         }
         DeviceEvent::Removed { device_id } => {
-            let was_primary = registry
-                .primary()
-                .map(|p| p.dev_id() == device_id)
-                .unwrap_or(false);
+            let was_primary = registry.is_primary_dev(device_id);
             if was_primary {
                 abort!("primary DRM device removed from under the running pipe");
             }
