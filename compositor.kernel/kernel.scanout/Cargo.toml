@@ -74,6 +74,7 @@ compositor_background_two_system_base = { path = "../../compositor.expansion/com
 compositor_configurator_audio_tab_base = { path = "../../compositor.extension/compositor.configurator/configurator.audio/audio.tab/tab.base" }
 compositor_configurator_bluetooth_backend_base = { path = "../../compositor.extension/compositor.configurator/configurator.bluetooth/bluetooth.backend/backend.base" }
 compositor_configurator_bluetooth_tab_base = { path = "../../compositor.extension/compositor.configurator/configurator.bluetooth/bluetooth.tab/tab.base" }
+compositor_configurator_hardware_battery_base = { path = "../../compositor.extension/compositor.configurator/configurator.hardware/hardware.battery/battery.base" }
 compositor_configurator_hardware_gpu_base = { path = "../../compositor.extension/compositor.configurator/configurator.hardware/hardware.gpu/gpu.base" }
 compositor_configurator_network_backend_base = { path = "../../compositor.extension/compositor.configurator/configurator.network/network.backend/backend.base" }
 compositor_configurator_network_tab_base = { path = "../../compositor.extension/compositor.configurator/configurator.network/network.tab/tab.base" }
