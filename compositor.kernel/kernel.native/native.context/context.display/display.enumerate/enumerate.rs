@@ -6,12 +6,29 @@
 
 use compositor_kernel_drm_edid_identity_base::identity;
 use compositor_kernel_drm_edid_parse_base::parse;
+use compositor_kernel_graphic_preference_output_profile::profile::{self, ModeRequest};
 use compositor_orchestration_driver_output_base::base::{DisplayInfo, ModeInfo, OutputsSnapshot};
 use smithay::backend::drm::DrmDevice;
 use smithay::reexports::drm::control::{connector, Mode as DrmMode};
 
 fn to_info(m: &DrmMode) -> ModeInfo {
     ModeInfo { width: m.size().0, height: m.size().1, refresh_mhz: m.vrefresh() * 1000 }
+}
+
+/// The mode saved in preferences for the monitor keyed by `edid_key` (its per-output
+/// profile's advertised mode), if set — so the picker can default an inactive monitor
+/// to its saved mode rather than the recommended one.
+fn preferred_mode(edid_key: &str) -> Option<ModeInfo> {
+    profile::get()
+        .iter()
+        .find(|p| p.identity.as_deref() == Some(edid_key))
+        .and_then(|p| p.mode.as_ref())
+        .and_then(|m| match m {
+            ModeRequest::Advertised { width, height, refresh_mhz } => {
+                Some(ModeInfo { width: *width, height: *height, refresh_mhz: *refresh_mhz })
+            }
+            _ => None,
+        })
 }
 
 /// One `DisplayInfo` per CONNECTED connector. `active`/`active_mode` identify the
@@ -43,12 +60,14 @@ pub fn enumerate(drm: &DrmDevice, active: connector::Handle, active_mode: ModeIn
         // Inactive connectors aren't driven, so they have no "current" mode; the
         // UI defaults a selection from `available`.
         let current = if is_active { Some(active_mode) } else { None };
+        let preferred = preferred_mode(&edid_key);
         displays.push(DisplayInfo {
             edid_key,
             name: label,
             connected: true,
             active: is_active,
             current,
+            preferred,
             available,
         });
     }

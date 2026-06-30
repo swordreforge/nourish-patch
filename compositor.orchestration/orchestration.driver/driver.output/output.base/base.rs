@@ -77,6 +77,10 @@ pub struct DisplayInfo {
     /// True for the connector currently driving the compositor.
     pub active: bool,
     pub current: Option<ModeInfo>,
+    /// The mode saved in preferences for THIS monitor (its per-output profile),
+    /// if any — so the picker defaults an inactive monitor to its saved mode rather
+    /// than just the recommended one. `None` when no profile mode is set.
+    pub preferred: Option<ModeInfo>,
     pub available: Vec<ModeInfo>,
 }
 

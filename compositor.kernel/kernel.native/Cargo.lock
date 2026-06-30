@@ -3472,6 +3472,7 @@ dependencies = [
  "compositor_kernel_drm_connector_scan_base",
  "compositor_kernel_drm_edid_identity_base",
  "compositor_kernel_drm_edid_parse_base",
+ "compositor_kernel_graphic_preference_output_profile",
  "compositor_orchestration_driver_output_base",
  "smithay",
 ]
@@ -8315,7 +8316,9 @@ dependencies = [
  "compositor_monitor_overview_ui_base",
  "compositor_orchestration_core_state_base",
  "compositor_orchestration_driver_settings_base",
+ "compositor_y5_overview_state_base",
  "libc",
+ "smithay",
 ]
 
 [[package]]

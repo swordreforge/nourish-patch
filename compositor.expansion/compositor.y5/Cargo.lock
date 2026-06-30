@@ -6800,7 +6800,9 @@ dependencies = [
  "compositor_monitor_overview_ui_base",
  "compositor_orchestration_core_state_base",
  "compositor_orchestration_driver_settings_base",
+ "compositor_y5_overview_state_base",
  "libc",
+ "smithay",
 ]
 
 [[package]]

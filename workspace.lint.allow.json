@@ -166,6 +166,9 @@
   "compositor.kernel/kernel.native/native.wire/wire.plugin/plugin.base": [
     "size"
   ],
+  "compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.status": [
+    "size"
+  ],
   "compositor.kernel/kernel.gles/gles.element/element.combined/combined.base": [
     "size"
   ],

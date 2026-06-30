@@ -48,7 +48,9 @@ pub struct Settings {
 /// The mode to seed the picker selection with for a display: its current mode if
 /// active, else its first advertised mode.
 fn default_mode(d: &DisplayInfo) -> Option<ModeInfo> {
-    d.current.or_else(|| d.available.first().copied())
+    // Active monitor: its live mode. Otherwise the mode SAVED IN PREFERENCES for
+    // this monitor, then the recommended (first advertised) as a last resort.
+    d.current.or(d.preferred).or_else(|| d.available.first().copied())
 }
 
 impl Settings {
