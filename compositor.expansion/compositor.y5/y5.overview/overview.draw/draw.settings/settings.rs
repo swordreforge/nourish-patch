@@ -132,6 +132,7 @@ fn destroy(state: &mut Loop, id: HandleId) {
     // provisional mode/switch change → revert it (no-op if nothing is pending).
     *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
     *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Revert);
+    state.inner.ping_control();
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() { reg.destroy_by_id(id); reg.set_keyboard_focus(None); }
     bt::command(BtCmd::Scan(false));
     let st = state.inner.kernel.get_mut(&SETTINGS_MUT);

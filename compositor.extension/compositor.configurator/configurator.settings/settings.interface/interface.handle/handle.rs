@@ -39,6 +39,7 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                     refresh_mhz: a.mode.refresh_mhz,
                 });
             }
+            state.inner.ping_control();
         }
         SettingsMessage::Keep(a) => {
             if a.switch {
@@ -62,11 +63,13 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                 });
             }
             let _ = pref::save(&state.inner.preference);
+            state.inner.ping_control();
         }
         SettingsMessage::Revert => {
             // Revert whichever gate is armed (both are no-ops if nothing pending).
             *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
             *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Revert);
+            state.inner.ping_control();
         }
         SettingsMessage::Rebind(id, combo) => {
             state.inner.keybinding.set(&id, combo);
@@ -108,6 +111,7 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             if !matches!(t, Tab::Display) {
                 *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
                 *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Revert);
+                state.inner.ping_control();
             }
         }
         SettingsMessage::Fps(_)
