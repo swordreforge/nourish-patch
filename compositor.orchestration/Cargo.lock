@@ -2053,6 +2053,7 @@ dependencies = [
  "compositor_configurator_bluetooth_backend_base",
  "compositor_configurator_network_backend_base",
  "compositor_developer_environment_config_base",
+ "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_y5_audio_controller_interface",
 ]
@@ -5350,6 +5351,16 @@ dependencies = [
  "compositor_developer_debug_instance_record",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_smithay_state_text_input_base",
+ "compositor_support_smithay_state_text_input_launch",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_support_smithay_state_text_input_launch"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_debug_instance_record",
+ "compositor_developer_environment_preference_base",
  "smithay",
 ]
 

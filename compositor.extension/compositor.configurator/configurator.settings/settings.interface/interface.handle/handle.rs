@@ -26,6 +26,12 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         SettingsMessage::Env(e) => {
             let _ = compositor_developer_environment_config_base::base::save(&e);
         }
+        SettingsMessage::Ime(ime) => {
+            // Persist the input-method launch command live to preferences.json. Applied
+            // on the next compositor start (the IME is spawned once at boot).
+            state.inner.preference.ime = Some(ime);
+            let _ = pref::save(&state.inner.preference);
+        }
         SettingsMessage::Apply(a) => {
             if a.switch {
                 *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Apply {

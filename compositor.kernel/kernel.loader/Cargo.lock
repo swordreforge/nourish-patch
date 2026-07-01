@@ -1974,9 +1974,11 @@ dependencies = [
  "compositor_configurator_settings_surface_environment",
  "compositor_configurator_settings_surface_keys",
  "compositor_configurator_settings_surface_message",
+ "compositor_configurator_settings_surface_misc",
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_config_base",
  "compositor_developer_environment_keybinding_base",
+ "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_support_iced_core_engine_base",
  "compositor_y5_audio_controller_interface",
@@ -2053,8 +2055,22 @@ dependencies = [
  "compositor_configurator_bluetooth_backend_base",
  "compositor_configurator_network_backend_base",
  "compositor_developer_environment_config_base",
+ "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_y5_audio_controller_interface",
+]
+
+[[package]]
+name = "compositor_configurator_settings_surface_misc"
+version = "0.0.1"
+dependencies = [
+ "compositor_configurator_settings_surface_control",
+ "compositor_configurator_settings_surface_message",
+ "compositor_configurator_settings_surface_style",
+ "compositor_developer_environment_preference_base",
+ "compositor_support_iced_core_engine_base",
+ "iced_core",
+ "iced_widget",
 ]
 
 [[package]]
@@ -2077,6 +2093,7 @@ dependencies = [
  "compositor_configurator_settings_surface_message",
  "compositor_developer_environment_config_base",
  "compositor_developer_environment_keybinding_base",
+ "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_support_iced_core_engine_base",
  "compositor_y5_audio_controller_interface",
@@ -3459,6 +3476,7 @@ dependencies = [
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_smithay_dispatch_wire_trait",
  "compositor_support_smithay_state_space_base",
+ "compositor_support_smithay_state_text_input_launch",
  "compositor_support_smithay_wayland_connection_record",
  "compositor_support_system_persist_engine_base",
  "compositor_support_system_storage_slot_base",
@@ -7003,6 +7021,16 @@ dependencies = [
  "compositor_developer_debug_instance_record",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_smithay_state_text_input_base",
+ "compositor_support_smithay_state_text_input_launch",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_support_smithay_state_text_input_launch"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_debug_instance_record",
+ "compositor_developer_environment_preference_base",
  "smithay",
 ]
 
