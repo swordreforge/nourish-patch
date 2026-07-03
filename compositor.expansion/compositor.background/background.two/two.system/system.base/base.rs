@@ -15,6 +15,9 @@ enum TwoCmd {
     Tick,
     Pan(f32, f32),
     Zoom(f32),
+    /// New output size — applied IN PLACE (keeps `start_time`/`commit`), never a
+    /// recreate. See the size-change note in `update()`.
+    Resize(f32, f32),
 }
 y5_buffer!(TWO_BUF: TwoCmd);
 
@@ -43,8 +46,17 @@ impl System for TwoSystem {
         let size = cx.kernel.get(&compositor_orchestration_smithay_data_base::data::SCREEN).size;
         let size = (size.w as f32, size.h as f32);
         let state = cx.storage.get(&BG_TWO);
+        // A size change must NOT recreate the instance. With multiple outputs of
+        // differing sizes this `update()` runs once PER OUTPUT, each with that
+        // output's `SCREEN` size, so a size-triggered rebuild would fire every
+        // frame — resetting `start_time` (freezing the shader clock at ~0) and the
+        // `commit` counter (no damage → the per-frame reschedule dies and the
+        // parallax stops animating). Only a MISSING instance forces a full rebuild
+        // (shader/params edits null the slot from the rim); a size change resizes
+        // IN PLACE below (the shader is size-independent — `build()` ignores size,
+        // and `draw()`/`bind_pane` use the actual per-pane `dst` size).
         let stale = state.instance.as_ref().is_some_and(|i| i.output_size != size);
-        let rebuild = state.instance.is_none() || stale;
+        let rebuild = state.instance.is_none();
         // Resolve once: this world's override → preference default → built-in.
         // (Setting `instance = None` from the rim forces a rebuild on change.)
         let override_sel = state.background_shader.clone();
@@ -63,6 +75,13 @@ impl System for TwoSystem {
                 cx.write(&TWO_BUF, TwoCmd::SetInstance(instance));
             }
             return;
+        }
+        // Keep the instance's own size current (used by the non-pane overview /
+        // full-screen draw's `geometry()` damage rect) WITHOUT recreating it — each
+        // output's `update()`+draw run in the same prepare, so this hands the frame
+        // its output's size while the animation clock and commit counter survive.
+        if stale {
+            cx.write(&TWO_BUF, TwoCmd::Resize(size.0, size.1));
         }
         // Advance the parallax animation (mutation -> buffer, honoring read-only update).
         cx.write(&TWO_BUF, TwoCmd::Tick);
@@ -87,6 +106,7 @@ impl System for TwoSystem {
             TwoCmd::Tick => { if let Some(i) = &mut two.instance { i.update(); } }
             TwoCmd::Pan(x, y) => { if let Some(i) = &mut two.instance { i.pan = (x, y); } }
             TwoCmd::Zoom(z) => { if let Some(i) = &mut two.instance { i.zoom = z; } }
+            TwoCmd::Resize(w, h) => { if let Some(i) = &mut two.instance { i.output_size = (w, h); } }
         }
     }
 

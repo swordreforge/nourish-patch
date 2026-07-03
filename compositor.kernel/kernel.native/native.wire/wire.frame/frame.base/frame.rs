@@ -67,6 +67,18 @@ pub fn register(
                     state,
                     compositor_kernel_native_render_execute_base::execute::RenderScope::All,
                 );
+                // Lost-wakeup guard: if this ping fired while a flip was still in
+                // flight, execute(All) SKIPPED that pipe (its `in_flight` guard) and
+                // re-armed nothing, yet `take_needs_redraw()` above already consumed
+                // the latch. That pipe's vblank runs `take_needs_redraw()` next and
+                // would find it cleared → no re-render, no further flip, and the
+                // parallax's non-pinging `schedule_redraw_post_vblank` cannot restart
+                // an idle cycle: the loop freezes until the next input schedule_redraw.
+                // Re-arm (post_vblank = set, no ping) so the pending vblank still
+                // re-renders. No-op when nothing is in flight (avoids a busy spin).
+                if context_ping.borrow().outputs.iter().any(|p| p.in_flight) {
+                    state.schedule_redraw_post_vblank();
+                }
                 handle_outcome(
                     outcome,
                     &loop_handle_ping,
