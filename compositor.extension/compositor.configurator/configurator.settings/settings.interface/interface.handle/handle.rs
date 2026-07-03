@@ -40,6 +40,27 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         SettingsMessage::Env(e) => {
             let _ = compositor_developer_environment_config_base::base::save(&e);
         }
+        SettingsMessage::Ime(ime) => {
+            // Persist the input-method launch command live to preferences.json. Applied
+            // on the next compositor start (the IME is spawned once at boot).
+            state.inner.preference.ime = Some(ime);
+            let _ = pref::save(&state.inner.preference);
+        }
+        SettingsMessage::Keyboard(kl) => {
+            // Persist AND apply the keyboard layout live: mutate the preference, save,
+            // then recompile the keymap on the seat's keyboard. `get_keyboard()` hands
+            // back an owned handle, so `&mut state.state` can be borrowed alongside the
+            // `&state.inner.preference` read (disjoint fields of `Loop`).
+            state.inner.preference.keyboard = kl;
+            let _ = pref::save(&state.inner.preference);
+            if let Some(keyboard) = state.state.seat.seat.get_keyboard() {
+                compositor_support_smithay_state_seat_xkb::xkb::apply(
+                    &keyboard,
+                    &mut state.state,
+                    &state.inner.preference.keyboard,
+                );
+            }
+        }
         SettingsMessage::Apply(a) => {
             // Per-pipe mode change on the SELECTED monitor (multi-output: every output
             // is independently driven, so this is never an active-output switch).
@@ -49,6 +70,7 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                 height: a.mode.height,
                 refresh_mhz: a.mode.refresh_mhz,
             });
+            state.inner.ping_control();
         }
         SettingsMessage::Keep(a) => {
             *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Confirm);
@@ -59,9 +81,11 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                 refresh_mhz: a.mode.refresh_mhz,
             });
             let _ = pref::save(&state.inner.preference);
+            state.inner.ping_control();
         }
         SettingsMessage::Revert => {
             *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
+            state.inner.ping_control();
         }
         SettingsMessage::Rebind(id, combo) => {
             state.inner.keybinding.set(&id, combo);
@@ -102,6 +126,7 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             // (a no-op in the kernel if nothing is pending).
             if !matches!(t, Tab::Display) {
                 *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
+                state.inner.ping_control();
             }
         }
         // Cursor-teleport layout committed on drag-end: persist the whole
@@ -147,6 +172,9 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             }
             let _ = pref::save(&state.inner.preference);
             *state.inner.kernel.get_mut(&OUTPUT_RECONCILE_REQUEST_MUT) = true;
+            // Wake the control-plane ping so the kernel drains the reconcile request
+            // input-independently (it is no longer drained on the libinput source).
+            state.inner.ping_control();
         }
         SettingsMessage::SetCyclic(b) => {
             state.inner.preference.teleport_cyclic = b;

@@ -116,7 +116,9 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
     let tab = compositor_configurator_settings_surface_message::message::Tab::from_index(state.inner.kernel.get(&SETTINGS).tab);
     let layout = state.inner.preference.outputs_layout.clone();
     let cyclic = state.inner.preference.teleport_cyclic;
-    let ui = Settings::new(env, cursor, natural, snap, keys, tab, layout, cyclic);
+    let ime = state.inner.preference.ime.clone().unwrap_or_default();
+    let keyboard = state.inner.preference.keyboard.clone();
+    let ui = Settings::new(env, cursor, natural, snap, keys, tab, layout, cyclic, ime, keyboard);
     let handle = load(state, renderer, ui, rect, IcedSpace::Screen, Layer::SCENE.bits());
     install_handler(state, handle);
     let untyped = handle.untyped();
@@ -135,6 +137,7 @@ fn destroy(state: &mut Loop, id: HandleId) {
     // Closing settings (Esc / overview-tab switch / overview close) abandons any
     // provisional mode change → revert it (no-op if nothing is pending).
     *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
+    state.inner.ping_control();
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() { reg.destroy_by_id(id); reg.set_keyboard_focus(None); }
     bt::command(BtCmd::Scan(false));
     let st = state.inner.kernel.get_mut(&SETTINGS_MUT);

@@ -104,6 +104,61 @@ pub struct Preference {
     /// layout (toroidal), instead of clamping. Default `false` (clamp at the edge).
     #[serde(default)]
     pub teleport_cyclic: bool,
+    /// The input method the compositor launches at startup. y5 spawns exactly this
+    /// process and grants the input-method / virtual-keyboard globals (system-wide
+    /// input power) ONLY to that process group — so identity is the spawned pid, never
+    /// a guessed `/proc` match. When unset (or `exec` empty), y5 launches no input
+    /// method — there is no built-in default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ime: Option<Ime>,
+    /// Keyboard layout (xkb). Applied live on change and at startup. Defaults to
+    /// `Env` so an existing `preferences.json` (no `keyboard` key) behaves exactly
+    /// as before — libxkbcommon reads the `XKB_DEFAULT_*` environment.
+    pub keyboard: KeyboardLayout,
+}
+
+/// Where the keyboard layout comes from. `Env` (the historical default) leaves the
+/// xkb config empty so libxkbcommon reads the `XKB_DEFAULT_*` environment variables;
+/// `Manual` uses the explicit [`KeyboardLayout`] fields.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LayoutSource {
+    /// Read layout/variant/options from the `XKB_DEFAULT_*` environment.
+    Env,
+    /// Use the explicit `layout`/`variant`/`options` fields.
+    Manual,
+}
+
+/// Keyboard layout (xkb) preference. Applied live on change and at startup via
+/// `compositor_support_smithay_state_seat_xkb`. When `source` is `Env`, the
+/// `layout`/`variant`/`options` fields are retained (so switching back to `Manual`
+/// restores the last choice) but not used.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyboardLayout {
+    pub source: LayoutSource,
+    /// Comma-separated xkb layout code(s), e.g. `"se"`, `"no"`, `"us,se"`.
+    pub layout: String,
+    /// Comma-separated xkb variant(s), one per layout (may be empty).
+    pub variant: String,
+    /// xkb options, e.g. `"grp:alt_shift_toggle,caps:escape"` (may be empty).
+    pub options: String,
+}
+
+impl Default for KeyboardLayout {
+    fn default() -> Self {
+        Self { source: LayoutSource::Env, layout: "us".into(), variant: String::new(), options: String::new() }
+    }
+}
+
+/// The input-method program y5 launches, e.g. `{ "exec": "fcitx5", "args": ["-r"] }`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Ime {
+    /// Executable to run (looked up on `PATH`). Empty = launch nothing.
+    pub exec: String,
+    /// Arguments passed to `exec`. Do NOT pass a daemonizing flag (`-d`): y5 must keep
+    /// the process as a direct child to know its pid/process-group.
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 impl Default for Preference {
@@ -115,6 +170,8 @@ impl Default for Preference {
             outputs_default_mode: None,
             outputs_layout: Vec::new(),
             teleport_cyclic: false,
+            ime: None,
+            keyboard: KeyboardLayout::default(),
         }
     }
 }

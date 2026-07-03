@@ -2,6 +2,7 @@
 //! `surface.chrome`. All edit messages forward to the surface handler; `Tab`, the
 //! display selection, and the optimistic confirm state are handled locally.
 use compositor_developer_environment_config_base::base::Environment;
+use compositor_developer_environment_preference_base::base::{Ime, KeyboardLayout};
 use compositor_developer_environment_keybinding_base::base::KeyRow;
 use compositor_developer_environment_preference_base::base::LayoutPlacement;
 use compositor_orchestration_driver_output_base::base::{ApplyResult, DisplayInfo, ModeInfo, OutputsSnapshot};
@@ -19,6 +20,10 @@ pub struct Settings {
     pub cursor_sensitivity: f32,
     pub natural_scroll: bool,
     pub env: Environment,
+    /// Input-method launch command (Misc tab), persisted to preferences.json.
+    pub ime: Ime,
+    /// Keyboard layout (Misc tab), persisted + applied live.
+    pub keyboard: KeyboardLayout,
     pub dirty: bool,
     /// Every connected monitor (active + connected-but-inactive), for the picker.
     pub displays: Vec<DisplayInfo>,
@@ -102,7 +107,7 @@ fn default_mode(d: &DisplayInfo) -> Option<ModeInfo> {
 }
 
 impl Settings {
-    pub fn new(env: Environment, cursor: f32, natural: bool, snap: OutputsSnapshot, keys: Vec<KeyRow>, tab: Tab, layout: Vec<LayoutPlacement>, cyclic: bool) -> Self {
+    pub fn new(env: Environment, cursor: f32, natural: bool, snap: OutputsSnapshot, keys: Vec<KeyRow>, tab: Tab, layout: Vec<LayoutPlacement>, cyclic: bool, ime: Ime, keyboard: KeyboardLayout) -> Self {
         let active = snap.displays.iter().find(|d| d.active).cloned();
         let active_edid = active.as_ref().map(|d| d.edid_key.clone()).unwrap_or_default();
         let selected_mode = active.as_ref().and_then(default_mode);
@@ -112,6 +117,8 @@ impl Settings {
             cursor_sensitivity: cursor,
             natural_scroll: natural,
             env,
+            ime,
+            keyboard,
             dirty: false,
             displays: snap.displays,
             active_edid: active_edid.clone(),
@@ -204,6 +211,8 @@ impl IcedUi for Settings {
                 self.env = e;
                 self.dirty = true;
             }
+            SettingsMessage::Ime(i) => self.ime = i,
+            SettingsMessage::Keyboard(k) => self.keyboard = k,
             SettingsMessage::SelectDisplay(key) => {
                 self.selected_display = key.clone();
                 self.seed_selection(&key);
@@ -377,6 +386,8 @@ impl IcedUi for Settings {
             self.selected_placement,
             self.cyclic,
             self.selected_inactive,
+            &self.ime,
+            &self.keyboard,
         )
     }
 }

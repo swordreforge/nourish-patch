@@ -1913,6 +1913,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "compositor_configurator_hardware_battery_base"
+version = "0.0.1"
+
+[[package]]
 name = "compositor_configurator_hardware_gpu_base"
 version = "0.0.1"
 
@@ -1950,6 +1954,7 @@ dependencies = [
  "compositor_orchestration_driver_audio_base",
  "compositor_orchestration_driver_output_base",
  "compositor_orchestration_driver_settings_base",
+ "compositor_support_smithay_state_seat_xkb",
  "compositor_y5_audio_controller_interface",
  "smithay",
 ]
@@ -1970,6 +1975,7 @@ dependencies = [
  "compositor_configurator_settings_surface_environment",
  "compositor_configurator_settings_surface_keys",
  "compositor_configurator_settings_surface_message",
+ "compositor_configurator_settings_surface_misc",
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_config_base",
  "compositor_developer_environment_keybinding_base",
@@ -2032,6 +2038,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "compositor_configurator_settings_surface_keyboard"
+version = "0.0.1"
+dependencies = [
+ "compositor_configurator_settings_surface_control",
+ "compositor_configurator_settings_surface_message",
+ "compositor_configurator_settings_surface_style",
+ "compositor_developer_environment_preference_base",
+ "compositor_support_iced_core_engine_base",
+ "iced_core",
+ "iced_widget",
+]
+
+[[package]]
 name = "compositor_configurator_settings_surface_keys"
 version = "0.0.1"
 dependencies = [
@@ -2054,6 +2073,20 @@ dependencies = [
  "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_y5_audio_controller_interface",
+]
+
+[[package]]
+name = "compositor_configurator_settings_surface_misc"
+version = "0.0.1"
+dependencies = [
+ "compositor_configurator_settings_surface_control",
+ "compositor_configurator_settings_surface_keyboard",
+ "compositor_configurator_settings_surface_message",
+ "compositor_configurator_settings_surface_style",
+ "compositor_developer_environment_preference_base",
+ "compositor_support_iced_core_engine_base",
+ "iced_core",
+ "iced_widget",
 ]
 
 [[package]]
@@ -3391,6 +3424,8 @@ dependencies = [
  "bitflags 2.13.0",
  "compositor_monitor_compositor_iced_base",
  "compositor_orchestration_core_state_base",
+ "compositor_orchestration_driver_lid_base",
+ "compositor_orchestration_driver_output_base",
  "compositor_orchestration_input_drive_base",
  "compositor_support_iced_core_engine_base",
  "compositor_support_system_input_event_base",
@@ -5124,6 +5159,7 @@ dependencies = [
  "bitflags 2.13.0",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_smithay_state_seat_base",
+ "compositor_support_smithay_state_seat_xkb",
  "smithay",
  "tracing",
  "tracing-subscriber",
@@ -5134,6 +5170,14 @@ name = "compositor_support_smithay_state_seat_focus"
 version = "0.0.1"
 dependencies = [
  "compositor_support_smithay_dispatch_state_base",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_support_smithay_state_seat_xkb"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_environment_preference_base",
  "smithay",
 ]
 
@@ -5232,6 +5276,16 @@ dependencies = [
  "compositor_developer_debug_instance_record",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_smithay_state_text_input_base",
+ "compositor_support_smithay_state_text_input_launch",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_support_smithay_state_text_input_launch"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_debug_instance_record",
+ "compositor_developer_environment_preference_base",
  "smithay",
 ]
 
@@ -6811,6 +6865,7 @@ dependencies = [
 name = "compositor_y5_overview_draw_status"
 version = "0.0.1"
 dependencies = [
+ "compositor_configurator_hardware_battery_base",
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_view",
  "compositor_developer_debug_instance_record",
@@ -6866,6 +6921,7 @@ dependencies = [
  "compositor_orchestration_driver_settings_base",
  "compositor_y5_camera_transform_translate",
  "compositor_y5_overview_interface_activate",
+ "compositor_y5_overview_interface_base",
  "compositor_y5_picker_seat_embed",
  "compositor_y5_picker_seat_pointer",
  "compositor_y5_surface_interface_base",

@@ -91,6 +91,13 @@ pub struct Orchestrator {
     /// flips this; `wire.input` drains it and schedules the engage on an idle (the
     /// keyboard crates can't call `lock.interface` — it depends back on them).
     pub lock_engage: bool,
+    /// Wakes the native control-plane ping source that drains the display
+    /// request queues (output mode / preferred-monitor switch / lid apply) OFF
+    /// the render and input paths. Set once by the native backend; stays `None`
+    /// on winit (no DRM modeset there). Producers call `ping_control()` right
+    /// after queuing a request instead of relying on the next input event to
+    /// drain it.
+    pub control_ping: Option<smithay::reexports::calloop::ping::Ping>,
     // Deferred request to open the world-selection screen on a coming draw.
     pub __set_picker: Option<SetPickerRequest>,
     pub status_session: StatusSession,
@@ -260,6 +267,7 @@ impl Orchestrator {
             render_output: None,
             cursor_output: None,
             lock_engage: false,
+            control_ping: None,
             __set_picker: None,
             status_session: StatusSession::Active,
             gesture: Default::default(),
@@ -356,6 +364,15 @@ impl Orchestrator {
             .find(|o| output_key(o) == key)
             .or_else(|| space.state.outputs().next())
             .expect("at least one mapped output")
+    }
+
+    /// Wake the native control-plane ping so the display request queues drain on
+    /// the next loop iteration. Call after queuing a mode/switch/lid request. A
+    /// no-op on winit (no ping registered), where those requests don't apply.
+    pub fn ping_control(&self) {
+        if let Some(ping) = &self.control_ping {
+            ping.ping();
+        }
     }
 
     /// FOCUS ACCESSOR (document/WORLD_DELEGATION.md): the camera/viewport of the
