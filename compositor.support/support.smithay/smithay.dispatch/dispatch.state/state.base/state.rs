@@ -128,6 +128,19 @@ impl Dispatch {
             if let Some(p) = &self.redraw_ping { p.ping(); }
         }
     }
+    /// Like `schedule_redraw` but ALWAYS fires the redraw ping, even while a frame is
+    /// in flight on another pipe. Needed when a NEW output pipe comes up (hotplug /
+    /// reactivation): it has never flipped, so it gets no per-CRTC vblank and the
+    /// vblank path (`RenderScope::Crtc`) never renders it — only an `All` render (the
+    /// ping) gives it its first frame and starts its own vblank cycle. The ping's
+    /// `execute(All)` skips per-pipe `in_flight` outputs, so forcing it mid-flight only
+    /// renders the idle (new) pipe. Without this the new output stays dark until a full
+    /// resume render (e.g. VT switch).
+    #[inline]
+    pub fn force_redraw(&mut self) {
+        self.needs_redraw = true;
+        if let Some(p) = &self.redraw_ping { p.ping(); }
+    }
     #[inline]
     pub fn take_needs_redraw(&mut self) -> bool { std::mem::replace(&mut self.needs_redraw, false) }
     #[inline]
@@ -276,7 +289,7 @@ mod handler_impls {
     use std::sync::Mutex;
     use smithay::backend::allocator::dmabuf::Dmabuf;
     use smithay::backend::renderer::utils::on_commit_buffer_handler;
-    use smithay::desktop::PopupKind;
+    use smithay::desktop::{PopupKind, PopupManager, find_popup_root_surface};
     use smithay::input::{Seat, SeatState};
     use smithay::input::dnd::{DnDGrab, DndGrabHandler, GrabType, Source};
     use smithay::input::pointer::{Focus, PointerHandle};
@@ -342,9 +355,25 @@ mod handler_impls {
             if let Err(err) = self.popup.state.track_popup(PopupKind::from(surface)) {
                 warn!("failed to track input-method popup err={err:?}");
             }
+            self.schedule_redraw();
         }
-        fn dismiss_popup(&mut self, _surface: smithay::wayland::input_method::PopupSurface) {}
-        fn popup_repositioned(&mut self, _surface: smithay::wayland::input_method::PopupSurface) {}
+        fn dismiss_popup(&mut self, surface: smithay::wayland::input_method::PopupSurface) {
+            // IME-scoped: untrack ONLY this popup from the shared PopupManager, never a
+            // blanket clear (xdg popups live in the same manager). smithay calls this from
+            // deactivate / re-activate while the popup still holds its (old) parent, so the
+            // root surface is resolvable and we remove exactly this node.
+            let kind = PopupKind::from(surface);
+            if let Ok(root) = find_popup_root_surface(&kind) {
+                let _ = PopupManager::dismiss_popup(&root, &kind);
+            }
+            self.schedule_redraw();
+        }
+        fn popup_repositioned(&mut self, _surface: smithay::wayland::input_method::PopupSurface) {
+            // The popup's location is read live from the surface at render time
+            // (`PopupKind::location()` → `set_text_input_rectangle`), so a reposition only
+            // needs a repaint — there is no cached position to update here.
+            self.schedule_redraw();
+        }
         fn parent_geometry(&self, parent: &WlSurface) -> Rectangle<i32, Logical> {
             self.geometries.get(parent).copied().unwrap_or_default()
         }

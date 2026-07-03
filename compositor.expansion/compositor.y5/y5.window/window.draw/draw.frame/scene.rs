@@ -26,9 +26,9 @@ use smithay::backend::renderer::element::{Id, Kind};
 use smithay::backend::renderer::utils::{CommitCounter, RendererSurfaceStateUserData, SurfaceView};
 use smithay::backend::renderer::element::solid::SolidColorRenderElement;
 use smithay::backend::renderer::{ImportAll, ImportMem, Renderer, Texture};
-use smithay::desktop::{PopupManager, Window};
+use smithay::desktop::{PopupKind, PopupManager, Window};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Physical, Point, Rectangle, Scale, Size};
+use smithay::utils::{Logical, Physical, Point, Rectangle, Scale, Size};
 use smithay::wayland::compositor::{SurfaceData, with_states};
 use smithay::wayland::seat::WaylandFocus;
 use compositor_y5_camera_transform_translate::slot;
@@ -46,6 +46,11 @@ fn view_of(states: &SurfaceData) -> Option<SurfaceView> {
         .data_map
         .get::<RendererSurfaceStateUserData>()
         .and_then(|m| m.lock().ok().and_then(|g| g.view()))
+}
+
+/// Logical `dst` size of a (popup) surface, used to keep IME popups fully on-screen.
+fn popup_dst(surface: &WlSurface) -> Option<Size<i32, Logical>> {
+    with_states(surface, |s| view_of(s)).map(|v| v.dst)
 }
 
 fn project_point(ctx: XformCtx, x: f64, y: f64) -> Point<i32, Physical> {
@@ -114,7 +119,7 @@ where
         state, renderer, size, window, context,
     );
 
-    let ctx = state.size_context();
+    let ctx = state.viewport_context();
     let output_scale = ctx.scale * state.inner.camera_mut().transform.zoom();
     let zoom = ctx.camera_zoom;
     let cfg = compositor_developer_environment_config_base::base::get();
@@ -176,11 +181,36 @@ where
         let render_at = project_point(ctx, (elem_loc.x - gloc.x) as f64, (elem_loc.y - gloc.y) as f64);
         for (popup, location) in PopupManager::popups_for_surface(&root_surface) {
             let pg = popup.geometry().loc;
-            let pl = project_point(
+            let mut pl = project_point(
                 ctx,
                 (elem_loc.x + location.x - pg.x) as f64,
                 (elem_loc.y + location.y - pg.y) as f64,
             );
+            if matches!(&popup, PopupKind::InputMethod(_)) {
+                // IME popups render at a CONSTANT readable size (screen scale, no zoom); position
+                // still tracks the caret. Clamped to the output since this path has no fit/crop.
+                if let Some(sz) = popup_dst(popup.wl_surface()) {
+                    let pw = (sz.w as f64 * ctx.scale).round() as i32;
+                    let ph = (sz.h as f64 * ctx.scale).round() as i32;
+                    pl.x = pl.x.clamp(0, (size.w - pw).max(0));
+                    pl.y = pl.y.clamp(0, (size.h - ph).max(0));
+                }
+                let native: Vec<WaylandSurfaceRenderElement<R>> = render_elements_from_surface_tree(
+                    renderer,
+                    popup.wl_surface(),
+                    pl,
+                    Scale::from(ctx.scale),
+                    1.0,
+                    Kind::Unspecified,
+                );
+                elements.extend(native.into_iter().map(|inner| {
+                    Element::Window(ClampOpaque {
+                        inner: ElementWindowSurface { inner, zoom: ctx.scale },
+                        screen: size,
+                    })
+                }));
+                continue;
+            }
             render_native(renderer, &mut elements, popup.wl_surface(), pl);
         }
         elements.extend(decoration.into_iter().map(Element::SolidBox));
@@ -207,7 +237,20 @@ where
     let rescale = Scale::from((fit_sx * zoom, fit_sy * zoom));
     let reloc = project_point(ctx, fit_surf_x, fit_surf_y);
     let crop_slot = project_rect(ctx, elem_loc.x as f64, elem_loc.y as f64, slot_size.w as f64, slot_size.h as f64);
-    let crop_output = Rectangle::new(Point::from((0, 0)), size);
+    // When rendering a split/floating viewport pane, clamp content + popups to the
+    // pane's physical rect so a window near the pane edge can't bleed into the
+    // neighbour pane. Full-output render (no render target) → the whole output.
+    let pane = state.inner.render_target.map(|rt| {
+        Rectangle::new(
+            Point::from(((rt.origin_logical.0 * ctx.scale).round() as i32, (rt.origin_logical.1 * ctx.scale).round() as i32)),
+            Size::from((rt.size_physical.0.round() as i32, rt.size_physical.1.round() as i32)),
+        )
+    });
+    let crop_output = pane.unwrap_or(Rectangle::new(Point::from((0, 0)), size));
+    let crop_slot = match pane {
+        Some(p) => crop_slot.intersection(p).unwrap_or_default(),
+        None => crop_slot,
+    };
 
     // Popups (front): positioned in the SAME fit frame as the content so they stick to the
     // rendered window content, not the raw slot. A popup's `location` is geometry-relative, but
@@ -229,6 +272,37 @@ where
         let pg = popup.geometry().loc;
         let off_x = (gbase.x as f64 + (location.x - pg.x) as f64 * psx) * ctx.scale;
         let off_y = (gbase.y as f64 + (location.y - pg.y) as f64 * psy) * ctx.scale;
+        if matches!(&popup, PopupKind::InputMethod(_)) {
+            // IME candidate popups: the anchor POSITION still tracks the caret through the camera
+            // (`reloc + off*rescale`, so it follows pan/zoom), but the SIZE is held constant —
+            // rendered at screen scale with `rescale = 1` (no zoom, no window fit) so the list
+            // stays a readable size at any zoom, mirroring the screen-space selection UI. Then
+            // clamped to the output at that constant size so it never spills off-screen. xdg
+            // popups (below) keep scaling with the pannable world.
+            let mut ax = reloc.x as f64 + off_x * rescale.x;
+            let mut ay = reloc.y as f64 + off_y * rescale.y;
+            if let Some(sz) = popup_dst(popup.wl_surface()) {
+                let fw = sz.w as f64 * ctx.scale;
+                let fh = sz.h as f64 * ctx.scale;
+                ax = ax.clamp(0.0, (size.w as f64 - fw).max(0.0));
+                ay = ay.clamp(0.0, (size.h as f64 - fh).max(0.0));
+            }
+            let anchor = Point::from((ax.round() as i32, ay.round() as i32));
+            let native: Vec<WaylandSurfaceRenderElement<R>> = render_elements_from_surface_tree(
+                renderer,
+                popup.wl_surface(),
+                Point::from((0, 0)),
+                Scale::from(ctx.scale),
+                1.0,
+                Kind::Unspecified,
+            );
+            for inner in native {
+                if let Some(e) = fit_wrap(inner, ctx.scale, Scale::from((1.0, 1.0)), anchor, crop_output, size) {
+                    elements.push(e);
+                }
+            }
+            continue;
+        }
         let native: Vec<WaylandSurfaceRenderElement<R>> = render_elements_from_surface_tree(
             renderer,
             popup.wl_surface(),

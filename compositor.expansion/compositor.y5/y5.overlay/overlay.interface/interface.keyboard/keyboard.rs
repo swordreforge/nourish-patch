@@ -226,33 +226,37 @@ fn sleep(state: &mut Loop) {
     if matches!(state.inner.status, compositor_orchestration_core_state_base::state::Status::Locked { .. }) {
         return; // already locked
     }
-    // Status set SYNCHRONOUSLY (sleep lock); the renderer-free engage runs off-frame
-    // — `wire.input` drains `lock_engage` and schedules `lock_logical` on an idle.
+    // Status set SYNCHRONOUSLY (sleep lock) + flag the engage, then wake the
+    // control-plane ping: its source drains `lock_engage` and runs the renderer-free
+    // `lock_logical` off-frame, event-driven (not polled per frame).
     state.inner.status = compositor_orchestration_core_state_base::state::Status::Locked {
         pending: true,
         sleep: true,
         time: std::time::Instant::now(),
     };
     state.inner.lock_engage = true;
+    state.inner.ping_control();
 }
 
 /// TEMPORARY (sanity test): make test-world `slot` (0=main, 1/2=pre-created
 /// spatial worlds) the active + spawn-target world, exercising world delegation.
 fn switch_world(state: &mut Loop, slot: usize) -> bool {
     let target = state.inner.kernel.get(&compositor_orchestration_core_state_base::state::TEST_WORLDS)[slot];
-    let output = state.inner.space_state().state.outputs().next().cloned();
+    // Capture all outputs + positions before switch (multi-output: map every one
+    // into the target world's fresh Space at its real position, not just the first).
+    let outputs: Vec<(smithay::output::Output, smithay::utils::Point<i32, smithay::utils::Logical>)> =
+        state.inner.space_state().state.outputs().map(|o| {
+            let loc = state.inner.space_state().state.output_geometry(o).map(|g| g.loc).unwrap_or_default();
+            (o.clone(), loc)
+        }).collect();
 
     state.inner.worlds.switch(target, &state.inner.kernel);
     state.inner.worlds.set_spawn_target(target);
     info!("world switch -> slot {slot} (world {target})");
 
-    if let Some(output) = output {
-        if state.inner.space_state().state.outputs().next().is_none() {
-            state
-                .inner
-                .space_state_mut()
-                .state
-                .map_output(&output, smithay::utils::Point::from((0, 0)));
+    if state.inner.space_state().state.outputs().next().is_none() {
+        for (output, loc) in &outputs {
+            state.inner.space_state_mut().state.map_output(output, *loc);
         }
     }
     true

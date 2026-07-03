@@ -48,29 +48,16 @@ pub fn register(
             // with — avoids warping the cursor / refocusing against a dead space).
             let dark = *state.inner.kernel.get(
                 &compositor_orchestration_driver_lid_base::base::DISPLAY_OFF,
-            ) || ctx_rc.borrow().drm_output.is_none();
+            ) || ctx_rc.borrow().pipe().drm_output.is_none();
             if !dark || matches!(event, InputEvent::Keyboard { .. }) {
                 compositor_orchestration_draw_state_lifecycle::lifecycle::input(state, &event);
             }
-            // A lid switch (or any input that drove the lid policy) may have
-            // queued a display request; perform it now — here so it runs even
-            // when the render loop is gated (DPMS-off) or about to be.
-            compositor_kernel_native_context_display_apply::apply::drain(state, &ctx_rc);
-            // Live output-mode change requests from the settings window (apply /
-            // confirm / revert), drained here for the same reason as the lid.
-            compositor_kernel_native_context_display_mode::mode::drain(state, &ctx_rc);
-            // Live active-output (preferred-monitor) switch requests from the
-            // settings window (apply / confirm / revert), same gate as the mode.
-            compositor_kernel_native_context_display_switch::switch::drain(state, &ctx_rc);
-            // Lock engage: the keybinding set `Status::Locked` synchronously + flagged
-            // this; run the renderer-free engage off-frame on a one-shot idle (the
-            // keyboard crates can't call `lock.interface` — it depends back on them).
-            if state.inner.lock_engage {
-                state.inner.lock_engage = false;
-                state.loop_handle.insert_idle(|state| {
-                    compositor_y5_lock_interface_base::interface::lock_logical(state);
-                });
-            }
+            // Display request queues (lid apply, settings mode change, activate/
+            // deactivate reconcile) and the lock engage are NOT drained here —
+            // draining them on the libinput source made them depend on input
+            // arriving. They run input-independently via the control-plane ping
+            // (`wire.entry`, woken by `ping_control()`, which drains apply / mode /
+            // reconcile / lock-engage on its own loop iteration).
             state.schedule_redraw();
         })
         .unwrap();

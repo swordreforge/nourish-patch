@@ -37,6 +37,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // required field is missing/malformed. It is the ONLY place env config is read.
     compositor_developer_environment_config_base::base::init();
 
+    // Aggregate the opt-in experimental `gpu_*` flags (experimental.json). Lenient:
+    // a missing/invalid file leaves the flag set empty, so defaults are unchanged.
+    // Read here, right after config; unrecognized flags are warned once below.
+    compositor_developer_environment_experimental_base::base::init();
+
     // Block SIGCHLD before any thread spawns, so the launch reaper's signalfd is
     // the sole consumer (no-op under the Direct backend).
     launch_executor::block_sigchld();
@@ -48,6 +53,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Levels come from COMPOSITOR_LOG_LEVEL.
     compositor_developer_log_process_main::spawn();
     info!("y5_compositor {VERSION}");
+
+    // Now that logging is up, surface the experimental flag state (the crate itself
+    // has no logging dep, so it can't warn at parse time).
+    {
+        use compositor_developer_environment_experimental_base::base as experimental;
+        let gpu_flags = experimental::get();
+        if !gpu_flags.is_empty() {
+            info!("experimental gpu flags active: {gpu_flags:?}");
+        }
+        if gpu_flags.contains(experimental::GpuFlags::NEGOTIATE_FORMATS) {
+            // Reserved: the bridge's wgpu engine format is fixed (Bgra8UnormSrgb) and
+            // the content is alpha-blended, so Argb8888 is the only correct fourcc.
+            warn!("gpu_negotiate_formats has no effect: the bridge render format is fixed");
+        }
+        for f in experimental::unknown() {
+            warn!("ignoring unrecognized experimental flag: {f:?}");
+        }
+    }
 
     // Arm the persistence engine (spawn its writer thread) before any world flushes.
     compositor_support_system_persist_engine_base::base::init();
@@ -71,6 +94,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("COMPOSITOR_VRR".to_string(), e.vrr.to_string()),
         ("COMPOSITOR_RENDER_NODE".to_string(), e.render_node.clone()),
         ("COMPOSITOR_LOG_LEVEL".to_string(), e.log_level.clone()),
+        (
+            "EXPERIMENTAL_GPU_FLAGS".to_string(),
+            format!("{:?}", compositor_developer_environment_experimental_base::base::get()),
+        ),
     ];
     compositor_developer_stats_registry_base::base::set_env_flags(env_flags);
 
@@ -95,6 +122,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(all(feature = "backend-winit", not(feature = "backend-native")))]
     {
         nested = true;
+    }
+
+    // Session compositor (native backend): scrub WAYLAND_DISPLAY / DISPLAY from
+    // OUR OWN environment before ANY GPU init. The Mesa `VK_LAYER_MESA_device_select`
+    // Vulkan layer, inside `vkEnumeratePhysicalDevices`, connects to $WAYLAND_DISPLAY
+    // and does a BLOCKING wl_display roundtrip to discover the "current" compositor's
+    // GPU — while holding the Vulkan loader's global mutex. We are the compositor, not
+    // a client; worse, an inherited *stale* WAYLAND_DISPLAY (leaked into the systemd
+    // user-manager env by a prior session's `announce_session` and reused as our own
+    // not-yet-listening socket name) makes that roundtrip block forever. Two Vulkan
+    // instances come up concurrently at startup — the `VulkanRenderer` on this thread
+    // and the wgpu context on a worker — so the worker stalls inside the layer holding
+    // the loader mutex and this thread's `vkCreateInstance` deadlocks on it: the
+    // compositor hangs BEFORE the event loop starts (no seat/DRM-master involvement —
+    // confirmed by backtrace). First-boot login has no WAYLAND_DISPLAY so it works;
+    // every login after a successful session inherits the stale one and hangs. We
+    // re-export WAYLAND_DISPLAY to our REAL socket for children later, after the
+    // backend is wired. Nested/winit dev keeps it: there the host display is live, so
+    // the layer's roundtrip is both wanted and non-blocking.
+    if !nested {
+        unsafe {
+            std::env::remove_var("WAYLAND_DISPLAY");
+            std::env::remove_var("DISPLAY");
+        }
+        info!("cleared inherited WAYLAND_DISPLAY/DISPLAY before GPU init (native session compositor)");
     }
 
     info!("Creating the loop loader");
@@ -446,6 +498,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // orchestration as the general per-world `Executed` event.
     launch_executor::install(&mut state, &event_loop.handle());
 
+    // Launch the compositor-owned input method configured in `preferences.json`
+    // (`ime: { exec, args }`); unset ⇒ none is launched. Must be AFTER WAYLAND_DISPLAY is exported
+    // (above) so it connects to OUR socket; the spawned process group is the ONLY client
+    // authorized to bind the input-method / virtual-keyboard globals (see `text.input.launch`).
+    compositor_support_smithay_state_text_input_launch::launch::launch(
+        state.inner.preference.ime.clone(),
+    );
+
     // Sampling heartbeat — a sparing, multi-level demo of live developer logs (so the
     // viewer shows activity over time and its level filters can be exercised). Remove when
     // not demoing.
@@ -468,7 +528,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // the thread to exit cleanly when state's sampler field is dropped.
     info!("Event Loop start");
     event_loop.run(None, &mut state, move |_| {
-        // Is now running
+        // Is now running. (Input-independent control-plane work — display drains,
+        // lock engage — is ping-driven via `state.inner.ping_control()`, drained
+        // in the backend's control-plane ping source, NOT polled per dispatch.)
     })?;
 
     Ok(())

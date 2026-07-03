@@ -55,6 +55,7 @@ compositor_kernel_vulkan_renderer_core_base = { workspace = true, optional = tru
 compositor_orchestration_draw_state_lifecycle.workspace = true
 compositor_orchestration_core_state_base.workspace = true
 compositor_support_smithay_dispatch_state_base.workspace = true
+compositor_support_smithay_state_text_input_launch.workspace = true
 compositor_support_smithay_dispatch_wire_trait.workspace = true
 compositor_support_smithay_wayland_connection_record.workspace = true
 compositor_support_library_debug_client_base.workspace = true
@@ -68,6 +69,8 @@ compositor_developer_log_process_main = { workspace = true }
 compositor_developer_debug_instance_record = { workspace = true }
 # Central environment config — read once at the very top of main() (before logging).
 compositor_developer_environment_config_base = { workspace = true }
+# Opt-in experimental gpu_* flags — read once right after config (before logging).
+compositor_developer_environment_experimental_base = { workspace = true }
 compositor_y5_picker_world_restore = { workspace = true }
 # App-launch executor wiring (kernel.execution driver) — main() calls
 # block_sigchld() + install() and nothing else from the launch subsystem.

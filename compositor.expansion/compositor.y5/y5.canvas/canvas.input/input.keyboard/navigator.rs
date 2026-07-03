@@ -9,6 +9,7 @@ use compositor_support_action_camera_fit_aspect::aspect;
 use compositor_y5_camera_zone_state::state::{Zone, ZoneSpecifier};
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_core_state_base::state::Status;
+use compositor_orchestration_core_state_base::state::CoordinateTrait;
 use compositor_y5_navigator_interface_base::interface::move_direction;
 use compositor_y5_navigator_travel_state::state::{Target, Travel};
 use compositor_support_library_input_keyboard_base::keyboard::combo::KeyCombo;
@@ -282,12 +283,14 @@ fn lock(s: &mut Loop) {
     if matches!(s.inner.status, Status::Locked { .. }) {
         return; // already locked
     }
-    // Set the lock status SYNCHRONOUSLY (so it holds even with no output), then ask
-    // for the renderer-free engage to run off-frame: `wire.input` drains `lock_engage`
-    // and schedules `lock_logical` on a one-shot idle. (This crate can't call
-    // `lock_interface` directly — `lock_interface → seat_keyboard_input → this`.)
+    // Set the lock status SYNCHRONOUSLY (so it holds even with no output) + flag the
+    // engage, then wake the control-plane ping: its source drains `lock_engage` and
+    // runs the renderer-free `lock_logical` off-frame, event-driven (not polled).
+    // (This crate can't call `lock_interface` directly — `lock_interface →
+    // seat_keyboard_input → this`.)
     s.inner.status = Status::Locked { pending: true, sleep: false, time: std::time::Instant::now() };
     s.inner.lock_engage = true;
+    s.inner.ping_control();
 }
 
 struct Bind {

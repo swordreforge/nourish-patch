@@ -23,6 +23,12 @@ pub fn button<I: InputBackend>(event: &<I as InputBackend>::PointerButtonEvent, 
     }
     let pressed = event.state() == ButtonState::Pressed;
     let loc = cursor(state);
+    // A press outside any screen surface (menu bar / popup) dismisses an open
+    // logout popup instead of falling through to the grid/globe.
+    if pressed && state.inner.overview().logout.is_some() && !over_bar(state, loc) {
+        compositor_y5_overview_interface_base::base::toggle_logout(state);
+        return true;
+    }
     let bar = surface_under_filtered(state, loc, &|h| h.iced_space() == Some(IcedSpace::Screen))
         .and_then(|h| h.iced_handle());
     if let Some(handle) = bar {
@@ -42,7 +48,7 @@ pub fn button<I: InputBackend>(event: &<I as InputBackend>::PointerButtonEvent, 
     }
     if pressed {
         // Cursor is WORLD space; cells are screen/physical — project via camera.
-        let ctx = state.size_context();
+        let ctx = state.size_ctx_all();
         let projected: compositor_y5_camera_transform_translate::transform::Transform = (loc, ctx).into();
         let phys: Point<f64, Physical> = projected.into();
         let p = Point::<i32, Physical>::from((phys.x.round() as i32, phys.y.round() as i32));
