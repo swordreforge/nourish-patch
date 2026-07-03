@@ -1,6 +1,8 @@
 //! The cursor-teleport layout canvas: a custom pan/zoom iced widget that draws each
-//! placed monitor as a square (with an inner box showing its true aspect ratio) and
-//! lets you drag squares to move them and drag the bottom-right corner to resize.
+//! placed monitor as a rectangle (with an inner box showing its true aspect ratio) and
+//! lets you drag rectangles to move them and drag the bottom-right corner to resize
+//! width and height independently (free aspect). The map is infinite (pan/positions
+//! are unbounded in every direction).
 //! Scroll-wheel zooms (around the cursor); dragging empty canvas pans. Content is
 //! clipped to the canvas bounds so a placement dragged out of view never overflows
 //! the panel. Moves/resizes emit `LayoutMove`/`LayoutResize` in LAYOUT coords
@@ -90,11 +92,11 @@ fn to_layout(px: f32, py: f32, st: &State) -> (f32, f32) {
 /// The bottom-right resize-handle region of a placement, in layout coords (the
 /// handle is a fixed pixel size on screen, so it scales as `HANDLE / zoom` here).
 fn in_handle(lx: f32, ly: f32, p: &LayoutPlacement, zoom: f32) -> bool {
-    let h = HANDLE / zoom;
-    lx >= p.x + p.size - h && lx <= p.x + p.size && ly >= p.y + p.size - h && ly <= p.y + p.size
+    let m = HANDLE / zoom;
+    lx >= p.x + p.w - m && lx <= p.x + p.w && ly >= p.y + p.h - m && ly <= p.y + p.h
 }
 fn point_in(lx: f32, ly: f32, p: &LayoutPlacement) -> bool {
-    lx >= p.x && lx <= p.x + p.size && ly >= p.y && ly <= p.y + p.size
+    lx >= p.x && lx <= p.x + p.w && ly >= p.y && ly <= p.y + p.h
 }
 
 /// Fit a box of aspect `aw:ah` centered inside `r` (minus `pad` on each side).
@@ -156,7 +158,7 @@ impl<'a> Widget<SettingsMessage, Theme, Renderer> for LayoutCanvas<'a> {
                 .chain(self.placements.iter().filter(|p| self.shown(&p.identity) && self.selected == Some(p.id)));
             for p in order {
                 let selected = self.selected == Some(p.id);
-                let r = Rectangle { x: sx(p.x), y: sy(p.y), width: p.size * z, height: p.size * z };
+                let r = Rectangle { x: sx(p.x), y: sy(p.y), width: p.w * z, height: p.h * z };
                 renderer.fill_quad(
                     renderer::Quad {
                         bounds: r,
@@ -250,14 +252,15 @@ impl<'a> Widget<SettingsMessage, Theme, Renderer> for LayoutCanvas<'a> {
                 let (lx, ly) = to_layout(pos.x, pos.y, state);
                 match drag {
                     Drag::Move { id, grab_dx, grab_dy } => {
-                        let nx = (lx - grab_dx).max(0.0);
-                        let ny = (ly - grab_dy).max(0.0);
-                        shell.publish(SettingsMessage::LayoutMove(id, nx, ny));
+                        // No lower bound — the map is infinite, placements may go negative.
+                        shell.publish(SettingsMessage::LayoutMove(id, lx - grab_dx, ly - grab_dy));
                     }
                     Drag::Resize { id } => {
                         if let Some(p) = self.placements.iter().find(|p| p.id == id) {
-                            let size = (lx - p.x).max(ly - p.y).max(MIN_SIZE);
-                            shell.publish(SettingsMessage::LayoutResize(id, size));
+                            // Width and height move INDEPENDENTLY (free aspect ratio).
+                            let w = (lx - p.x).max(MIN_SIZE);
+                            let h = (ly - p.y).max(MIN_SIZE);
+                            shell.publish(SettingsMessage::LayoutResize(id, w, h));
                         }
                     }
                     Drag::Pan { last_x, last_y } => {

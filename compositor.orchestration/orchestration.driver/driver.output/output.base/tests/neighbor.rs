@@ -2,7 +2,7 @@
 use compositor_orchestration_driver_output_base::base::{Edge, Placement, TeleportLayout};
 
 fn sq(id: u64, key: &str, x: f32, y: f32, size: f32) -> Placement {
-    Placement { id, key: key.into(), x, y, size }
+    Placement { id, key: key.into(), x, y, w: size, h: size }
 }
 
 // Two equal squares side by side: A(id1) at x=0, B(id2) at x=100, both 100×100.

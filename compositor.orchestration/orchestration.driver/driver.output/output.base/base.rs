@@ -156,7 +156,9 @@ pub struct Placement {
     pub key: String,
     pub x: f32,
     pub y: f32,
-    pub size: f32,
+    /// Width + height of the teleport zone (a free rectangle, not a square).
+    pub w: f32,
+    pub h: f32,
 }
 
 /// The result of a successful crossing: the entered placement plus where along its
@@ -214,10 +216,10 @@ impl TeleportLayout {
         let f = exit_frac.clamp(0.0, 1.0);
         // The crossing point in abstract space, on `from`'s `edge`.
         let (ex, ey) = match edge {
-            Edge::Right => (from.x + from.size, from.y + f * from.size),
-            Edge::Left => (from.x, from.y + f * from.size),
-            Edge::Bottom => (from.x + f * from.size, from.y + from.size),
-            Edge::Top => (from.x + f * from.size, from.y),
+            Edge::Right => (from.x + from.w, from.y + f * from.h),
+            Edge::Left => (from.x, from.y + f * from.h),
+            Edge::Bottom => (from.x + f * from.w, from.y + from.h),
+            Edge::Top => (from.x + f * from.w, from.y),
         };
         let entry_edge = edge.opposite();
         // The crossing coordinate on the axis PARALLEL to the crossed edge (y for a
@@ -225,8 +227,8 @@ impl TeleportLayout {
         // entered placement's facing edge must span it.
         let cross = match edge { Edge::Left | Edge::Right => ey, Edge::Top | Edge::Bottom => ex };
         let covers = |q: &Placement| match edge {
-            Edge::Left | Edge::Right => within(cross, q.y, q.y + q.size),
-            Edge::Top | Edge::Bottom => within(cross, q.x, q.x + q.size),
+            Edge::Left | Edge::Right => within(cross, q.y, q.y + q.h),
+            Edge::Top | Edge::Bottom => within(cross, q.x, q.x + q.w),
         };
 
         // Nearest placement in the travel direction whose facing span covers `cross`.
@@ -237,10 +239,10 @@ impl TeleportLayout {
             }
             // Distance along the travel direction; `None` if `q` isn't in that direction.
             let dist = match edge {
-                Edge::Right => (q.x + q.size > ex).then(|| (q.x - ex).max(0.0)),
-                Edge::Left => (q.x < ex).then(|| (ex - (q.x + q.size)).max(0.0)),
-                Edge::Bottom => (q.y + q.size > ey).then(|| (q.y - ey).max(0.0)),
-                Edge::Top => (q.y < ey).then(|| (ey - (q.y + q.size)).max(0.0)),
+                Edge::Right => (q.x + q.w > ex).then(|| (q.x - ex).max(0.0)),
+                Edge::Left => (q.x < ex).then(|| (ex - (q.x + q.w)).max(0.0)),
+                Edge::Bottom => (q.y + q.h > ey).then(|| (q.y - ey).max(0.0)),
+                Edge::Top => (q.y < ey).then(|| (ey - (q.y + q.h)).max(0.0)),
             };
             if let Some(d) = dist {
                 if best.map_or(true, |(_, bd)| d < bd) {
@@ -260,9 +262,9 @@ impl TeleportLayout {
                 // Left → rightmost, Bottom → topmost, Top → bottommost.
                 let key = match edge {
                     Edge::Right => q.x,
-                    Edge::Left => -(q.x + q.size),
+                    Edge::Left => -(q.x + q.w),
                     Edge::Bottom => q.y,
-                    Edge::Top => -(q.y + q.size),
+                    Edge::Top => -(q.y + q.h),
                 };
                 if best.map_or(true, |(_, bk)| key < bk) {
                     best = Some((q, key));
@@ -273,8 +275,8 @@ impl TeleportLayout {
         let (q, _) = best?;
         // Where along `q`'s entry edge the cursor lands, proportionally.
         let entry_frac = match entry_edge {
-            Edge::Left | Edge::Right => (ey - q.y) / q.size,
-            Edge::Top | Edge::Bottom => (ex - q.x) / q.size,
+            Edge::Left | Edge::Right => (ey - q.y) / q.h,
+            Edge::Top | Edge::Bottom => (ex - q.x) / q.w,
         };
         Some(Neighbor {
             id: q.id,
@@ -307,7 +309,7 @@ pub fn build_teleport(
             .filter(|p| {
                 connected_keys.iter().any(|k| k == &p.identity) && output_active(&prefs.outputs, &p.identity)
             })
-            .map(|p| Placement { id: p.id, key: p.identity.clone(), x: p.x, y: p.y, size: p.size })
+            .map(|p| Placement { id: p.id, key: p.identity.clone(), x: p.x, y: p.y, w: p.w, h: p.h })
             .collect(),
         prefs.teleport_cyclic,
     )

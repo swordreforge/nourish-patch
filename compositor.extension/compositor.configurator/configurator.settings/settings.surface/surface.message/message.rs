@@ -118,9 +118,9 @@ pub enum SettingsMessage {
     LayoutPlace(String, f32, f32),
     /// Move placement `id` to abstract-layout `(x, y)` (UI-local: snap + no-overlap).
     LayoutMove(u64, f32, f32),
-    /// Resize placement `id` to square side `size` (UI-local: min size + no-overlap).
-    /// Teleport geometry only — never scale/resolution.
-    LayoutResize(u64, f32),
+    /// Resize placement `id` to width `w` × height `h` (UI-local: min size + no-overlap).
+    /// A free rectangle — teleport geometry only, never scale/resolution.
+    LayoutResize(u64, f32, f32),
     /// Select placement `id` (UI-local: also selects its monitor so the mode/res
     /// controls below populate).
     LayoutSelect(u64),

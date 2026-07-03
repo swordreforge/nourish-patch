@@ -68,15 +68,15 @@ pub struct Settings {
     pub cyclic: bool,
 }
 
-/// A new square's side length in abstract layout units.
+/// A new placement's default width/height in abstract layout units.
 const PLACE_SIZE: f32 = 120.0;
-/// Minimum square side.
+/// Minimum placement extent (per axis).
 const MIN_SIZE: f32 = 60.0;
 /// Edge-snap radius (abstract units).
 const SNAP: f32 = 12.0;
 
 fn rects_overlap(a: &LayoutPlacement, b: &LayoutPlacement) -> bool {
-    a.x < b.x + b.size && b.x < a.x + a.size && a.y < b.y + b.size && b.y < a.y + a.size
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 }
 
 /// Snap `p`'s edges to any other placement's edges within [`SNAP`].
@@ -85,12 +85,12 @@ fn snap_edges(p: &mut LayoutPlacement, others: &[LayoutPlacement]) {
         if o.id == p.id {
             continue;
         }
-        for (pe, oe) in [(p.x, o.x + o.size), (p.x, o.x), (p.x + p.size, o.x), (p.x + p.size, o.x + o.size)] {
+        for (pe, oe) in [(p.x, o.x + o.w), (p.x, o.x), (p.x + p.w, o.x), (p.x + p.w, o.x + o.w)] {
             if (pe - oe).abs() <= SNAP {
                 p.x += oe - pe;
             }
         }
-        for (pe, oe) in [(p.y, o.y + o.size), (p.y, o.y), (p.y + p.size, o.y), (p.y + p.size, o.y + o.size)] {
+        for (pe, oe) in [(p.y, o.y + o.h), (p.y, o.y), (p.y + p.h, o.y), (p.y + p.h, o.y + o.h)] {
             if (pe - oe).abs() <= SNAP {
                 p.y += oe - pe;
             }
@@ -286,8 +286,8 @@ impl IcedUi for Settings {
             SettingsMessage::LayoutPlace(edid, x, y) => {
                 let id = self.next_placement_id;
                 self.next_placement_id += 1;
-                let mut p = LayoutPlacement { id, identity: edid, x, y, size: PLACE_SIZE };
-                // Nudge right until it doesn't overlap an existing square.
+                let mut p = LayoutPlacement { id, identity: edid, x, y, w: PLACE_SIZE, h: PLACE_SIZE };
+                // Nudge right until it doesn't overlap an existing placement.
                 while self.layout.iter().any(|o| rects_overlap(&p, o)) {
                     p.x += PLACE_SIZE + SNAP;
                 }
@@ -311,14 +311,16 @@ impl IcedUi for Settings {
                     }
                 }
             }
-            SettingsMessage::LayoutResize(id, size) => {
-                let size = size.max(MIN_SIZE);
+            SettingsMessage::LayoutResize(id, w, h) => {
+                let (w, h) = (w.max(MIN_SIZE), h.max(MIN_SIZE));
                 if let Some(mut resized) = self.layout.iter().find(|p| p.id == id).cloned() {
-                    resized.size = size;
+                    resized.w = w;
+                    resized.h = h;
                     let others: Vec<_> = self.layout.iter().filter(|p| p.id != id).cloned().collect();
                     if !others.iter().any(|o| rects_overlap(&resized, o)) {
                         if let Some(slot) = self.layout.iter_mut().find(|p| p.id == id) {
-                            slot.size = size;
+                            slot.w = w;
+                            slot.h = h;
                         }
                     }
                 }

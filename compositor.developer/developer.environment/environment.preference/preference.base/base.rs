@@ -62,8 +62,19 @@ pub struct LayoutPlacement {
     /// Top-left in abstract layout space.
     pub x: f32,
     pub y: f32,
-    /// Side length of the square in abstract layout space.
-    pub size: f32,
+    /// Width and height of the teleport zone in abstract layout space — a free
+    /// rectangle (not constrained to a square). `#[serde(default)]` so a layout saved
+    /// by the older square format (a `size` key, no `w`/`h`) still loads, defaulting
+    /// the extents (its stored position is kept).
+    #[serde(default = "layout_extent_default")]
+    pub w: f32,
+    #[serde(default = "layout_extent_default")]
+    pub h: f32,
+}
+
+/// Default extent for a teleport-layout placement (matches the UI's `PLACE_SIZE`).
+fn layout_extent_default() -> f32 {
+    120.0
 }
 
 /// Fallback mode for any monitor that has no per-output [`OutputProfile`] mode yet.
