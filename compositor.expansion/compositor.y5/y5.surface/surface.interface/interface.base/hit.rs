@@ -82,9 +82,17 @@ where
     // ── 1. Iced Screen-space ────────────────────────────────────────
     //
     // Items live in physical pixels. Compare bbox in physical.
+    let active_output = _loop.inner.active_output_key();
     if let Some(registry) = &_loop.inner.surface().registry {
         for item in registry.iter().rev() {
             if item.space() != IcedSpace::Screen {
+                continue;
+            }
+            // Output-bound surfaces (per-monitor capture overlays) are hit-tested
+            // only on the monitor the cursor is on; the physical hit point is in
+            // that output's local pixels, so an identically-anchored instance
+            // bound to another output would otherwise match at the same coords.
+            if item.output().is_some_and(|o| o != active_output.as_str()) {
                 continue;
             }
             let item_rect_i = item.screen_rect(&iced_transform, iced_output_size);

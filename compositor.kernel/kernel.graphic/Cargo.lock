@@ -1800,6 +1800,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "compositor_developer_stats_registry_base"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_stats_registry_counter",
+ "compositor_developer_stats_registry_hdr",
+ "compositor_developer_stats_registry_meta",
+ "compositor_developer_stats_registry_shader",
+ "compositor_developer_stats_registry_snapshot",
+]
+
+[[package]]
+name = "compositor_developer_stats_registry_counter"
+version = "0.0.1"
+
+[[package]]
+name = "compositor_developer_stats_registry_hdr"
+version = "0.0.1"
+
+[[package]]
+name = "compositor_developer_stats_registry_meta"
+version = "0.0.1"
+
+[[package]]
+name = "compositor_developer_stats_registry_shader"
+version = "0.0.1"
+
+[[package]]
+name = "compositor_developer_stats_registry_snapshot"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_stats_registry_counter",
+ "compositor_developer_stats_registry_meta",
+]
+
+[[package]]
 name = "compositor_introspection_execution_launch_policy"
 version = "0.0.1"
 
@@ -2750,6 +2785,7 @@ dependencies = [
  "compositor_developer_debug_instance_record",
  "compositor_developer_environment_keybinding_base",
  "compositor_developer_environment_preference_base",
+ "compositor_developer_stats_registry_base",
  "compositor_introspection_sampler_window_base",
  "compositor_orchestration_bus_legacy_base",
  "compositor_orchestration_driver_audio_base",
@@ -2765,7 +2801,6 @@ dependencies = [
  "compositor_orchestration_environment_type_base",
  "compositor_orchestration_seat_gesture_state",
  "compositor_orchestration_seat_pointer_state",
- "compositor_orchestration_seat_pointer_teleport",
  "compositor_orchestration_seat_pointer_texture",
  "compositor_orchestration_seat_system_pointer",
  "compositor_orchestration_storage_state_base",
@@ -2895,6 +2930,7 @@ dependencies = [
 name = "compositor_orchestration_driver_output_base"
 version = "0.0.1"
 dependencies = [
+ "compositor_developer_environment_preference_base",
  "compositor_support_system_storage_token_base",
 ]
 
@@ -2979,10 +3015,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
 ]
-
-[[package]]
-name = "compositor_orchestration_seat_pointer_teleport"
-version = "0.0.1"
 
 [[package]]
 name = "compositor_orchestration_seat_pointer_texture"
@@ -4129,6 +4161,7 @@ dependencies = [
  "bitflags 2.13.0",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_smithay_state_seat_base",
+ "compositor_support_smithay_state_seat_xkb",
  "smithay",
  "tracing",
  "tracing-subscriber",
@@ -4139,6 +4172,14 @@ name = "compositor_support_smithay_state_seat_focus"
 version = "0.0.1"
 dependencies = [
  "compositor_support_smithay_dispatch_state_base",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_support_smithay_state_seat_xkb"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_environment_preference_base",
  "smithay",
 ]
 
@@ -4237,6 +4278,16 @@ dependencies = [
  "compositor_developer_debug_instance_record",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_smithay_state_text_input_base",
+ "compositor_support_smithay_state_text_input_launch",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_support_smithay_state_text_input_launch"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_debug_instance_record",
+ "compositor_developer_environment_preference_base",
  "smithay",
 ]
 
@@ -4802,6 +4853,7 @@ dependencies = [
  "compositor_monitor_compositor_iced_base",
  "compositor_orchestration_draw_layer_base",
  "compositor_orchestration_draw_platform_base",
+ "compositor_orchestration_driver_output_base",
  "compositor_orchestration_storage_state_base",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_system_buffer_token_base",

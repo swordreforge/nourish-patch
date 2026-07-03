@@ -1573,9 +1573,9 @@ name = "compositor_background_two_draw_parallax"
 version = "0.0.1"
 dependencies = [
  "compositor_background_two_draw_motion",
- "compositor_background_two_draw_program",
+ "compositor_background_two_draw_select",
  "compositor_background_two_draw_vulkan",
- "compositor_developer_stats_registry_base",
+ "compositor_background_two_shader_spirv",
  "compositor_orchestration_draw_dispatch_frame",
  "smithay",
 ]
@@ -1589,11 +1589,63 @@ dependencies = [
 ]
 
 [[package]]
+name = "compositor_background_two_draw_select"
+version = "0.0.1"
+dependencies = [
+ "compositor_background_two_draw_program",
+ "compositor_background_two_draw_vulkan",
+ "compositor_background_two_shader_builtin",
+ "compositor_background_two_shader_load",
+ "compositor_background_two_shader_property",
+ "compositor_background_two_shader_spirv",
+ "compositor_developer_stats_registry_base",
+ "compositor_orchestration_draw_dispatch_frame",
+ "smithay",
+]
+
+[[package]]
 name = "compositor_background_two_draw_vulkan"
 version = "0.0.1"
 dependencies = [
  "compositor_developer_stats_registry_base",
  "compositor_orchestration_draw_dispatch_frame",
+ "naga",
+]
+
+[[package]]
+name = "compositor_background_two_shader_builtin"
+version = "0.0.1"
+dependencies = [
+ "compositor_background_two_shader_property",
+]
+
+[[package]]
+name = "compositor_background_two_shader_load"
+version = "0.0.1"
+dependencies = [
+ "compositor_background_two_draw_program",
+ "compositor_background_two_shader_locate",
+ "compositor_background_two_shader_property",
+ "compositor_background_two_shader_spirv",
+ "compositor_developer_debug_instance_record",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_background_two_shader_locate"
+version = "0.0.1"
+dependencies = [
+ "compositor_support_system_persist_path_base",
+]
+
+[[package]]
+name = "compositor_background_two_shader_property"
+version = "0.0.1"
+
+[[package]]
+name = "compositor_background_two_shader_spirv"
+version = "0.0.1"
+dependencies = [
  "naga",
 ]
 
@@ -1635,6 +1687,7 @@ dependencies = [
  "compositor_developer_stats_registry_counter",
  "compositor_developer_stats_registry_hdr",
  "compositor_developer_stats_registry_meta",
+ "compositor_developer_stats_registry_shader",
  "compositor_developer_stats_registry_snapshot",
 ]
 
@@ -1648,6 +1701,10 @@ version = "0.0.1"
 
 [[package]]
 name = "compositor_developer_stats_registry_meta"
+version = "0.0.1"
+
+[[package]]
+name = "compositor_developer_stats_registry_shader"
 version = "0.0.1"
 
 [[package]]
@@ -2141,6 +2198,13 @@ dependencies = [
  "iced_widget",
  "thiserror 2.0.18",
  "wgpu",
+]
+
+[[package]]
+name = "compositor_support_system_persist_path_base"
+version = "0.0.1"
+dependencies = [
+ "uuid",
 ]
 
 [[package]]

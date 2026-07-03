@@ -437,6 +437,11 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
     // Indicator rect is UNCLAMPED (the on-screen projection of the region/bbox),
     // so the teal border crops at the screen edge as the region pans off rather
     // than shrinking.
+    // Origin monitor: the one the capture started on. The region dim + border are
+    // BOUND to it (output affinity) so they dim/outline THAT monitor at its own
+    // size, instead of painting every monitor at the origin's dimensions.
+    let origin_key = state.inner.active_output_key();
+
     let crop_ov = indicator_rect(state, &target, sw, sh).unwrap_or(OverlayRect {
         x: 0,
         y: 0,
@@ -452,7 +457,9 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
         IcedSpace::Screen,
         (Layer::CAPTURE_DIM | Layer::CAPTURE_PASSTHROUGH).bits(),
     );
-    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).dim_id = Some(dim.untyped());
+    let dim_id = dim.untyped();
+    bind_output(state, dim_id, &origin_key);
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).dim_id = Some(dim_id);
 
     let border = load(
         state,
@@ -462,22 +469,31 @@ fn begin_active(state: &mut Loop, renderer: &mut GlesRenderer) {
         IcedSpace::Screen,
         (Layer::SCENE | Layer::CAPTURE_PASSTHROUGH).bits(),
     );
-    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).border_id = Some(border.untyped());
+    let border_id = border.untyped();
+    bind_output(state, border_id, &origin_key);
+    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).border_id = Some(border_id);
 
-    let stop_rect = Rectangle::new(
-        Point::from((sw - STOP_W - 12, 12)),
-        Size::from((STOP_W, STOP_H)),
-    );
-    let stop = load(
-        state,
-        renderer,
-        StopHud,
-        stop_rect,
-        IcedSpace::Screen,
-        Layer::SCENE.bits(),
-    );
-    state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).stop_hud_id = Some(stop.untyped());
-    forward(state, stop);
+    // One Stop button per monitor: anchored to each monitor's own top-right and
+    // bound to that output, so the control shows on every screen and is clickable
+    // on whichever monitor the cursor is on — not just the origin.
+    for (key, (ow, _oh)) in output_sizes(state) {
+        let stop_rect = Rectangle::new(
+            Point::from((ow - STOP_W - 12, 12)),
+            Size::from((STOP_W, STOP_H)),
+        );
+        let stop = load(
+            state,
+            renderer,
+            StopHud,
+            stop_rect,
+            IcedSpace::Screen,
+            Layer::SCENE.bits(),
+        );
+        let stop_id = stop.untyped();
+        bind_output(state, stop_id, &key);
+        forward(state, stop);
+        state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).stop_hud_ids.push(stop_id);
+    }
 
     state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT).phase = CapturePhase::Active(ActiveState {
         media,
@@ -531,16 +547,19 @@ fn teardown(state: &mut Loop) {
         _ => {}
     }
 
-    let ids = {
+    let ids: Vec<HandleId> = {
         let c = &state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT);
         [
             c.setup_id,
             c.border_id,
             c.dim_id,
-            c.stop_hud_id,
             c.continue_dialog_id,
             c.save_dialog_id,
         ]
+        .into_iter()
+        .flatten()
+        .chain(c.stop_hud_ids.iter().copied())
+        .collect()
     };
     {
         let c = &mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT);
@@ -548,7 +567,7 @@ fn teardown(state: &mut Loop) {
         c.setup_id = None;
         c.border_id = None;
         c.dim_id = None;
-        c.stop_hud_id = None;
+        c.stop_hud_ids.clear();
         c.continue_dialog_id = None;
         c.save_dialog_id = None;
         c.force_set.clear();
@@ -556,7 +575,7 @@ fn teardown(state: &mut Loop) {
         c.setup_selection.clear();
     }
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
-        for id in ids.into_iter().flatten() {
+        for id in ids {
             reg.destroy_by_id(id);
         }
         reg.set_keyboard_focus(None);
@@ -1015,19 +1034,23 @@ fn optimized_codec() -> OptimizedCodec {
 }
 
 fn destroy_indicators(state: &mut Loop) {
-    let ids = {
+    let ids: Vec<HandleId> = {
         let c = &state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT);
-        [c.border_id, c.dim_id, c.stop_hud_id, c.continue_dialog_id]
+        [c.border_id, c.dim_id, c.continue_dialog_id]
+            .into_iter()
+            .flatten()
+            .chain(c.stop_hud_ids.iter().copied())
+            .collect()
     };
     {
         let c = &mut state.inner.kernel.get_mut(&compositor_orchestration_driver_capture_base::base::CAPTURE_MUT);
         c.border_id = None;
         c.dim_id = None;
-        c.stop_hud_id = None;
+        c.stop_hud_ids.clear();
         c.continue_dialog_id = None;
     }
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
-        for id in ids.into_iter().flatten() {
+        for id in ids {
             reg.destroy_by_id(id);
         }
     }
@@ -1384,6 +1407,29 @@ fn from_overlay(r: OverlayRect) -> Rectangle<i32, Physical> {
 // ---------------------------------------------------------------------------
 // Iced registry plumbing
 // ---------------------------------------------------------------------------
+
+/// Every mapped output's `output_key` + physical mode size (w, h). Used to place
+/// one overlay instance per monitor. Outputs without a current mode are skipped.
+fn output_sizes(state: &Loop) -> Vec<(String, (i32, i32))> {
+    state
+        .inner.space_state()
+        .state
+        .outputs()
+        .filter_map(|o| {
+            let key = compositor_orchestration_core_state_base::state::output_key(o);
+            o.current_mode().map(|m| (key, (m.size.w, m.size.h)))
+        })
+        .collect()
+}
+
+/// Bind a screen-space overlay surface to a physical output, so the scene
+/// builder draws it only on that monitor and the pointer path hit-tests it only
+/// when the cursor is on that monitor (see `IcedItem::output`).
+fn bind_output(state: &mut Loop, id: HandleId, key: &str) {
+    if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
+        reg.set_output_affinity_by_id(id, Some(key.to_string()));
+    }
+}
 
 /// Install a message handler that forwards a capture UI's messages onto the
 /// surface message channel (drained by the surface pump → `handle`).

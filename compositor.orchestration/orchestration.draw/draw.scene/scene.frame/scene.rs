@@ -286,7 +286,8 @@ where
     // physical output, gate them so they aren't duplicated + mispositioned on every
     // monitor. `render_output == None` = a non-loop pass (winit / single) → draw all.
     let surfaces_screen = prepared.surfaces_screen;
-    let draw_screen = match state.inner.render_output.clone() {
+    let render_key = state.inner.render_output.clone();
+    let draw_screen = match &render_key {
         None => true,
         Some(key) => {
             let active = state.inner.cursor_output.clone().or_else(|| {
@@ -301,14 +302,26 @@ where
             active.as_deref() == Some(key.as_str())
         }
     };
+    // Per-element gate for screen-space iced. An UNBOUND surface (launcher,
+    // dialogs, cursor) belongs to the one active output → `draw_screen`. An
+    // OUTPUT-BOUND surface (per-monitor capture overlays) draws only on ITS
+    // output, regardless of which monitor the cursor is on. `render_key == None`
+    // (winit / single-output pass) draws everything.
+    let draw_iced = |output: &Option<String>| match output {
+        None => draw_screen,
+        Some(tag) => render_key.as_deref().map_or(true, |k| k == tag.as_str()),
+    };
     if draw_screen {
         let pointer = compositor_orchestration_seat_pointer_draw::scene::element(state, renderer, size);
         plan.extend(layer::POINTER, pointer.into_iter().map(DrawNode::Pointer));
 
         let layer_shell = layershell(state, size);
         plan.extend(layer::LAYERSHELL, layer_shell.into_iter().map(DrawNode::Surface));
-
-        plan.extend(layer::ICED_SCREEN, surfaces_screen.into_iter().map(DrawNode::Iced));
+    }
+    for elem in surfaces_screen {
+        if draw_iced(&elem.output) {
+            plan.push(layer::ICED_SCREEN, DrawNode::Iced(elem));
+        }
     }
 
 
@@ -460,8 +473,14 @@ where
         }
     };
 
-    // Capture-dim backdrop: below the content band, above background.
-    plan.extend(layer::CAPTURE_DIM, prepared.surfaces_dim.into_iter().map(DrawNode::Iced));
+    // Capture-dim backdrop: below the content band, above background. Bound to
+    // the capture's origin output, so it dims only that monitor (correctly
+    // sized) instead of every monitor at the origin's dimensions.
+    for elem in prepared.surfaces_dim {
+        if draw_iced(&elem.output) {
+            plan.push(layer::CAPTURE_DIM, DrawNode::Iced(elem));
+        }
+    }
     let _ = prepared.surfaces; // world iced now drawn per-id in the content band
     plan.extend(layer::WORLD_3D, prepared.background_three.into_iter().map(DrawNode::Background3D));
     // The parallax background is pushed per-pane in the content match above (one

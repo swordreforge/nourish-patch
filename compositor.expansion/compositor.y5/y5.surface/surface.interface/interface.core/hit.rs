@@ -99,6 +99,14 @@ impl<'a> HitCx<'a> {
             .unwrap_or_else(|| abort!("no output for hit-test"))
     }
 
+    /// The `output_key` of the monitor the cursor is on — used to hit-test
+    /// output-bound screen surfaces (per-monitor capture overlays) only on the
+    /// monitor whose local pixels the screen point was projected into.
+    fn current_output_key(&self) -> String {
+        let p = self.current_output().physical_properties();
+        format!("{} {} {}", p.make, p.model, p.serial_number)
+    }
+
     fn camera(&self) -> &compositor_y5_camera_state_base::state::Camera {
         self.storage.get(&compositor_y5_viewport_state_base::state::OUTPUT_VIEWS).current_views().focus_camera()
     }
@@ -292,8 +300,16 @@ fn hit_iced_in_space(
     filter: HitFilter,
 ) -> Option<SurfaceHit> {
     let reg = hcx.surface().registry.as_ref()?;
+    let active_output = hcx.current_output_key();
     for item in reg.iter().rev() {
         if item.space() != space {
+            continue;
+        }
+        // Output-bound surfaces (per-monitor capture overlays) hit-test only on
+        // the cursor's monitor: `screen_point` is in that output's local pixels,
+        // so an identically-anchored instance bound to another output would match
+        // at the same coordinates.
+        if item.output().is_some_and(|o| o != active_output.as_str()) {
             continue;
         }
         // Capture border/dim are hit-test-transparent: skip them entirely so the
