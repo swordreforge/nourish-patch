@@ -24,9 +24,9 @@ pub struct ParallaxBackground {
     pub output_size: (f32, f32),
     pub pan: (f32, f32), // state passed from your main loop
     pub zoom: f32,
-    /// Shader-authored `@prop` values (8 float slots), fed to the shader each
-    /// draw as `u_param0`/`u_param1` (GLES) / the push `params` block (Vulkan).
-    pub params: [f32; 8],
+    /// Shader-authored `@prop` values (16 float slots), fed to the shader each
+    /// draw as `u_param0`..`u_param3` (GLES) / the push `params` block (Vulkan).
+    pub params: [f32; 16],
     /// The selected shader's compile error for the active renderer, if it failed
     /// (the built-in is rendering instead). Surfaced by the settings panel.
     pub shader_error: Option<String>,

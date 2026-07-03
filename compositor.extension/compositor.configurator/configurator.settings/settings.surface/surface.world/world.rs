@@ -51,9 +51,9 @@ fn preview_or_error<'a>(props: &'a [ShaderProp], source: &'a str, status: Option
 /// The live wgpu preview of the selected shader, driven by the current variable
 /// values + mouse pan (drag) / zoom (scroll).
 fn preview_pane<'a>(props: &'a [ShaderProp], source: &'a str) -> El<'a> {
-    let mut params = [0.0f32; 8];
+    let mut params = [0.0f32; 16];
     for p in props {
-        if p.slot < 8 { params[p.slot] = p.value; }
+        if p.slot < 16 { params[p.slot] = p.value; }
     }
     let inner: El<'a> = if source.is_empty() {
         container(text("Preparing preview\u{2026}").size(11).color(style::MUTED))

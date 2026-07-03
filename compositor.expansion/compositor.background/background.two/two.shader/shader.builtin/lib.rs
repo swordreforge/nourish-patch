@@ -32,6 +32,6 @@ pub fn builtin_props() -> Vec<Property> {
 }
 
 /// The built-in shader's default params block.
-pub fn default_params() -> [f32; 8] {
+pub fn default_params() -> [f32; 16] {
     compositor_background_two_shader_property::default_params(&builtin_props())
 }

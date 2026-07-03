@@ -21,7 +21,7 @@ use smithay::backend::renderer::gles::{
 /// The engine uniforms every parallax-background GLES shader receives. A custom
 /// `gles/shader.frag` declares (a subset of) these; they carry the pan/zoom/time/
 /// flow/lock state the built-in `spacev3.frag` uses.
-fn engine_uniforms() -> [UniformName<'static>; 9] {
+fn engine_uniforms() -> [UniformName<'static>; 11] {
     [
         UniformName::new("u_time", UniformType::_1f),
         UniformName::new("u_lock_amount", UniformType::_1f),
@@ -30,9 +30,11 @@ fn engine_uniforms() -> [UniformName<'static>; 9] {
         UniformName::new("pan_velocity", UniformType::_2f),
         UniformName::new("u_zoom", UniformType::_1f),
         UniformName::new("u_resolution", UniformType::_2f),
-        // Shader-authored `@prop` values, two vec4 slots (8 floats).
+        // Shader-authored `@prop` values, four vec4 slots (16 floats).
         UniformName::new("u_param0", UniformType::_4f),
         UniformName::new("u_param1", UniformType::_4f),
+        UniformName::new("u_param2", UniformType::_4f),
+        UniformName::new("u_param3", UniformType::_4f),
     ]
 }
 

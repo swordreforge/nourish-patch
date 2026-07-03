@@ -1,7 +1,7 @@
 // Parallax space background — native Vulkan SDR fragment shader (WGSL → SPIR-V
 // via naga at build time). A faithful port of the GLES `spacev3.frag`; runs in
 // a real VkPipeline so the Vulkan shader path is exercised. Uniforms arrive as
-// push constants (3×vec4 = 48 bytes).
+// push constants (3 engine vec4 + 4 params vec4 = 7×vec4 = 112 bytes).
 //
 // NOTE: the value-noise `hash()` here is a driver-stable integer/bit-mix hash
 // (Dave Hoskins' "hash without sine"), NOT the GLES `fract(sin(...))` hash. The
@@ -14,7 +14,7 @@ struct Push {
     res_zoom_time: vec4<f32>,        // xy = resolution, z = zoom, w = time
     pan_flow: vec4<f32>,             // xy = pan, zw = flow_offset
     lock_alpha: vec4<f32>,           // x = lock_amount, y = alpha
-    params: array<vec4<f32>, 2>,     // shader-authored @prop values (8 floats)
+    params: array<vec4<f32>, 4>,     // shader-authored @prop values (16 floats)
 };
 var<immediate> pc: Push;
 

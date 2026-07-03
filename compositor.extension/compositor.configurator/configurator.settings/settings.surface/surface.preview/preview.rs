@@ -15,7 +15,7 @@ use std::time::Instant;
 pub struct ParallaxPreview {
     /// The WGSL source of the shader to preview (built-in or the selected bundle).
     pub source: String,
-    pub params: [f32; 8],
+    pub params: [f32; 16],
 }
 
 /// Per-widget interaction state: accumulated pan/zoom + an active drag.
@@ -83,7 +83,7 @@ impl shader::Program<SettingsMessage> for ParallaxPreview {
 pub struct Primitive {
     source: String,
     key: u64,
-    params: [f32; 8],
+    params: [f32; 16],
     pan: (f32, f32),
     zoom: f32,
 }
@@ -94,7 +94,7 @@ struct Uniforms {
     res_zoom_time: [f32; 4],
     pan_flow: [f32; 4],
     lock_alpha: [f32; 4],
-    params: [[f32; 4]; 2],
+    params: [[f32; 4]; 4],
 }
 
 impl shader::Primitive for Primitive {
@@ -117,6 +117,8 @@ impl shader::Primitive for Primitive {
             params: [
                 [self.params[0], self.params[1], self.params[2], self.params[3]],
                 [self.params[4], self.params[5], self.params[6], self.params[7]],
+                [self.params[8], self.params[9], self.params[10], self.params[11]],
+                [self.params[12], self.params[13], self.params[14], self.params[15]],
             ],
         };
         let bytes = unsafe {

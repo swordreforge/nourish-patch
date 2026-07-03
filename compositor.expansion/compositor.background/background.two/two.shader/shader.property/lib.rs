@@ -36,10 +36,10 @@ impl PropValue {
     }
 }
 
-/// The default params block (8 float slots): prop #i → slot i, in order.
-pub fn default_params(props: &[Property]) -> [f32; 8] {
-    let mut p = [0.0; 8];
-    for (i, prop) in props.iter().take(8).enumerate() {
+/// The default params block (16 float slots): prop #i → slot i, in order.
+pub fn default_params(props: &[Property]) -> [f32; 16] {
+    let mut p = [0.0; 16];
+    for (i, prop) in props.iter().take(16).enumerate() {
         p[i] = prop.default.as_f32();
     }
     p

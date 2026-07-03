@@ -1,15 +1,15 @@
 use compositor_background_two_draw_element::element::ParallaxBackground;
 use compositor_background_two_state_base::state::Two;
 use compositor_support_system_buffer_token_base::y5_buffer;
-use compositor_support_system_storage_token_base::base::{Token, TokenMut};
 use compositor_support_system_trait_system_base::base::{BufferCx, System, SystemCx, WorldBuilder};
 use compositor_support_system_world_frame_base::base::{self as layer, FramePlan, FrameTick};
 use smithay::backend::renderer::gles::GlesRenderer;
 use std::any::Any;
 
-pub static BG_TWO: Token<Two> = Token::new();
-/// TRANSITIONAL pub: lock/capture still mutate the instance directly.
-pub static BG_TWO_MUT: TokenMut<Two> = TokenMut::new(&BG_TWO);
+/// The per-world background slot tokens now live in `two.storage`; re-exported
+/// here so existing `system_base::base::BG_TWO(_MUT)` consumers keep resolving.
+/// TRANSITIONAL: lock/capture still mutate the instance directly via `BG_TWO_MUT`.
+pub use compositor_background_two_storage_base::base::{BG_TWO, BG_TWO_MUT};
 
 enum TwoCmd {
     SetInstance(ParallaxBackground),
@@ -97,43 +97,9 @@ impl System for TwoSystem {
     fn persist(
         &self,
     ) -> &'static [&'static compositor_support_system_persist_entry_base::base::PersistEntry] {
-        BACKGROUND_PERSISTS
+        compositor_background_two_storage_base::base::BACKGROUND_PERSISTS
     }
 }
-
-/// This world's persisted background: the shader override + its edited variable
-/// values keyed by `@prop` name (robust to slot/order changes).
-#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
-struct BackgroundPersisted {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    shader: Option<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    params: Vec<(String, f32)>,
-}
-
-/// Transforms the per-world `Two` slot to/from its persisted form (a single
-/// value, so `Persist`/`y5_persist!` — not the collection `Document`).
-struct BackgroundPersist;
-impl compositor_support_system_persist_trait_base::base::Persist for BackgroundPersist {
-    type Live = Two;
-    type Persisted = BackgroundPersisted;
-    const KEY: &'static str = "world.background";
-    const CURRENT_VERSION: u32 = 1;
-    fn to_persisted(live: &Two) -> BackgroundPersisted {
-        BackgroundPersisted { shader: live.background_shader.clone(), params: live.params.clone() }
-    }
-    fn from_persisted(p: BackgroundPersisted) -> Two {
-        let mut two = Two::new();
-        two.background_shader = p.shader;
-        two.params = p.params;
-        two
-    }
-}
-compositor_support_system_persist_trait_base::y5_persist!(
-    BACKGROUND_PERSIST, BackgroundPersist, BG_TWO, BG_TWO_MUT
-);
-static BACKGROUND_PERSISTS: &[&compositor_support_system_persist_entry_base::base::PersistEntry] =
-    &[&BACKGROUND_PERSIST];
 
 impl TwoSystem {
     fn on_camera_moved(&mut self, cx: &mut SystemCx, event: &compositor_y5_camera_system_base::base::CameraMoved) {

@@ -76,6 +76,7 @@ compositor_background_two_shader_locate = { path = "../../compositor.expansion/c
 compositor_background_two_shader_property = { path = "../../compositor.expansion/compositor.background/background.two/two.shader/shader.property" }
 compositor_background_two_shader_spirv = { path = "../../compositor.expansion/compositor.background/background.two/two.shader/shader.spirv" }
 compositor_background_two_state_base = { path = "../../compositor.expansion/compositor.background/background.two/two.state/state.base" }
+compositor_background_two_storage_base = { path = "../../compositor.expansion/compositor.background/background.two/two.storage/storage.base" }
 compositor_background_two_system_base = { path = "../../compositor.expansion/compositor.background/background.two/two.system/system.base" }
 compositor_configurator_audio_tab_base = { path = "../../compositor.extension/compositor.configurator/configurator.audio/audio.tab/tab.base" }
 compositor_configurator_bluetooth_backend_base = { path = "../../compositor.extension/compositor.configurator/configurator.bluetooth/bluetooth.backend/backend.base" }

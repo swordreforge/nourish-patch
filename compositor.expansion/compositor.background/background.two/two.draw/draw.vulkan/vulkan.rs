@@ -13,32 +13,37 @@ pub const PARALLAX_WGSL: &str = include_str!("shaders/parallax.wgsl");
 const SDR_SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/parallax.spv"));
 const HDR_SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/parallax_hdr.spv"));
 
-/// SDR push — matches `parallax.wgsl`'s `Push` (engine 3×vec4 + params 2×vec4 =
-/// 80 bytes). `params` carries the shader-authored `@prop` values.
+/// SDR push — matches `parallax.wgsl`'s `Push` (engine 3×vec4 + params 4×vec4 =
+/// 112 bytes). `params` carries the shader-authored `@prop` values.
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct SdrPush {
     res_zoom_time: [f32; 4],
     pan_flow: [f32; 4],
     lock_alpha: [f32; 4],
-    params: [[f32; 4]; 2],
+    params: [[f32; 4]; 4],
 }
 
-/// HDR push — the SDR fields plus the HDR levels (6×vec4 = 96 bytes).
+/// HDR push — the SDR fields plus the HDR levels (8×vec4 = 128 bytes).
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct HdrPush {
     res_zoom_time: [f32; 4],
     pan_flow: [f32; 4],
     lock_alpha: [f32; 4],
-    params: [[f32; 4]; 2],
+    params: [[f32; 4]; 4],
     /// x = sdr_white_nits, y = max_nits, z/w reserved.
     hdr: [f32; 4],
 }
 
-/// Split the 8-float params block into two `vec4`s (the std140 push layout).
-fn params_vec4(p: &[f32; 8]) -> [[f32; 4]; 2] {
-    [[p[0], p[1], p[2], p[3]], [p[4], p[5], p[6], p[7]]]
+/// Split the 16-float params block into four `vec4`s (the std140 push layout).
+fn params_vec4(p: &[f32; 16]) -> [[f32; 4]; 4] {
+    [
+        [p[0], p[1], p[2], p[3]],
+        [p[4], p[5], p[6], p[7]],
+        [p[8], p[9], p[10], p[11]],
+        [p[12], p[13], p[14], p[15]],
+    ]
 }
 
 fn as_bytes<T: Copy>(v: &T) -> &[u8] {
@@ -57,7 +62,7 @@ impl ParallaxPass {
     /// Pack both variants' push constants from the renderer-agnostic uniforms.
     /// The HDR levels come from the live HDR tuning registry (ignored unless the
     /// renderer is compositing HDR, in which case it selects the HDR variant).
-    pub fn new(u: &ParallaxUniforms, params: &[f32; 8]) -> Self {
+    pub fn new(u: &ParallaxUniforms, params: &[f32; 16]) -> Self {
         let res_zoom_time = [u.resolution[0], u.resolution[1], u.zoom, u.time];
         let pan_flow = [u.pan[0], u.pan[1], u.flow_offset[0], u.flow_offset[1]];
         let lock_alpha = [u.lock_amount, u.alpha, 0.0, 0.0];
@@ -103,17 +108,17 @@ impl ParallaxPass {
     }
 }
 
-/// Pack the standard 80-byte engine push (`res_zoom_time` / `pan_flow` /
-/// `lock_alpha` + the 2×vec4 `params` block) for a runtime-loaded WGSL/GLSL
+/// Pack the standard 112-byte engine push (`res_zoom_time` / `pan_flow` /
+/// `lock_alpha` + the 4×vec4 `params` block) for a runtime-loaded WGSL/GLSL
 /// background shader, which uses the same `Push` layout as `parallax.wgsl`.
-pub fn engine_push(u: &ParallaxUniforms, params: &[f32; 8]) -> [u8; 80] {
+pub fn engine_push(u: &ParallaxUniforms, params: &[f32; 16]) -> [u8; 112] {
     let p = SdrPush {
         res_zoom_time: [u.resolution[0], u.resolution[1], u.zoom, u.time],
         pan_flow: [u.pan[0], u.pan[1], u.flow_offset[0], u.flow_offset[1]],
         lock_alpha: [u.lock_amount, u.alpha, 0.0, 0.0],
         params: params_vec4(params),
     };
-    let mut out = [0u8; 80];
+    let mut out = [0u8; 112];
     out.copy_from_slice(as_bytes(&p));
     out
 }

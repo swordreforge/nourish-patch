@@ -16,7 +16,7 @@ pub fn build(
     renderer: &mut GlesRenderer,
     selection: Option<&str>,
     params_override: &[(String, f32)],
-) -> (Option<GlesPixelProgram>, Option<Arc<VulkanModule>>, [f32; 8], Option<String>) {
+) -> (Option<GlesPixelProgram>, Option<Arc<VulkanModule>>, [f32; 16], Option<String>) {
     let prefers_dmabuf =
         compositor_developer_stats_registry_base::base::compositor_prefers_dmabuf();
     let (loaded, error) = match selection {
@@ -32,7 +32,7 @@ pub fn build(
     let mut params = compositor_background_two_shader_property::default_params(&props);
     for (name, val) in params_override {
         if let Some(slot) = props.iter().position(|p| &p.name == name) {
-            if slot < 8 {
+            if slot < 16 {
                 params[slot] = *val;
             }
         }
@@ -56,7 +56,7 @@ pub fn build(
 pub fn loaded_pass<'a>(
     m: &'a VulkanModule,
     u: &ParallaxUniforms,
-    params: &[f32; 8],
+    params: &[f32; 16],
 ) -> NativeShaderPass<'a> {
     NativeShaderPass {
         sdr: ShaderVariant {

@@ -67,7 +67,7 @@ fn shader_state(state: &Loop) -> (Vec<String>, Option<String>, Vec<ShaderProp>, 
     let defaults = compositor_background_two_shader_property::default_params(&props);
     let dtos = props
         .iter()
-        .take(8)
+        .take(16)
         .enumerate()
         .map(|(slot, p)| {
             let value = overrides
