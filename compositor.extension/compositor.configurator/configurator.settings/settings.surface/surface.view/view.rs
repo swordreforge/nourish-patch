@@ -217,6 +217,7 @@ impl IcedUi for Settings {
                 }
                 ApplyResult::Reverted | ApplyResult::Failed => {
                     self.pending = None;
+                    self.staged_active = None;
                     self.confirming = false;
                     self.reset_selection();
                 }
@@ -247,9 +248,10 @@ impl IcedUi for Settings {
                 self.staged_active = None;
                 self.confirming = true;
             }
-            // STAGE an activate/deactivate on CHECK: arm the confirm bar WITHOUT touching
-            // the kernel (APPLY forwards the `SetActive`; REVERT discards). Mutually
-            // exclusive with a provisional resolution change.
+            // Activate/deactivate on CHECK: arm the confirm bar. The forwarded handler
+            // applies it LIVE + arms the auto-revert watchdog (parity with a resolution
+            // change); APPLY (`SetActive`) keeps it, REVERT / timeout restores it.
+            // Mutually exclusive with a provisional resolution change.
             SettingsMessage::StageActive(edid, mode) => {
                 self.staged_active = Some((edid, mode));
                 self.pending = None;
@@ -258,6 +260,7 @@ impl IcedUi for Settings {
             SettingsMessage::Keep(_) => self.confirming = false,
             SettingsMessage::Revert => {
                 self.pending = None;
+                self.staged_active = None;
                 self.confirming = false;
                 self.reset_selection();
             }

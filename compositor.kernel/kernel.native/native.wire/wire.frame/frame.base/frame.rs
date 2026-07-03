@@ -216,9 +216,16 @@ fn process_vblank(
 
     let mut ctx = ctx_rc.borrow_mut();
 
-    // Route the VBlank to the pipe whose CRTC flipped (fallback: the primary output,
-    // e.g. an active-output switch that left the crtc handle stale — single-output).
-    let idx = ctx.outputs.iter().position(|p| p.crtc == crtc).unwrap_or(0);
+    // Route the VBlank to the pipe whose CRTC flipped. If NO pipe matches, this is a
+    // LATE flip completion from a CRTC whose pipe was just pruned (a monitor
+    // deactivate / hotplug removed the pipe and freed its CRTC while a flip was still
+    // queued on it). There is nothing to account it against — DROP it. Never fall
+    // back to `outputs[0]`: clearing the primary's `in_flight` and popping its
+    // feedback for someone else's flip corrupts the primary's flip state, causing a
+    // double-queue that fails the primary's scanout and tears it down (both-black).
+    let Some(idx) = ctx.outputs.iter().position(|p| p.crtc == crtc) else {
+        return;
+    };
 
     // This pipe's flip completed → it is no longer in flight. The re-render below
     // (on `needs_redraw`) will now redraw THIS output; other pipes still in flight

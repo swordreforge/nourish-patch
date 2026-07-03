@@ -178,17 +178,16 @@ pub enum SettingsMessage {
     /// UI-LOCAL: select the "Inactive" row for the selected monitor (a pending
     /// deactivate that CHECK CHANGES then applies), like `SelectMode` for a mode.
     SelectInactive,
-    /// UI-LOCAL (on CHECK CHANGES): STAGE an active-state change for the selected
-    /// monitor — arms the confirm bar without touching the kernel. `None` = staged
-    /// deactivate; `Some(mode)` = staged (re)activate at that mode. APPLY then forwards
-    /// the matching `SetActive`; REVERT discards it. This gives activate/deactivate the
-    /// same two-step CHECK → APPLY gate as a resolution change (which instead applies
-    /// live-provisionally on CHECK). Mutually exclusive with `pending` (resolution).
+    /// Forwarded (on CHECK CHANGES): PROVISIONALLY apply an active-state change for the
+    /// selected monitor and arm the confirm bar. `None` = deactivate; `Some(mode)` =
+    /// (re)activate at that mode. The handler applies it LIVE (persist + reconcile) and
+    /// arms the auto-revert watchdog, so activate/deactivate has the SAME live-provisional
+    /// CHECK → APPLY/REVERT gate as a resolution change. APPLY forwards `SetActive` (keep);
+    /// REVERT / timeout restores the prior state. Mutually exclusive with `pending`.
     StageActive(String, Option<ModeInfo>),
-    /// Forwarded (on APPLY, from a staged change): set a monitor's active state.
-    /// `None` = deactivate; `Some(mode)` = (re)activate and drive it at that mode. The
-    /// kernel then reconciles (tears the pipe down / brings it up). Deactivating the
-    /// LAST active one is refused.
+    /// Forwarded (on APPLY): KEEP the provisional activate/deactivate — disarms the
+    /// auto-revert watchdog (the change was already applied on CHECK). The payload is the
+    /// staged `(edid, mode)` for the UI; the handler needs only to disarm.
     SetActive(String, Option<ModeInfo>),
     /// Forwarded: toggle the cursor-teleport CYCLIC (wrap-around) preference.
     SetCyclic(bool),

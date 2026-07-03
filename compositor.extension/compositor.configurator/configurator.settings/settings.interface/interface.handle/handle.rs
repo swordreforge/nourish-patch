@@ -5,13 +5,44 @@
 //! modes go via the OUTPUT_MODE_REQUEST channel (apply / confirm+persist / revert).
 use compositor_developer_environment_preference_base::base as pref;
 use compositor_orchestration_core_state_base::Loop;
-use compositor_orchestration_driver_output_base::base::{OutputModeRequest, OUTPUT_MODE_REQUEST_MUT, OUTPUTS_SNAPSHOT, OUTPUT_RECONCILE_REQUEST_MUT};
+use compositor_orchestration_driver_output_base::base::{ActiveRevert, ApplyResult, OutputModeRequest, OUTPUTS_SNAPSHOT, OUTPUT_ACTIVE_REVERT, OUTPUT_ACTIVE_REVERT_MUT, OUTPUT_MODE_REQUEST_MUT, OUTPUT_MODE_RESULT_MUT, OUTPUT_RECONCILE_REQUEST_MUT};
+use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 use compositor_orchestration_driver_settings_base::base::SETTINGS_MUT;
 use compositor_configurator_settings_surface_message::message::{SettingsMessage, Tab};
 use compositor_configurator_network_backend_base::base::{self as wifi, WifiCmd};
 use compositor_configurator_bluetooth_backend_base::base::{self as bt, BtCmd};
 use compositor_orchestration_driver_audio_base::base::AUDIO;
 use smithay::backend::renderer::gles::GlesRenderer;
+
+/// How long a provisional activate/deactivate survives without an explicit APPLY
+/// before auto-reverting — mirrors the resolution gate's `CONFIRM_TIMEOUT`.
+const ACTIVE_CONFIRM_TIMEOUT: Duration = Duration::from_secs(15);
+/// Monotonic arm counter: stamps each provisional activation so a superseded one-shot
+/// watchdog (a prior gate confirmed/reverted, then a NEW gate armed within the
+/// timeout) no-ops instead of reverting the current gate.
+static ACTIVE_EPOCH: AtomicU64 = AtomicU64::new(0);
+
+/// Restore the baseline of the armed provisional activate/deactivate (if it is still
+/// the current gate) and reconcile back — shared by the REVERT button and the
+/// auto-revert watchdog. `expect_epoch` is `Some` for the watchdog (act only if it is
+/// still the live gate) and `None` for an explicit REVERT (always undo the current
+/// gate). Emits `Reverted` so the settings UI drops the confirm bar and re-syncs.
+fn active_revert_now(state: &mut Loop, expect_epoch: Option<u64>) {
+    let Some(rev) = state.inner.kernel.get(&OUTPUT_ACTIVE_REVERT).clone() else { return };
+    if let Some(e) = expect_epoch {
+        if rev.epoch != e {
+            return; // a newer gate (or a confirm) superseded this watchdog — stale.
+        }
+    }
+    *state.inner.kernel.get_mut(&OUTPUT_ACTIVE_REVERT_MUT) = None;
+    pref::set_active(&mut state.inner.preference.outputs, &rev.edid, rev.prior_active);
+    let _ = pref::save(&state.inner.preference);
+    *state.inner.kernel.get_mut(&OUTPUT_RECONCILE_REQUEST_MUT) = true;
+    state.inner.ping_control();
+    *state.inner.kernel.get_mut(&OUTPUT_MODE_RESULT_MUT) = Some(ApplyResult::Reverted);
+}
 
 /// Currently-connected monitors' EDID keys (from the kernel snapshot) — the set the
 /// live teleport map is filtered against when it is rebuilt.
@@ -84,8 +115,15 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             state.inner.ping_control();
         }
         SettingsMessage::Revert => {
-            *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
-            state.inner.ping_control();
+            // REVERT resolves whichever fault gate is armed: a provisional
+            // activate/deactivate (restore the prior active state + reconcile) takes
+            // precedence over a provisional resolution change.
+            if state.inner.kernel.get(&OUTPUT_ACTIVE_REVERT).is_some() {
+                active_revert_now(state, None);
+            } else {
+                *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
+                state.inner.ping_control();
+            }
         }
         SettingsMessage::Rebind(id, combo) => {
             state.inner.keybinding.set(&id, combo);
@@ -192,26 +230,32 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             // The tracked placement may have been removed/renumbered; re-resolve lazily.
             *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::CURSOR_PLACEMENT_MUT) = None;
         }
-        // Activate / deactivate a monitor. `None` = deactivate ("Inactive"); refused
-        // if it's the last active+connected one. `Some(mode)` = (re)activate at `mode`.
-        // Persist, then ask the kernel to reconcile (bring the pipe up / tear it down);
-        // reconcile rebuilds the teleport map from the new active set.
-        SettingsMessage::SetActive(edid, mode_opt) => {
-            match mode_opt {
-                None => {
-                    let active_connected = state
-                        .inner
-                        .kernel
-                        .get(&OUTPUTS_SNAPSHOT)
-                        .displays
-                        .iter()
-                        .filter(|d| d.connected && d.enabled)
-                        .count();
-                    if active_connected <= 1 {
-                        return; // keep at least one active monitor
-                    }
-                    pref::set_active(&mut state.inner.preference.outputs, &edid, false);
+        // CHECK CHANGES on an activate/deactivate: apply it LIVE now and arm the
+        // auto-revert watchdog — the same fault gate as a resolution change (so the
+        // user SEES a deactivation before committing, and it auto-reverts if they walk
+        // away). `None` = deactivate ("Inactive", refused for the last active+connected
+        // monitor); `Some(mode)` = (re)activate at `mode`. APPLY (`SetActive`) keeps it;
+        // REVERT / timeout restores the prior active state (`active_revert_now`).
+        SettingsMessage::StageActive(edid, mode_opt) => {
+            if mode_opt.is_none() {
+                let active_connected = state
+                    .inner
+                    .kernel
+                    .get(&OUTPUTS_SNAPSHOT)
+                    .displays
+                    .iter()
+                    .filter(|d| d.connected && d.enabled)
+                    .count();
+                if active_connected <= 1 {
+                    // Nothing applied → clear the (optimistically-armed) confirm bar.
+                    *state.inner.kernel.get_mut(&OUTPUT_MODE_RESULT_MUT) = Some(ApplyResult::Failed);
+                    return; // keep at least one active monitor
                 }
+            }
+            // Baseline to restore on revert, captured BEFORE mutating.
+            let prior_active = pref::output_active(&state.inner.preference.outputs, &edid);
+            match &mode_opt {
+                None => pref::set_active(&mut state.inner.preference.outputs, &edid, false),
                 Some(mode) => {
                     pref::set_active(&mut state.inner.preference.outputs, &edid, true);
                     pref::upsert_output(&mut state.inner.preference.outputs, &edid, pref::ModeRequest::Advertised {
@@ -222,10 +266,26 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                 }
             }
             let _ = pref::save(&state.inner.preference);
+            // Reconcile (bring the pipe up / tear it down); the ping drains it
+            // input-independently (not on the libinput source).
             *state.inner.kernel.get_mut(&OUTPUT_RECONCILE_REQUEST_MUT) = true;
-            // Wake the control-plane ping so the kernel drains the reconcile request
-            // input-independently (it is no longer drained on the libinput source).
             state.inner.ping_control();
+            // Record the baseline + arm the one-shot auto-revert watchdog.
+            let epoch = ACTIVE_EPOCH.fetch_add(1, Ordering::Relaxed) + 1;
+            *state.inner.kernel.get_mut(&OUTPUT_ACTIVE_REVERT_MUT) =
+                Some(ActiveRevert { edid, prior_active, epoch });
+            let _ = state.loop_handle.insert_source(
+                Timer::from_duration(ACTIVE_CONFIRM_TIMEOUT),
+                move |_, _, state: &mut Loop| {
+                    active_revert_now(state, Some(epoch));
+                    TimeoutAction::Drop
+                },
+            );
+        }
+        // APPLY of a provisional activate/deactivate: KEEP it — just disarm the
+        // auto-revert watchdog (the change was already applied + persisted on CHECK).
+        SettingsMessage::SetActive(_edid, _mode_opt) => {
+            *state.inner.kernel.get_mut(&OUTPUT_ACTIVE_REVERT_MUT) = None;
         }
         SettingsMessage::SetCyclic(b) => {
             state.inner.preference.teleport_cyclic = b;
@@ -246,9 +306,6 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         | SettingsMessage::SelectDisplay(_)
         | SettingsMessage::SelectMode(_)
         | SettingsMessage::SelectInactive
-        // Staging an activate/deactivate is UI-local (arms the confirm bar); APPLY then
-        // forwards `SetActive`.
-        | SettingsMessage::StageActive(..)
         // Layout edits are applied UI-locally in the view; only LayoutCommit forwards.
         | SettingsMessage::LayoutPlace(..)
         | SettingsMessage::LayoutMove(..)

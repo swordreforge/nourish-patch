@@ -77,9 +77,9 @@ pub fn build<'a>(
     // Deactivating the LAST active monitor is not allowed (all `displays` are
     // connected, so "active" = `enabled`).
     let active_count = displays.iter().filter(|d| d.enabled).count();
-    // The action CHECK arms one of two confirm flows, BOTH resolved by APPLY/REVERT:
-    // a deactivate/reactivate is STAGED (not applied until APPLY), while a resolution
-    // change on an active monitor applies live-provisionally through the fault gate.
+    // CHECK arms the confirm flow, resolved by APPLY/REVERT. BOTH a deactivate/
+    // reactivate (`StageActive`) and a resolution change (`Apply`) apply
+    // live-provisionally through the fault gate and auto-revert if not kept.
     let check_msg: Option<SettingsMessage> = if confirming || !changed {
         None
     } else if selected_inactive {
@@ -100,8 +100,8 @@ pub fn build<'a>(
             None => b.style(control::disabled),
         }
     };
-    // APPLY commits whichever confirm flow is armed: a STAGED activate/deactivate is
-    // forwarded now (`SetActive`), while a live-provisional resolution change is KEPT.
+    // APPLY commits whichever confirm flow is armed: a provisional activate/deactivate
+    // is KEPT (`SetActive` disarms the auto-revert), like a resolution change (`Keep`).
     let apply = {
         let b = button(text("APPLY")).width(Length::Fill);
         if confirming {

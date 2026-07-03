@@ -82,6 +82,27 @@ pub static OUTPUT_MODE_RESULT_MUT: TokenMut<Option<ApplyResult>> =
 pub static OUTPUT_RECONCILE_REQUEST: Token<bool> = Token::new();
 pub static OUTPUT_RECONCILE_REQUEST_MUT: TokenMut<bool> = TokenMut::new(&OUTPUT_RECONCILE_REQUEST);
 
+/// Baseline of a PROVISIONAL activate/deactivate awaiting Keep/Revert — the settings
+/// "check changes" fault gate for an active-set change, mirroring the mode gate
+/// (`OutputModeRequest`). The rim applies the toggle live (persist + reconcile) and
+/// records this baseline; APPLY clears it (keep), while REVERT or a timeout restores
+/// `prior_active` and reconciles back. `epoch` lets a superseded one-shot revert
+/// watchdog tell it is stale (a prior gate confirmed, a new one armed within the
+/// timeout) and no-op instead of reverting the current gate. `None` = no gate armed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ActiveRevert {
+    /// EDID identity ("make model serial") of the toggled monitor.
+    pub edid: String,
+    /// The `active` flag to restore on revert — the state BEFORE the provisional apply.
+    pub prior_active: bool,
+    /// Monotonic arm id; the auto-revert watchdog acts only if it still matches.
+    pub epoch: u64,
+}
+
+/// Rim-armed provisional activate/deactivate awaiting confirm/revert (`None` = idle).
+pub static OUTPUT_ACTIVE_REVERT: Token<Option<ActiveRevert>> = Token::new();
+pub static OUTPUT_ACTIVE_REVERT_MUT: TokenMut<Option<ActiveRevert>> = TokenMut::new(&OUTPUT_ACTIVE_REVERT);
+
 /// Kernel → rim: one connected connector, primitive form, for the monitor picker.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DisplayInfo {

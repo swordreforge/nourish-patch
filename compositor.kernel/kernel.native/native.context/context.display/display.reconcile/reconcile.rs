@@ -91,6 +91,12 @@ fn bring_up(ctx: &mut NativeRenderContext, target: &connector::Info, requested: 
     let new_hdr_active = env.hdr && built.hdr.hdr_capable() && ctx.vulkan_mode;
     let new_mode = Mode::from(built.drm_mode);
     ctx.pipe_mut().drm_output = Some(built.drm_output);
+    // The fail-over may land the primary on a DIFFERENT CRTC than it held before.
+    // `crtc` is the vblank routing key (frame.rs) AND the `busy` exclusion key that
+    // `add_output` uses to avoid double-claiming a CRTC — leaving it stale routes the
+    // new CRTC's vblanks nowhere and lets a later reactivation steal the primary's
+    // real CRTC (both-black). Keep it truthful.
+    ctx.pipe_mut().crtc = built.crtc;
     ctx.pipe_mut().mode = new_mode;
     ctx.pipe_mut().current_drm_mode = built.drm_mode;
     ctx.pipe_mut().modes = built.modes;

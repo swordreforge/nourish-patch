@@ -254,6 +254,9 @@ impl Orchestrator {
         kernel_data.insert(&compositor_orchestration_driver_output_base::base::OUTPUTS_SNAPSHOT, Default::default());
         // Rim→kernel: request a reconcile pass after an activate/deactivate.
         kernel_data.insert(&compositor_orchestration_driver_output_base::base::OUTPUT_RECONCILE_REQUEST, false);
+        // Baseline of a provisional activate/deactivate awaiting the "check changes"
+        // confirm/revert gate (auto-reverts on timeout). `None` until the first toggle.
+        kernel_data.insert(&compositor_orchestration_driver_output_base::base::OUTPUT_ACTIVE_REVERT, None);
         // Cursor-teleport layout + current placement (output-arrangement state; not on
         // the Orchestrator). Seeded from prefs with no connected outputs yet — the
         // kernel's first `reconcile` rebuilds it with the connected set.
