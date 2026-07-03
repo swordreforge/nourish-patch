@@ -175,15 +175,16 @@ impl Settings {
         self.staged_active = None;
     }
 
-    /// Seed the pending selection for a monitor from its CURRENT state: an inactive
-    /// monitor starts on "Inactive", an active one on its current/first mode.
+    /// Seed the pending selection for a monitor to REACTIVATE-ready: its live mode if
+    /// active, else its saved / first-advertised mode. Selecting an INACTIVE monitor
+    /// therefore arms CHECK to turn it back ON (`StageActive` with that mode); the
+    /// "Inactive" row still stages a deactivate. (Seeding an inactive monitor to
+    /// "Inactive" — the old behaviour — routed CHECK to a deactivate it can't perform,
+    /// namely the last active monitor, so CHECK greyed out and the monitor looked
+    /// impossible to reactivate.)
     fn seed_selection(&mut self, key: &str) {
-        let (enabled, mode) = {
-            let d = self.display(key);
-            (d.map(|d| d.enabled).unwrap_or(true), d.and_then(default_mode))
-        };
-        self.selected_inactive = !enabled;
-        self.selected_mode = if enabled { mode } else { None };
+        self.selected_mode = self.display(key).and_then(default_mode);
+        self.selected_inactive = false;
     }
 }
 
@@ -279,6 +280,13 @@ impl IcedUi for Settings {
             // change is being confirmed (the snapshot is mid-transition then), and
             // preserve the user's picker selection when that monitor still exists.
             SettingsMessage::SyncDisplays(displays) => {
+                // ALWAYS refresh the raw snapshot so the picker, mode list and teleport
+                // map reflect the CURRENT active set — a live-provisional activate/
+                // deactivate changes the snapshot WHILE `confirming`, and the poll that
+                // feeds this dedups on the snapshot, so if we dropped it here it would
+                // never be re-sent after APPLY and the panel would stay stale (CHECK
+                // stuck, map not updating). Only the picker's active + selection anchors
+                // are held steady mid-confirm so the selection doesn't jump under the gate.
                 if !self.confirming {
                     self.active_edid = displays
                         .iter()
@@ -290,8 +298,8 @@ impl IcedUi for Settings {
                         self.selected_mode =
                             displays.iter().find(|d| d.edid_key == self.selected_display).and_then(default_mode);
                     }
-                    self.displays = displays;
                 }
+                self.displays = displays;
             }
             SettingsMessage::WifiSelect(ssid) => {
                 self.wifi_selected = Some(ssid);

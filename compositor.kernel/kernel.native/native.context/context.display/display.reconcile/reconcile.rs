@@ -71,11 +71,13 @@ fn find_target(drm: &DrmDevice, key: &str) -> Option<connector::Info> {
         .find(|i| i.state() == connector::State::Connected && identity_key(drm, i) == key)
 }
 
-/// Tear down the current pipe (freeing its CRTC) and bring `target` up as the sole
-/// output, reusing the smithay `Output`. On success the context reflects the new
-/// connector/mode. On failure `ctx.pipe().drm_output` is left `None` — the caller must
-/// rebuild a working output (render frames skip while it is `None`).
-fn bring_up(ctx: &mut NativeRenderContext, target: &connector::Info, requested: Option<ModeInfo>) -> Result<(), String> {
+/// Tear down the current pipe (freeing its CRTC) and bring `target` up as the primary
+/// output, reusing the smithay `Output`. `busy` lists CRTCs held by OTHER live pipes
+/// (surviving secondaries) so the rebuild can't claim a CRTC one of them is scanning
+/// out. On success the context reflects the new connector/mode. On failure
+/// `ctx.pipe().drm_output` is left `None` — the caller must rebuild a working output
+/// (render frames skip while it is `None`).
+fn bring_up(ctx: &mut NativeRenderContext, target: &connector::Info, requested: Option<ModeInfo>, busy: &[crtc::Handle]) -> Result<(), String> {
     // Drop the current output FIRST so its CRTC/bandwidth is free for the target
     // (the atomic modeset of a second simultaneous pipe is rejected).
     ctx.pipe_mut().drm_output = None;
@@ -83,7 +85,7 @@ fn bring_up(ctx: &mut NativeRenderContext, target: &connector::Info, requested: 
         &ctx.drm_output_manager,
         &ctx.gpu_binding,
         &ctx.pipe().output,
-        &[],
+        busy,
         target,
         requested,
     )?;
@@ -343,8 +345,8 @@ pub fn reconcile(state: &mut Loop, ctx_rc: &Ctx) -> Option<OutputChange> {
     // its own vblank cycle (see the `force_redraw` call at the end).
     let mut brought_up = false;
 
-    // 2. PRIMARY (`outputs[0]`): if it isn't driving a drive-set monitor, fail over to a
-    //    drive-set member (preferred first), else go dark.
+    // 2. PRIMARY (`outputs[0]`, the never-pruned anchor): if it isn't driving a
+    //    drive-set monitor, fail it over to one (preferred first), else go dark.
     let primary_ok = ctx.outputs[0].drm_output.is_some()
         && drive_handles.contains(&ctx.outputs[0].connector);
     if !primary_ok {
@@ -354,11 +356,40 @@ pub fn reconcile(state: &mut Loop, ctx_rc: &Ctx) -> Option<OutputChange> {
         };
         match target {
             Some(t) => {
+                // If the chosen target is ALREADY driven by a secondary pipe (e.g. the
+                // user deactivated the anchor's OWN monitor while a secondary stays
+                // active), EVICT that secondary first. Otherwise the anchor would build
+                // a second pipe on a connector another pipe already drives — a
+                // double-drive that fights over the CRTC and blacks the display.
+                let th = t.handle();
+                let mut i = 1;
+                while i < ctx.outputs.len() {
+                    if ctx.outputs[i].connector == th && ctx.outputs[i].drm_output.is_some() {
+                        let removed = ctx.outputs.remove(i);
+                        state.inner.space_state_mut().state.unmap_output(&removed.output);
+                        if let Some(gid) = removed.global {
+                            ctx.display_handle
+                                .remove_global::<compositor_support_smithay_dispatch_state_base::state::Dispatch>(gid);
+                        }
+                        info!("reconcile: evicted secondary {:?} so the primary can take it over", removed.connector);
+                    } else {
+                        i += 1;
+                    }
+                }
                 let requested = {
                     let mgr = ctx.drm_output_manager.borrow();
                     pref_mode(mgr.device(), &t)
                 };
-                if let Err(e) = bring_up(&mut ctx, &t, requested) {
+                // CRTCs still held by surviving secondaries must be excluded so the
+                // anchor rebuild can't steal a CRTC one of them is scanning out.
+                let busy: Vec<crtc::Handle> = ctx
+                    .outputs
+                    .iter()
+                    .skip(1)
+                    .filter(|p| p.drm_output.is_some())
+                    .map(|p| p.crtc)
+                    .collect();
+                if let Err(e) = bring_up(&mut ctx, &t, requested, &busy) {
                     warn!("reconcile primary bring-up failed: {e}; going dark");
                     go_dark_primary(state, &mut ctx);
                 } else {

@@ -241,7 +241,11 @@ fn install_handler(state: &mut Loop, handle: IcedHandle<Settings>) {
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
         if let Some(inst) = reg.instance_mut(handle) {
             inst.runtime_mut().set_message_handler(move |m: &SettingsMessage| {
-                if matches!(m, SettingsMessage::SyncSystem(..) | SettingsMessage::SyncDisplays(_) | SettingsMessage::SyncShaders(..) | SettingsMessage::SyncShaderProps(..) | SettingsMessage::SyncShaderPreview(..) | SettingsMessage::SyncShaderStatus(..) | SettingsMessage::Tick | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_) | SettingsMessage::SelectDisplay(_) | SettingsMessage::SelectMode(_) | SettingsMessage::SelectInactive | SettingsMessage::StageActive(..)) { return; }
+                // `StageActive` IS forwarded now — CHECK CHANGES applies an
+                // activate/deactivate live-provisionally through the handler (arming the
+                // auto-revert gate), so it must reach `interface.handle`. The rest here
+                // are UI-local (sync pushes, tab/selection state) and never forwarded.
+                if matches!(m, SettingsMessage::SyncSystem(..) | SettingsMessage::SyncDisplays(_) | SettingsMessage::SyncShaders(..) | SettingsMessage::SyncShaderProps(..) | SettingsMessage::SyncShaderPreview(..) | SettingsMessage::SyncShaderStatus(..) | SettingsMessage::Tick | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_) | SettingsMessage::SelectDisplay(_) | SettingsMessage::SelectMode(_) | SettingsMessage::SelectInactive) { return; }
                 let _ = tx.send(SurfaceMessage { message: SurfaceMessageType::Settings(m.clone()) });
             });
         }
