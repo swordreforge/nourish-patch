@@ -408,6 +408,24 @@ impl Orchestrator {
         }
     }
 
+    /// The ACTIVE output's focused camera: the monitor the user is on (cursor's
+    /// output, else primary), IGNORING `render_output`. Unlike [`camera`](Self::camera)
+    /// — which resolves against `current_output_key` and so returns whichever output
+    /// the per-output render loop is currently DRAWING — this follows the user's
+    /// monitor. Use it for spawn-time placement (new windows must land on the active
+    /// screen, not the one whose render pass happens to be draining the map queue).
+    /// Mirrors [`active_output`](Self::active_output) for screen-space surfaces.
+    pub fn active_camera(&self) -> &compositor_y5_camera_state_base::state::Camera {
+        let target = self.worlds.spawn_target();
+        let key = self.active_output_key();
+        self.worlds
+            .get(target)
+            .storage()
+            .get(&compositor_y5_viewport_state_base::state::OUTPUT_VIEWS)
+            .views(&key)
+            .focus_camera()
+    }
+
     /// FOCUS ACCESSOR: the CURRENT output's viewport tree (slots + cameras).
     pub fn viewports(&self) -> &compositor_y5_viewport_state_base::state::Viewports {
         let target = self.worlds.spawn_target();
