@@ -59,9 +59,8 @@ pub fn register(
             // Live output-mode change requests from the settings window (apply /
             // confirm / revert), drained here for the same reason as the lid.
             compositor_kernel_native_context_display_mode::mode::drain(state, &ctx_rc);
-            // Live active-output (preferred-monitor) switch requests from the
-            // settings window (apply / confirm / revert), same gate as the mode.
-            compositor_kernel_native_context_display_switch::switch::drain(state, &ctx_rc);
+            // Activate/deactivate from settings → re-run reconcile (deferred).
+            compositor_kernel_native_context_display_reconcile::reconcile::drain_reconcile(state, &ctx_rc);
             // Lock engage: the keybinding set `Status::Locked` synchronously + flagged
             // this; run the renderer-free engage off-frame on a one-shot idle (the
             // keyboard crates can't call `lock.interface` — it depends back on them).

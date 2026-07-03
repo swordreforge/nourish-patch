@@ -36,7 +36,7 @@ pub fn register(
             // output per preferences (fail over / recover), or go dark + wait. Runs
             // in this udev dispatch (not the vblank callback), so the modeset is safe.
             if reconcile {
-                if let Some(change) = compositor_kernel_native_context_display_switch::switch::reconcile(state, &ctx_rc) {
+                if let Some(change) = compositor_kernel_native_context_display_reconcile::reconcile::reconcile(state, &ctx_rc) {
                     use compositor_orchestration_event_output_base::output::OutputChange;
                     // Fire the output-presence lifecycle event (event-driven — once
                     // per real transition) on the ACTIVE world's router: that is the

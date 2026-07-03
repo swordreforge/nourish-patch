@@ -66,6 +66,14 @@ fn compose(
     // explicitly or they come out upside down relative to the rest of the frame.
     let output_transform = context.output.current_transform();
 
+    // Stable capture id for this output — the SAME EDID-derived `OutputId::from_key`
+    // the rim's capture requests use (they key off `active_output()` on every
+    // backend), so entries match on winit too. A hardcoded `OutputId(0)` here never
+    // matched the request's keyed id → capture silently produced nothing.
+    let capture_output = OutputId::from_key(
+        &compositor_orchestration_core_state_base::state::output_key(&context.output),
+    );
+
     let (gles_renderer, mut gles_framebuffer) = context.winit_backend.bind().unwrap();
 
     // The capture registry is pre-created at startup (loader prewarm) from the
@@ -277,7 +285,7 @@ fn compose(
                     registry.tick(
                         &state.inner.environment.GPU.as_str(),
                         gles_renderer,
-                        OutputId(0),
+                        capture_output,
                         &gles_framebuffer,
                         monitor_size,
                     );
@@ -333,7 +341,7 @@ fn compose(
                     registry.tick(
                         &state.inner.environment.GPU.as_str(),
                         gles_renderer,
-                        OutputId(0),
+                        capture_output,
                         &gles_framebuffer,
                         monitor_size,
                     );
@@ -409,7 +417,7 @@ fn compose(
                 registry.tick(
                     &state.inner.environment.GPU.as_str(),
                     gles_renderer,
-                    OutputId(0),
+                    capture_output,
                     &gles_framebuffer,
                     monitor_size,
                 );

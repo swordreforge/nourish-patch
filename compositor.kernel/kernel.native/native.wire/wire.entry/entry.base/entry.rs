@@ -194,6 +194,7 @@ pub fn wire(
             current_drm_mode: display.drm_mode,
             modes: display.connector.modes().to_vec(),
             mode_revert: None,
+            global: None,
             in_flight: false,
         }],
         drm_output_manager: renderer.drm_output_manager,
@@ -204,7 +205,6 @@ pub fn wire(
         vulkan_mode,
         vulkan,
         drm_fd: display.drm_fd.clone(),
-        output_revert: None,
         dark_tick: None,
     }));
 
@@ -279,7 +279,7 @@ pub fn wire(
 
     // ---- Full connected-monitor list for the settings preferred-monitor picker
     //      (kernel → rim). Lists the active connector plus connected-but-inactive
-    //      monitors; refreshed on a live switch by `display.switch`.
+    //      monitors; refreshed on a live switch by `display.reconcile`.
     {
         use compositor_orchestration_driver_output_base::base::ModeInfo;
         let active_mode = ModeInfo {
@@ -348,7 +348,7 @@ pub fn wire(
     // Light up every OTHER connected monitor as an additional output (the primary
     // is already up from assembly). The set-reconciler adds one pipe per connected
     // connector not yet driven — the same path a runtime hotplug takes.
-    compositor_kernel_native_context_display_switch::switch::reconcile(_loop, &ctx_rc);
+    compositor_kernel_native_context_display_reconcile::reconcile::reconcile(_loop, &ctx_rc);
 
     NativeHandles { ctx: ctx_rc }
 }

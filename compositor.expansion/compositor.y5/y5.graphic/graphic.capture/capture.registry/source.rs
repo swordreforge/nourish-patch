@@ -5,9 +5,9 @@ use smithay::utils::{Physical, Rectangle};
 /// Identifies a compositor output by a STABLE id derived from its identity
 /// (EDID key, connector-name fallback) — not a positional index, so it survives
 /// hotplug reordering and means the same monitor across the render loop and the
-/// capture-request side. Build it with [`OutputId::from_key`] from the same
-/// `output_key` the rim uses; `OutputId(0)` is still valid for the single-output
-/// / winit case.
+/// capture-request side. ALWAYS build it with [`OutputId::from_key`] from the same
+/// `output_key` the rim uses (every backend, incl. single-output / winit) so the
+/// producer and consumer ids match; never key an output by its positional index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct OutputId(pub u64);
 

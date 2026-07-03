@@ -75,6 +75,13 @@ pub static OUTPUT_MODE_RESULT: Token<Option<ApplyResult>> = Token::new();
 pub static OUTPUT_MODE_RESULT_MUT: TokenMut<Option<ApplyResult>> =
     TokenMut::new(&OUTPUT_MODE_RESULT);
 
+/// Rim → kernel: request a hotplug `reconcile` pass on the next drain. Set by the
+/// settings window after activating/deactivating a monitor (an active-set change,
+/// not a hardware hotplug), so the kernel brings the newly-active output up or tears
+/// a now-inactive one down. Cleared by the kernel when it runs the pass.
+pub static OUTPUT_RECONCILE_REQUEST: Token<bool> = Token::new();
+pub static OUTPUT_RECONCILE_REQUEST_MUT: TokenMut<bool> = TokenMut::new(&OUTPUT_RECONCILE_REQUEST);
+
 /// Kernel → rim: one connected connector, primitive form, for the monitor picker.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DisplayInfo {
@@ -87,8 +94,12 @@ pub struct DisplayInfo {
     /// connector name.
     pub name: String,
     pub connected: bool,
-    /// True for the connector currently driving the compositor.
+    /// True for the connector treated as the primary/anchor output.
     pub active: bool,
+    /// Whether the user has this monitor ENABLED (driven). `false` = deactivated in
+    /// the settings Display tab ("Inactive"). Default `true`. Distinct from `active`
+    /// (which marks the primary): a monitor can be enabled but not the primary.
+    pub enabled: bool,
     pub current: Option<ModeInfo>,
     /// The mode saved in preferences for THIS monitor (its per-output profile),
     /// if any — so the picker defaults an inactive monitor to its saved mode rather
@@ -105,27 +116,6 @@ pub struct OutputsSnapshot {
     pub displays: Vec<DisplayInfo>,
 }
 
-/// Rim → kernel: a step in the user-confirmed active-output switch transaction,
-/// mirroring `OutputModeRequest`. `Apply` provisionally switches to `edid_key`
-/// (optionally bringing the new output up at `mode`) and arms the confirm/revert
-/// watchdog; `Confirm`/`Revert` finish the transaction as for mode changes.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum OutputSwitchRequest {
-    Apply { edid_key: String, mode: Option<ModeInfo> },
-    Confirm,
-    Revert,
-}
-
 /// Kernel-written full connector list, read by the settings Display panel.
 pub static OUTPUTS_SNAPSHOT: Token<OutputsSnapshot> = Token::new();
 pub static OUTPUTS_SNAPSHOT_MUT: TokenMut<OutputsSnapshot> = TokenMut::new(&OUTPUTS_SNAPSHOT);
-
-/// Rim-issued active-output switch request, drained by the kernel loop (`None` idle).
-pub static OUTPUT_SWITCH_REQUEST: Token<Option<OutputSwitchRequest>> = Token::new();
-pub static OUTPUT_SWITCH_REQUEST_MUT: TokenMut<Option<OutputSwitchRequest>> =
-    TokenMut::new(&OUTPUT_SWITCH_REQUEST);
-
-/// Kernel-written result of the last switch transaction (reuses `ApplyResult`).
-pub static OUTPUT_SWITCH_RESULT: Token<Option<ApplyResult>> = Token::new();
-pub static OUTPUT_SWITCH_RESULT_MUT: TokenMut<Option<ApplyResult>> =
-    TokenMut::new(&OUTPUT_SWITCH_RESULT);

@@ -1,5 +1,5 @@
 [package]
-name = "compositor_kernel_native_context_display_switch"
+name = "compositor_kernel_native_context_display_reconcile"
 version = "0.0.1"
 edition = "2024"
 

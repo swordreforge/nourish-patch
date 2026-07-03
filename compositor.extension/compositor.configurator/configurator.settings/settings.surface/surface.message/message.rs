@@ -3,15 +3,13 @@
 use compositor_developer_environment_config_base::base::Environment;
 use compositor_orchestration_driver_output_base::base::{ApplyResult, DisplayInfo, ModeInfo};
 
-/// A provisional display change the user can Keep/Revert: a target monitor
-/// (by EDID identity key), the mode to drive it at, and whether this switches
-/// the ACTIVE output (different monitor → output-switch gate) or just changes
-/// the mode on the active monitor.
+/// A provisional per-monitor mode change the user can Keep/Revert: the target
+/// monitor (by EDID identity key) and the mode to drive it at. Multi-output: every
+/// output is independently driven, so this is always an in-place mode change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Applied {
     pub edid_key: String,
     pub mode: ModeInfo,
-    pub switch: bool,
 }
 use compositor_y5_audio_controller_interface::interface::AudioState;
 use compositor_configurator_network_backend_base::base::WifiSnapshot;
@@ -120,4 +118,21 @@ pub enum SettingsMessage {
     /// Commit the whole arrangement (forwarded on drag-end): persisted to
     /// `preferences.json` and rebuilt into the live teleport layout.
     LayoutCommit(Vec<compositor_developer_environment_preference_base::base::LayoutPlacement>),
+    /// UI-LOCAL: select the "Inactive" row for the selected monitor (a pending
+    /// deactivate that CHECK CHANGES then applies), like `SelectMode` for a mode.
+    SelectInactive,
+    /// UI-LOCAL (on CHECK CHANGES): STAGE an active-state change for the selected
+    /// monitor — arms the confirm bar without touching the kernel. `None` = staged
+    /// deactivate; `Some(mode)` = staged (re)activate at that mode. APPLY then forwards
+    /// the matching `SetActive`; REVERT discards it. This gives activate/deactivate the
+    /// same two-step CHECK → APPLY gate as a resolution change (which instead applies
+    /// live-provisionally on CHECK). Mutually exclusive with `pending` (resolution).
+    StageActive(String, Option<ModeInfo>),
+    /// Forwarded (on APPLY, from a staged change): set a monitor's active state.
+    /// `None` = deactivate; `Some(mode)` = (re)activate and drive it at that mode. The
+    /// kernel then reconciles (tears the pipe down / brings it up). Deactivating the
+    /// LAST active one is refused.
+    SetActive(String, Option<ModeInfo>),
+    /// Forwarded: toggle the cursor-teleport CYCLIC (wrap-around) preference.
+    SetCyclic(bool),
 }

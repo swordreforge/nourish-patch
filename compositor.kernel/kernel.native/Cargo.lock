@@ -3496,7 +3496,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "compositor_kernel_native_context_display_switch"
+name = "compositor_kernel_native_context_display_reconcile"
 version = "0.0.1"
 dependencies = [
  "compositor_developer_debug_instance_record",
@@ -3616,7 +3616,7 @@ dependencies = [
  "compositor_kernel_graphic_draw_plan_tap",
  "compositor_kernel_graphic_draw_present_callbacks",
  "compositor_kernel_native_context_display_mode",
- "compositor_kernel_native_context_display_switch",
+ "compositor_kernel_native_context_display_reconcile",
  "compositor_kernel_native_context_render_base",
  "compositor_kernel_scanout_flip_queue_base",
  "compositor_kernel_scanout_plane_direct_base",
@@ -3657,7 +3657,7 @@ dependencies = [
  "compositor_kernel_native_assemble_renderer_base",
  "compositor_kernel_native_context_display_base",
  "compositor_kernel_native_context_display_enumerate",
- "compositor_kernel_native_context_display_switch",
+ "compositor_kernel_native_context_display_reconcile",
  "compositor_kernel_native_context_render_base",
  "compositor_kernel_native_context_topology_base",
  "compositor_kernel_native_render_execute_base",
@@ -3706,7 +3706,7 @@ dependencies = [
  "compositor_kernel_input_loop_libinput_base",
  "compositor_kernel_native_context_display_apply",
  "compositor_kernel_native_context_display_mode",
- "compositor_kernel_native_context_display_switch",
+ "compositor_kernel_native_context_display_reconcile",
  "compositor_kernel_native_context_render_base",
  "compositor_orchestration_core_state_base",
  "compositor_orchestration_draw_state_lifecycle",
@@ -3724,7 +3724,7 @@ dependencies = [
  "compositor_kernel_gpu_registry_node_base",
  "compositor_kernel_graphic_preference_gpu_rank",
  "compositor_kernel_native_context_display_base",
- "compositor_kernel_native_context_display_switch",
+ "compositor_kernel_native_context_display_reconcile",
  "compositor_kernel_native_context_render_base",
  "compositor_kernel_native_context_topology_base",
  "compositor_kernel_native_plugin_route_base",

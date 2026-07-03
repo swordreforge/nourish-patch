@@ -12,7 +12,7 @@ use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use crate::layout_canvas::layout_canvas;
 use iced_core::{Element, Length, Theme};
-use iced_widget::{button, column, row, scrollable, text, Column};
+use iced_widget::{button, checkbox, column, row, scrollable, text, Column};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
 
@@ -27,8 +27,11 @@ pub fn build<'a>(
     selected_mode: Option<ModeInfo>,
     confirming: bool,
     pending: Option<&Applied>,
+    staged_active: Option<&(String, Option<ModeInfo>)>,
     layout: &'a [LayoutPlacement],
     selected_placement: Option<u64>,
+    cyclic: bool,
+    selected_inactive: bool,
 ) -> El<'a> {
     let head = column![
         text("DISPLAY").size(16).color(style::ACCENT),
@@ -59,29 +62,58 @@ pub fn build<'a>(
     // an active-output switch (which tears the primary down and fails the modeset for
     // an already-lit secondary → the "reverts immediately" bug). A change is pending
     // when the picked mode differs from the SELECTED monitor's current mode.
+    // The pending selection (Inactive, or a mode) is applied on CHECK CHANGES — NOT on
+    // selecting the item — so deactivate/reactivate/resolution all go through the gate.
     let selected = displays.iter().find(|d| d.edid_key == selected_display);
-    let changed = selected_mode.is_some() && selected_mode != selected.and_then(|d| d.current);
-    // CHECK is enabled only when a change is pending AND nothing is currently
-    // provisioning. APPLY/REVERT are enabled only WHILE provisioning. A disabled
-    // button gets no `on_press` and the greyed `disabled` style so it both looks and
-    // behaves inert.
-    let check_enabled = !confirming && changed && selected_mode.is_some();
+    let cur_inactive = selected.map(|d| !d.enabled).unwrap_or(false);
+    let cur_mode = selected.and_then(|d| d.current);
+    let changed = if selected_inactive {
+        !cur_inactive
+    } else if let Some(m) = selected_mode {
+        cur_inactive || Some(m) != cur_mode
+    } else {
+        false
+    };
+    // Deactivating the LAST active monitor is not allowed (all `displays` are
+    // connected, so "active" = `enabled`).
+    let active_count = displays.iter().filter(|d| d.enabled).count();
+    // The action CHECK arms one of two confirm flows, BOTH resolved by APPLY/REVERT:
+    // a deactivate/reactivate is STAGED (not applied until APPLY), while a resolution
+    // change on an active monitor applies live-provisionally through the fault gate.
+    let check_msg: Option<SettingsMessage> = if confirming || !changed {
+        None
+    } else if selected_inactive {
+        (active_count > 1).then(|| SettingsMessage::StageActive(selected_display.to_string(), None))
+    } else {
+        selected_mode.map(|mode| {
+            if cur_inactive {
+                SettingsMessage::StageActive(selected_display.to_string(), Some(mode))
+            } else {
+                SettingsMessage::Apply(Applied { edid_key: selected_display.to_string(), mode })
+            }
+        })
+    };
     let check = {
         let b = button(text("CHECK CHANGES")).width(Length::Fill);
-        match (check_enabled, selected_mode) {
-            (true, Some(mode)) => b.style(control::action).on_press(SettingsMessage::Apply(Applied {
-                edid_key: selected_display.to_string(),
-                mode,
-                switch: false,
-            })),
-            _ => b.style(control::disabled),
+        match check_msg {
+            Some(msg) => b.style(control::action).on_press(msg),
+            None => b.style(control::disabled),
         }
     };
+    // APPLY commits whichever confirm flow is armed: a STAGED activate/deactivate is
+    // forwarded now (`SetActive`), while a live-provisional resolution change is KEPT.
     let apply = {
         let b = button(text("APPLY")).width(Length::Fill);
-        match (confirming, pending) {
-            (true, Some(p)) => b.style(control::accent).on_press(SettingsMessage::Keep(p.clone())),
-            _ => b.style(control::disabled),
+        if confirming {
+            if let Some((edid, mode)) = staged_active {
+                b.style(control::accent).on_press(SettingsMessage::SetActive(edid.clone(), *mode))
+            } else if let Some(p) = pending {
+                b.style(control::accent).on_press(SettingsMessage::Keep(p.clone()))
+            } else {
+                b.style(control::disabled)
+            }
+        } else {
+            b.style(control::disabled)
         }
     };
     let revert = {
@@ -90,13 +122,16 @@ pub fn build<'a>(
     };
     let actions = row![check, apply, revert].spacing(8);
 
-    // Modes for the selected monitor.
+    // Modes for the selected monitor. The FIRST item is "Inactive". Selecting any row
+    // (Inactive or a mode) is a UI-LOCAL selection; CHECK CHANGES applies it.
     let sel = displays.iter().find(|d| d.edid_key == selected_display);
     let mut modes: Vec<El<'a>> = vec![text("RESOLUTION").size(11).color(style::MUTED).into()];
     match sel {
         Some(d) if !d.available.is_empty() => {
+            let inactive = button(text("Inactive")).width(Length::Fill).on_press(SettingsMessage::SelectInactive);
+            modes.push(if selected_inactive { inactive.style(control::accent) } else { inactive.style(control::action) }.into());
             for m in &d.available {
-                let on = Some(*m) == selected_mode;
+                let on = !selected_inactive && Some(*m) == selected_mode;
                 let b = button(text(mode_label(m))).width(Length::Fill).on_press(SettingsMessage::SelectMode(*m));
                 modes.push(if on { b.style(control::accent) } else { b.style(control::action) }.into());
             }
@@ -113,7 +148,9 @@ pub fn build<'a>(
     if displays.len() > 1 {
         let mut adds: Vec<El<'a>> =
             vec![text("ADD TO CURSOR LAYOUT").size(11).color(style::MUTED).into()];
-        for d in displays {
+        // Only ACTIVE monitors can be added to the map (inactive ones aren't driven,
+        // so they aren't part of the cursor-crossing arrangement).
+        for d in displays.iter().filter(|d| d.enabled) {
             adds.push(
                 button(text(format!("＋ {}", d.name)))
                     .width(Length::Fill)
@@ -133,6 +170,12 @@ pub fn build<'a>(
                 .into(),
             None => button(text("REMOVE")).style(control::disabled).into(),
         };
+        // Cyclic (wrap-around) toggle for the teleport map.
+        let cyclic_row = row![
+            checkbox(cyclic).on_toggle(SettingsMessage::SetCyclic),
+            text("Cyclic — wrap the cursor around the layout edges").size(12).color(style::MUTED),
+        ]
+        .spacing(8);
         col = col.push(
             column![
                 text("CURSOR TELEPORT LAYOUT").size(11).color(style::MUTED),
@@ -143,6 +186,7 @@ pub fn build<'a>(
                     Column::with_children(adds).spacing(6).width(Length::Fixed(200.0)),
                 ]
                 .spacing(12),
+                cyclic_row,
                 row![apply_layout, remove].spacing(8),
             ]
             .spacing(8),

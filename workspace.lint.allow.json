@@ -29,7 +29,7 @@
   "compositor.kernel/kernel.native/native.context/context.display/display.mode": [
     "size"
   ],
-  "compositor.kernel/kernel.native/native.context/context.display/display.switch": [
+  "compositor.kernel/kernel.native/native.context/context.display/display.reconcile": [
     "size"
   ],
   "compositor.expansion/compositor.y5/y5.audio/audio.controller/controller.interface": [

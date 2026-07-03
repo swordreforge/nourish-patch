@@ -59,7 +59,7 @@ fn set_mode_now(ctx: &mut NativeRenderContext, idx: usize, mode: DrmMode) -> Res
 }
 /// Take a pending request (if any) and DEFER it onto a one-shot loop timer, so the
 /// modeset never runs inside the vblank/render callback that may be calling this
-/// drain (a modeset mid-vblank is unsafe — same rule as `display.switch`).
+/// drain (a modeset mid-vblank is unsafe — same rule as `display.reconcile`).
 pub fn drain(state: &mut Loop, ctx_rc: &Ctx) {
     let Some(req) = state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT).take() else { return };
     let ctx = ctx_rc.clone();

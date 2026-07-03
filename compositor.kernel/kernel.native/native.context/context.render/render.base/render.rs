@@ -35,7 +35,7 @@ pub struct OutputPipe {
     /// The live scanout target. `Option` because a live monitor switch tears the
     /// current output DOWN before building the target (single-output hardware can't
     /// light two at once — the atomic modeset of a second output fails). It is
-    /// `None` only transiently inside `display.switch` between teardown and rebuild;
+    /// `None` only transiently inside `display.reconcile` between teardown and rebuild;
     /// every render path treats `None` as "skip this frame".
     pub drm_output: Option<NativeDrmOutput>,
     /// HDR (M5): the display's parsed EDID HDR/colorimetry caps.
@@ -59,6 +59,12 @@ pub struct OutputPipe {
     /// `(previous_mode, one_shot_timer)`. `Some` while awaiting the user's Keep;
     /// cleared on Confirm, on Revert, or when the timer reverts. See `display.mode`.
     pub mode_revert: Option<(DrmMode, RegistrationToken)>,
+    /// The `wl_output` global for this pipe's Output, when this pipe created its own
+    /// (secondary outputs via `display.reconcile::add_output`). Kept so it can be
+    /// DESTROYED when the pipe is pruned (disconnect/deactivate) — otherwise a stale
+    /// global lingers and re-adding the monitor advertises a duplicate. `None` for the
+    /// primary anchor (its global is created once at boot and never pruned).
+    pub global: Option<smithay::reexports::wayland_server::backend::GlobalId>,
     /// This pipe has a page-flip in flight (queued, awaiting its own VBlank).
     /// The render loop SKIPS an in-flight pipe so each output re-renders only on
     /// its OWN vblank cadence — a 144 Hz output is not dragged down to a 60 Hz
@@ -97,11 +103,6 @@ pub struct NativeRenderContext {
     /// doesn't expose colorspace / HDR metadata). Per-device (shared), so it stays
     /// on the context rather than the per-output [`OutputPipe`].
     pub drm_fd: smithay::backend::drm::DrmDeviceFd,
-    /// Armed confirm/revert state for a provisionally-applied active-output
-    /// SWITCH: the original pipe (kept alive on its own CRTC) plus the metadata to
-    /// restore. `Some` while awaiting the user's Keep; cleared on Confirm (old
-    /// dropped), on Revert, or when the timer reverts. See `display.switch`.
-    pub output_revert: Option<OutputSwitchBaseline>,
     /// The dark control-plane timer (`Timer` re-arming every ~100 ms) while the
     /// compositor has no output: pumps the important renderer-free drains so they
     /// progress with no rendering. `Some` only while dark — armed on the `WentDark`
@@ -121,13 +122,3 @@ impl NativeRenderContext {
     }
 }
 
-/// What to restore on a switch revert: the original connector (by its unique name,
-/// e.g. "DisplayPort-1") and the mode it was driving, plus the auto-revert
-/// watchdog. The original output is torn DOWN on apply (single-output scanout —
-/// only one pipe active at a time), so a revert REBUILDS it rather than
-/// re-activating a kept-alive pipe.
-pub struct OutputSwitchBaseline {
-    pub connector_name: String,
-    pub mode: compositor_orchestration_driver_output_base::base::ModeInfo,
-    pub timer: RegistrationToken,
-}

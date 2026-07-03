@@ -218,7 +218,7 @@ compositor_kernel_native_context_display_base = { path = "../../compositor.kerne
 compositor_kernel_native_context_display_build = { path = "../../compositor.kernel/kernel.native/native.context/context.display/display.build" }
 compositor_kernel_native_context_display_enumerate = { path = "../../compositor.kernel/kernel.native/native.context/context.display/display.enumerate" }
 compositor_kernel_native_context_display_mode = { path = "../../compositor.kernel/kernel.native/native.context/context.display/display.mode" }
-compositor_kernel_native_context_display_switch = { path = "../../compositor.kernel/kernel.native/native.context/context.display/display.switch" }
+compositor_kernel_native_context_display_reconcile = { path = "../../compositor.kernel/kernel.native/native.context/context.display/display.reconcile" }
 compositor_kernel_native_context_render_base = { path = "../../compositor.kernel/kernel.native/native.context/context.render/render.base" }
 compositor_kernel_native_context_topology_base = { path = "../../compositor.kernel/kernel.native/native.context/context.topology/topology.base" }
 compositor_kernel_native_device_delegate_base = { path = "../../compositor.kernel/kernel.native/native.device/device.delegate/delegate.base" }

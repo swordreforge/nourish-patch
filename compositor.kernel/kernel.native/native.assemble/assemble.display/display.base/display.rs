@@ -208,7 +208,7 @@ fn resolve_mode(
         // advertised request inside mode.select falls back to default policy too.
         None => {
             let dm = compositor_kernel_graphic_preference_output_profile::profile::default_mode()
-                .map(|mode| OutputProfile { identity: None, mode: Some(mode) });
+                .map(|mode| OutputProfile { identity: None, mode: Some(mode), active: true });
             compositor_kernel_drm_mode_select_base::select::select(connector, dm.as_ref())
                 .expect("connector advertises no modes")
         }

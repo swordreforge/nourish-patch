@@ -67,11 +67,14 @@ pub fn enumerate(
         // one has no "current" and the UI defaults a selection from `available`.
         let current = lit.iter().find(|(h, _)| *h == info.handle()).map(|(_, m)| *m);
         let preferred = preferred_mode(&edid_key);
+        // User enable/disable (the settings "Inactive" toggle); profile-less → enabled.
+        let enabled = compositor_kernel_graphic_preference_output_profile::profile::active(&edid_key);
         displays.push(DisplayInfo {
             edid_key,
             name: label,
             connected: true,
             active: is_active,
+            enabled,
             current,
             preferred,
             available,

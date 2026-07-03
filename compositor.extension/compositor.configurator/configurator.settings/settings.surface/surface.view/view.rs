@@ -28,8 +28,16 @@ pub struct Settings {
     pub selected_display: String,
     /// Mode selected for the selected monitor (defaults to its current/first).
     pub selected_mode: Option<ModeInfo>,
+    /// Whether the pending selection for the selected monitor is "Inactive"
+    /// (deactivate). Mutually exclusive with a `selected_mode`. Applied by CHECK.
+    pub selected_inactive: bool,
     /// The change awaiting Keep/Revert (drives the confirm bar + commit on result).
     pub pending: Option<Applied>,
+    /// A STAGED activate/deactivate awaiting APPLY: `(edid_key, Some(mode)=reactivate |
+    /// None=deactivate)`. Unlike `pending` (a live-provisional resolution change), this
+    /// is NOT applied on CHECK — APPLY forwards the `SetActive`, REVERT discards it.
+    /// Mutually exclusive with `pending`.
+    pub staged_active: Option<(String, Option<ModeInfo>)>,
     pub confirming: bool,
     /// Shortcut rows for the Keys tab (id, label, default, current combo).
     pub keys: Vec<KeyRow>,
@@ -51,6 +59,8 @@ pub struct Settings {
     pub selected_placement: Option<u64>,
     /// Next placement id to hand out (monotonic within the session).
     pub next_placement_id: u64,
+    /// Cursor-teleport CYCLIC (wrap-around) preference — the Display-tab checkbox.
+    pub cyclic: bool,
 }
 
 /// A new square's side length in abstract layout units.
@@ -92,7 +102,7 @@ fn default_mode(d: &DisplayInfo) -> Option<ModeInfo> {
 }
 
 impl Settings {
-    pub fn new(env: Environment, cursor: f32, natural: bool, snap: OutputsSnapshot, keys: Vec<KeyRow>, tab: Tab, layout: Vec<LayoutPlacement>) -> Self {
+    pub fn new(env: Environment, cursor: f32, natural: bool, snap: OutputsSnapshot, keys: Vec<KeyRow>, tab: Tab, layout: Vec<LayoutPlacement>, cyclic: bool) -> Self {
         let active = snap.displays.iter().find(|d| d.active).cloned();
         let active_edid = active.as_ref().map(|d| d.edid_key.clone()).unwrap_or_default();
         let selected_mode = active.as_ref().and_then(default_mode);
@@ -107,7 +117,9 @@ impl Settings {
             active_edid: active_edid.clone(),
             selected_display: active_edid,
             selected_mode,
+            selected_inactive: false,
             pending: None,
+            staged_active: None,
             confirming: false,
             keys,
             audio: AudioState::default(),
@@ -120,6 +132,7 @@ impl Settings {
             layout,
             selected_placement: None,
             next_placement_id,
+            cyclic,
         }
     }
 
@@ -136,6 +149,19 @@ impl Settings {
     fn reset_selection(&mut self) {
         self.selected_display = self.active_edid.clone();
         self.selected_mode = self.display(&self.active_edid).and_then(default_mode);
+        self.selected_inactive = false;
+        self.staged_active = None;
+    }
+
+    /// Seed the pending selection for a monitor from its CURRENT state: an inactive
+    /// monitor starts on "Inactive", an active one on its current/first mode.
+    fn seed_selection(&mut self, key: &str) {
+        let (enabled, mode) = {
+            let d = self.display(key);
+            (d.map(|d| d.enabled).unwrap_or(true), d.and_then(default_mode))
+        };
+        self.selected_inactive = !enabled;
+        self.selected_mode = if enabled { mode } else { None };
     }
 }
 
@@ -146,28 +172,21 @@ impl IcedUi for Settings {
         match message {
             SettingsMessage::Tab(t) => self.tab = t,
             SettingsMessage::Fps(f) => self.fps = f,
-            // Kernel outcome of the provisional apply: commit on Confirmed (a
-            // switch makes the target the active monitor), reset otherwise.
+            // Kernel outcome of the provisional apply: commit on Confirmed, reset
+            // otherwise.
             SettingsMessage::ModeResult(r) => match r {
                 ApplyResult::Confirmed => {
                     if let Some(p) = self.pending.take() {
-                        // Update the in-memory snapshot so the active monitor's
-                        // `current` reflects the just-applied mode (and, for a real
-                        // switch, the active flag moves). Without this the snapshot
-                        // is stale: re-selecting the previous mode would read as "no
-                        // change", greying out CHECK, so you couldn't revert/redo in
-                        // the same session.
+                        // Update the in-memory snapshot so the changed monitor's
+                        // `current` reflects the just-applied mode. Without this the
+                        // snapshot is stale: re-selecting the previous mode would read
+                        // as "no change", greying out CHECK, so you couldn't revert/
+                        // redo in the same session.
                         for d in &mut self.displays {
                             if d.edid_key == p.edid_key {
-                                d.active = true;
                                 d.current = Some(p.mode);
-                            } else if p.switch {
-                                d.active = false;
-                                d.current = None;
                             }
                         }
-                        self.active_edid = p.edid_key;
-                        self.selected_display = self.active_edid.clone();
                         self.selected_mode = Some(p.mode);
                     }
                     self.confirming = false;
@@ -187,11 +206,27 @@ impl IcedUi for Settings {
             }
             SettingsMessage::SelectDisplay(key) => {
                 self.selected_display = key.clone();
-                self.selected_mode = self.display(&key).and_then(default_mode);
+                self.seed_selection(&key);
             }
-            SettingsMessage::SelectMode(m) => self.selected_mode = Some(m),
+            SettingsMessage::SelectMode(m) => {
+                self.selected_mode = Some(m);
+                self.selected_inactive = false;
+            }
+            SettingsMessage::SelectInactive => {
+                self.selected_inactive = true;
+                self.selected_mode = None;
+            }
             SettingsMessage::Apply(a) => {
                 self.pending = Some(a);
+                self.staged_active = None;
+                self.confirming = true;
+            }
+            // STAGE an activate/deactivate on CHECK: arm the confirm bar WITHOUT touching
+            // the kernel (APPLY forwards the `SetActive`; REVERT discards). Mutually
+            // exclusive with a provisional resolution change.
+            SettingsMessage::StageActive(edid, mode) => {
+                self.staged_active = Some((edid, mode));
+                self.pending = None;
                 self.confirming = true;
             }
             SettingsMessage::Keep(_) => self.confirming = false,
@@ -294,6 +329,15 @@ impl IcedUi for Settings {
             }
             // Forwarded (persist + rebuild teleport): the UI already holds the data.
             SettingsMessage::LayoutCommit(_) => {}
+            // Optimistic: reflect the cyclic checkbox immediately (also forwarded).
+            SettingsMessage::SetCyclic(b) => self.cyclic = b,
+            // APPLY of a staged activate/deactivate (also forwarded → kernel reconciles):
+            // drop the confirm bar + clear the stage. The kernel applies it and the next
+            // `SyncDisplays` refresh reflects the new active set.
+            SettingsMessage::SetActive(..) => {
+                self.staged_active = None;
+                self.confirming = false;
+            }
             // Forwarded-only actions: no local UI state change.
             SettingsMessage::SetDefaultSink(_)
             | SettingsMessage::SetSinkVolume(_, _)
@@ -319,6 +363,7 @@ impl IcedUi for Settings {
             &self.selected_display,
             self.selected_mode,
             self.pending.as_ref(),
+            self.staged_active.as_ref(),
             self.confirming,
             &self.keys,
             &self.audio,
@@ -330,6 +375,8 @@ impl IcedUi for Settings {
             self.fps,
             &self.layout,
             self.selected_placement,
+            self.cyclic,
+            self.selected_inactive,
         )
     }
 }

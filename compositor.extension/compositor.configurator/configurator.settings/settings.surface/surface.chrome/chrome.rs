@@ -69,13 +69,14 @@ fn performance<'a>(fps: u32) -> El<'a> {
 pub fn render<'a>(
     tab: Tab, dirty: bool, cursor_sensitivity: f32, natural: bool, env: &'a Environment,
     displays: &'a [DisplayInfo], active_edid: &'a str, selected_display: &'a str,
-    selected_mode: Option<ModeInfo>, pending: Option<&'a Applied>, confirming: bool,
+    selected_mode: Option<ModeInfo>, pending: Option<&'a Applied>,
+    staged_active: Option<&'a (String, Option<ModeInfo>)>, confirming: bool,
     keys: &'a [KeyRow], audio: &'a AudioState, wifi: &'a WifiSnapshot, bt: &'a BtSnapshot,
     wifi_selected: Option<&'a str>, wifi_password: &'a str, devices: &'a [RenderDevice], fps: u32,
-    layout: &'a [LayoutPlacement], selected_placement: Option<u64>,
+    layout: &'a [LayoutPlacement], selected_placement: Option<u64>, cyclic: bool, selected_inactive: bool,
 ) -> El<'a> {
     let body: El<'a> = match tab {
-        Tab::Display => display::build(displays, active_edid, selected_display, selected_mode, confirming, pending, layout, selected_placement),
+        Tab::Display => display::build(displays, active_edid, selected_display, selected_mode, confirming, pending, staged_active, layout, selected_placement, cyclic, selected_inactive),
         Tab::Audio => audio_tab::build(audio),
         Tab::Input => row![
             container(cursor::build(cursor_sensitivity, natural)).width(Length::FillPortion(5)).height(Length::Fill),

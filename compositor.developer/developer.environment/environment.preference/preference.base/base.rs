@@ -21,13 +21,30 @@ pub enum ModeRequest {
     Modeline(String),
 }
 
+fn profile_active_default() -> bool {
+    true
+}
+
 /// Per-monitor output preference. `identity = None` applies to any output
 /// (single-output-era default).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputProfile {
     /// EDID identity string ("make model serial") this profile applies to.
     pub identity: Option<String>,
     pub mode: Option<ModeRequest>,
+    /// Whether this monitor is DRIVEN. `false` = the user deactivated it (settings
+    /// Display tab → "Inactive"): the compositor doesn't light it and it's dropped
+    /// from the live cursor-teleport map, but its profile + map placement are kept
+    /// so reactivating restores it in place. Defaults to `true` (all monitors active),
+    /// so an older `preferences.json` without the field drives every monitor as before.
+    #[serde(default = "profile_active_default")]
+    pub active: bool,
+}
+
+impl Default for OutputProfile {
+    fn default() -> Self {
+        Self { identity: None, mode: None, active: true }
+    }
 }
 
 /// One placed monitor in the cursor-teleport layout (the settings Display-tab
@@ -82,6 +99,11 @@ pub struct Preference {
     /// `outputs`, which is one-per-identity), so it is its own list.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs_layout: Vec<LayoutPlacement>,
+    /// Cursor-teleport CYCLIC mode: when the pointer exits a layout edge with no
+    /// monitor across it, wrap around and re-enter from the opposite side of the
+    /// layout (toroidal), instead of clamping. Default `false` (clamp at the edge).
+    #[serde(default)]
+    pub teleport_cyclic: bool,
 }
 
 impl Default for Preference {
@@ -92,6 +114,7 @@ impl Default for Preference {
             outputs: Vec::new(),
             outputs_default_mode: None,
             outputs_layout: Vec::new(),
+            teleport_cyclic: false,
         }
     }
 }
@@ -149,7 +172,27 @@ pub fn upsert_output(outputs: &mut Vec<OutputProfile>, edid_key: &str, mode: Mod
     if let Some(p) = outputs.iter_mut().find(|p| p.identity.as_deref() == Some(edid_key)) {
         p.mode = Some(mode);
     } else {
-        outputs.push(OutputProfile { identity: Some(edid_key.to_string()), mode: Some(mode) });
+        outputs.push(OutputProfile { identity: Some(edid_key.to_string()), mode: Some(mode), active: true });
+    }
+}
+
+/// Whether the monitor keyed by `edid_key` is DRIVEN (active). Unknown monitors —
+/// and any without an explicit profile — default to active.
+pub fn output_active(outputs: &[OutputProfile], edid_key: &str) -> bool {
+    outputs
+        .iter()
+        .find(|p| p.identity.as_deref() == Some(edid_key))
+        .map(|p| p.active)
+        .unwrap_or(true)
+}
+
+/// Set the active (driven) flag for `edid_key`, inserting an identity-only profile
+/// if none exists. Preserves the profile's mode + position.
+pub fn set_active(outputs: &mut Vec<OutputProfile>, edid_key: &str, active: bool) {
+    if let Some(p) = outputs.iter_mut().find(|p| p.identity.as_deref() == Some(edid_key)) {
+        p.active = active;
+    } else {
+        outputs.push(OutputProfile { identity: Some(edid_key.to_string()), mode: None, active });
     }
 }
 
@@ -166,7 +209,7 @@ pub fn set_layout(prefs: &mut Preference, placements: Vec<LayoutPlacement>) {
 pub fn set_default(outputs: &mut Vec<OutputProfile>, edid_key: &str) {
     let profile = match outputs.iter().position(|p| p.identity.as_deref() == Some(edid_key)) {
         Some(i) => outputs.remove(i),
-        None => OutputProfile { identity: Some(edid_key.to_string()), mode: None },
+        None => OutputProfile { identity: Some(edid_key.to_string()), mode: None, active: true },
     };
     outputs.insert(0, profile);
 }
