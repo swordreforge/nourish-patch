@@ -68,6 +68,11 @@ pub struct Preference {
     /// `Env` so an existing `preferences.json` (no `keyboard` key) behaves exactly
     /// as before — libxkbcommon reads the `XKB_DEFAULT_*` environment.
     pub keyboard: KeyboardLayout,
+    /// Default background shader for new worlds: a bundle folder name under
+    /// `~/.local/share/y5/background/shader/`, or an absolute path. A world may
+    /// override it in its own record; unset = the built-in parallax.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background_shader: Option<String>,
 }
 
 /// Where the keyboard layout comes from. `Env` (the historical default) leaves the
@@ -123,6 +128,7 @@ impl Default for Preference {
             outputs_default_mode: None,
             ime: None,
             keyboard: KeyboardLayout::default(),
+            background_shader: None,
         }
     }
 }
