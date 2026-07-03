@@ -22,6 +22,8 @@ pub struct ParallaxBackground {
     start_time: Instant,
     pub lock_time: Option<Instant>,
     pub output_size: (f32, f32),
+    /// Render-rect top-left (physical px); a pane's origin per-pane, else `(0,0)`.
+    pub offset: (i32, i32),
     pub pan: (f32, f32), // state passed from your main loop
     pub zoom: f32,
     /// Shader-authored `@prop` values (16 float slots), fed to the shader each
@@ -46,6 +48,7 @@ impl ParallaxBackground {
             compositor_background_two_draw_select::build(renderer, selection, params_override);
         Self {
             output_size,
+            offset: (0, 0),
             id: Id::new(),
             commit: CommitCounter::default(),
             program,
@@ -60,15 +63,19 @@ impl ParallaxBackground {
         self.motion.tick(self.pan, self.lock_time.is_some());
         self.commit.increment();
     }
+    /// Rebind a clone to a viewport pane (render rect + pane camera + distinct id).
+    pub fn bind_pane(&mut self, offset: (i32, i32), size: (f32, f32), pan: (f32, f32), zoom: f32, id: Id) {
+        self.offset = offset; self.output_size = size; self.pan = pan; self.zoom = zoom; self.id = id;
+    }
 }
 impl Element for ParallaxBackground {
     fn id(&self) -> &Id { &self.id }
     fn current_commit(&self) -> CommitCounter { self.commit }
     fn src(&self) -> Rectangle<f64, Buffer> { Rectangle::from_loc_and_size((0.0, 0.0), (1.0, 1.0)) }
     fn geometry(&self, _scale: Scale<f64>) -> Rectangle<i32, Physical> {
-        Rectangle::from_loc_and_size((0, 0), (self.output_size.0 as i32, self.output_size.1 as i32))
+        Rectangle::from_loc_and_size(self.offset, (self.output_size.0 as i32, self.output_size.1 as i32))
     }
-    fn location(&self, _scale: Scale<f64>) -> Point<i32, Physical> { Point::from((0, 0)) }
+    fn location(&self, _scale: Scale<f64>) -> Point<i32, Physical> { Point::from(self.offset) }
     fn transform(&self) -> Transform { Transform::Normal }
     fn damage_since(&self, scale: Scale<f64>, commit: Option<CommitCounter>) -> DamageSet<i32, Physical> {
         if commit != Some(self.commit) {

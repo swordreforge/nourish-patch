@@ -4,7 +4,7 @@ use compositor_monitor_compositor_iced_base::{HandleId, IcedHandle, IcedSpace};
 use compositor_orchestration_core_state_base::Loop;
 use compositor_orchestration_draw_layer_base::base::Layer;
 use compositor_orchestration_driver_audio_base::base::AUDIO;
-use compositor_orchestration_driver_output_base::base::{OutputModeRequest, OutputSwitchRequest, OutputsSnapshot, OUTPUTS_SNAPSHOT, OUTPUT_MODE_REQUEST_MUT, OUTPUT_MODE_RESULT_MUT, OUTPUT_SWITCH_REQUEST_MUT, OUTPUT_SWITCH_RESULT_MUT};
+use compositor_orchestration_driver_output_base::base::{OutputModeRequest, OutputsSnapshot, OUTPUTS_SNAPSHOT, OUTPUT_MODE_REQUEST_MUT, OUTPUT_MODE_RESULT_MUT};
 use compositor_orchestration_driver_settings_base::base::{SETTINGS, SETTINGS_MUT};
 use compositor_configurator_network_backend_base::base::{self as wifi, WifiCmd, WifiSnapshot};
 use compositor_configurator_bluetooth_backend_base::base::{self as bt, BtCmd, BtSnapshot};
@@ -101,6 +101,15 @@ fn shader_state(state: &Loop) -> (Vec<String>, Option<String>, Vec<ShaderProp>, 
 }
 
 pub fn per_frame(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physical>) {
+    // Runs once per output in the render loop; the settings window is a screen-space
+    // surface that belongs to the ACTIVE monitor only. Act only on the active
+    // output's pass, so `size` is that monitor's and it isn't created/resized on
+    // every other output. (render_output None = single/non-loop pass → run.)
+    if let Some(k) = &state.inner.render_output {
+        if *k != state.inner.active_output_key() {
+            return;
+        }
+    }
     let shown = state.inner.overview().visible
         && state.inner.overview().overlay_ready()
         && state.inner.overview().is_settings();
@@ -179,13 +188,6 @@ fn sync(state: &mut Loop, id: HandleId, size: Size<i32, Physical>) {
             let _ = reg.dispatch_message(IcedHandle::<Settings>::from_id(id), SettingsMessage::ModeResult(r));
         }
     }
-    // Same for the active-output switch gate (shares the ModeResult UI handling).
-    let switch_result = state.inner.kernel.get_mut(&OUTPUT_SWITCH_RESULT_MUT).take();
-    if let Some(r) = switch_result {
-        if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
-            let _ = reg.dispatch_message(IcedHandle::<Settings>::from_id(id), SettingsMessage::ModeResult(r));
-        }
-    }
 }
 
 fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physical>) {
@@ -202,9 +204,11 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
     keys.extend(compositor_y5_canvas_input_keyboard::navigator::fixed());
     keys.extend(compositor_y5_overlay_interface_keyboard::keyboard::fixed());
     let tab = compositor_configurator_settings_surface_message::message::Tab::from_index(state.inner.kernel.get(&SETTINGS).tab);
+    let layout = state.inner.preference.outputs_layout.clone();
+    let cyclic = state.inner.preference.teleport_cyclic;
     let ime = state.inner.preference.ime.clone().unwrap_or_default();
     let keyboard = state.inner.preference.keyboard.clone();
-    let ui = Settings::new(env, cursor, natural, snap, keys, tab, ime, keyboard);
+    let ui = Settings::new(env, cursor, natural, snap, keys, tab, layout, cyclic, ime, keyboard);
     let handle = load(state, renderer, ui, rect, IcedSpace::Screen, Layer::SCENE.bits());
     install_handler(state, handle);
     let untyped = handle.untyped();
@@ -222,9 +226,8 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
 
 fn destroy(state: &mut Loop, id: HandleId) {
     // Closing settings (Esc / overview-tab switch / overview close) abandons any
-    // provisional mode/switch change → revert it (no-op if nothing is pending).
+    // provisional mode change → revert it (no-op if nothing is pending).
     *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
-    *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Revert);
     state.inner.ping_control();
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() { reg.destroy_by_id(id); reg.set_keyboard_focus(None); }
     bt::command(BtCmd::Scan(false));
@@ -238,7 +241,7 @@ fn install_handler(state: &mut Loop, handle: IcedHandle<Settings>) {
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
         if let Some(inst) = reg.instance_mut(handle) {
             inst.runtime_mut().set_message_handler(move |m: &SettingsMessage| {
-                if matches!(m, SettingsMessage::SyncSystem(..) | SettingsMessage::SyncDisplays(_) | SettingsMessage::SyncShaders(..) | SettingsMessage::SyncShaderProps(..) | SettingsMessage::SyncShaderPreview(..) | SettingsMessage::SyncShaderStatus(..) | SettingsMessage::Tick | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_) | SettingsMessage::SelectDisplay(_) | SettingsMessage::SelectMode(_)) { return; }
+                if matches!(m, SettingsMessage::SyncSystem(..) | SettingsMessage::SyncDisplays(_) | SettingsMessage::SyncShaders(..) | SettingsMessage::SyncShaderProps(..) | SettingsMessage::SyncShaderPreview(..) | SettingsMessage::SyncShaderStatus(..) | SettingsMessage::Tick | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_) | SettingsMessage::SelectDisplay(_) | SettingsMessage::SelectMode(_) | SettingsMessage::SelectInactive | SettingsMessage::StageActive(..)) { return; }
                 let _ = tx.send(SurfaceMessage { message: SurfaceMessageType::Settings(m.clone()) });
             });
         }

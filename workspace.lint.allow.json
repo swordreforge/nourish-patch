@@ -26,10 +26,19 @@
   "compositor.orchestration/orchestration.driver/driver.output/output.base": [
     "size"
   ],
+  "compositor.expansion/compositor.y5/y5.viewport/viewport.state/state.base": [
+    "size"
+  ],
+  "compositor.expansion/compositor.y5/y5.viewport/viewport.interaction/interaction.base": [
+    "size"
+  ],
   "compositor.extension/compositor.configurator/configurator.settings/settings.interface/interface.handle": [
     "size"
   ],
   "compositor.extension/compositor.configurator/configurator.settings/settings.surface/surface.message": [
+    "size"
+  ],
+  "compositor.kernel/kernel.native/native.context/context.render/render.base": [
     "size"
   ],
   "compositor.kernel/kernel.native/native.context/context.display/display.build": [
@@ -38,7 +47,7 @@
   "compositor.kernel/kernel.native/native.context/context.display/display.mode": [
     "size"
   ],
-  "compositor.kernel/kernel.native/native.context/context.display/display.switch": [
+  "compositor.kernel/kernel.native/native.context/context.display/display.reconcile": [
     "size"
   ],
   "compositor.expansion/compositor.y5/y5.audio/audio.controller/controller.interface": [
@@ -185,6 +194,9 @@
     "size"
   ],
   "compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.status": [
+    "size"
+  ],
+  "compositor.expansion/compositor.y5/y5.overview/overview.draw/draw.frame": [
     "size"
   ],
   "compositor.kernel/kernel.gles/gles.element/element.combined/combined.base": [

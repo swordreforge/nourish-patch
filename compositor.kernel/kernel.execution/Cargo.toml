@@ -244,7 +244,7 @@ compositor_kernel_native_context_display_base = { path = "../kernel.native/nativ
 compositor_kernel_native_context_display_build = { path = "../kernel.native/native.context/context.display/display.build" }
 compositor_kernel_native_context_display_enumerate = { path = "../kernel.native/native.context/context.display/display.enumerate" }
 compositor_kernel_native_context_display_mode = { path = "../kernel.native/native.context/context.display/display.mode" }
-compositor_kernel_native_context_display_switch = { path = "../kernel.native/native.context/context.display/display.switch" }
+compositor_kernel_native_context_display_reconcile = { path = "../kernel.native/native.context/context.display/display.reconcile" }
 compositor_kernel_native_context_render_base = { path = "../kernel.native/native.context/context.render/render.base" }
 compositor_kernel_native_context_topology_base = { path = "../kernel.native/native.context/context.topology/topology.base" }
 compositor_kernel_native_device_delegate_base = { path = "../kernel.native/native.device/device.delegate/delegate.base" }
@@ -738,6 +738,11 @@ compositor_y5_surface_interface_core = { path = "../../compositor.expansion/comp
 compositor_y5_surface_protocol_base = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.protocol/protocol.base" }
 compositor_y5_surface_state_base = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.state/state.base" }
 compositor_y5_surface_system_base = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.system/system.base" }
+compositor_y5_viewport_interaction_base = { path = "../../compositor.expansion/compositor.y5/y5.viewport/viewport.interaction/interaction.base" }
+compositor_y5_viewport_interface_base = { path = "../../compositor.expansion/compositor.y5/y5.viewport/viewport.interface/interface.base" }
+compositor_y5_viewport_layout_base = { path = "../../compositor.expansion/compositor.y5/y5.viewport/viewport.layout/layout.base" }
+compositor_y5_viewport_persist_doc = { path = "../../compositor.expansion/compositor.y5/y5.viewport/viewport.persist/persist.doc" }
+compositor_y5_viewport_state_base = { path = "../../compositor.expansion/compositor.y5/y5.viewport/viewport.state/state.base" }
 compositor_y5_window_decoration_element = { path = "../../compositor.expansion/compositor.y5/y5.window/window.decoration/decoration.element" }
 compositor_y5_window_draw_element = { path = "../../compositor.expansion/compositor.y5/y5.window/window.draw/draw.element" }
 compositor_y5_window_draw_frame = { path = "../../compositor.expansion/compositor.y5/y5.window/window.draw/draw.frame" }

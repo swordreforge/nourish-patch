@@ -5,13 +5,27 @@
 //! modes go via the OUTPUT_MODE_REQUEST channel (apply / confirm+persist / revert).
 use compositor_developer_environment_preference_base::base as pref;
 use compositor_orchestration_core_state_base::Loop;
-use compositor_orchestration_driver_output_base::base::{OutputModeRequest, OutputSwitchRequest, OUTPUT_MODES_SNAPSHOT, OUTPUT_MODE_REQUEST_MUT, OUTPUT_SWITCH_REQUEST_MUT};
+use compositor_orchestration_driver_output_base::base::{OutputModeRequest, OUTPUT_MODE_REQUEST_MUT, OUTPUTS_SNAPSHOT, OUTPUT_RECONCILE_REQUEST_MUT};
 use compositor_orchestration_driver_settings_base::base::SETTINGS_MUT;
 use compositor_configurator_settings_surface_message::message::{SettingsMessage, Tab};
 use compositor_configurator_network_backend_base::base::{self as wifi, WifiCmd};
 use compositor_configurator_bluetooth_backend_base::base::{self as bt, BtCmd};
 use compositor_orchestration_driver_audio_base::base::AUDIO;
 use smithay::backend::renderer::gles::GlesRenderer;
+
+/// Currently-connected monitors' EDID keys (from the kernel snapshot) — the set the
+/// live teleport map is filtered against when it is rebuilt.
+fn connected_keys(state: &Loop) -> Vec<String> {
+    state
+        .inner
+        .kernel
+        .get(&OUTPUTS_SNAPSHOT)
+        .displays
+        .iter()
+        .filter(|d| d.connected)
+        .map(|d| d.edid_key.clone())
+        .collect()
+}
 
 pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage) {
     match m {
@@ -48,48 +62,29 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             }
         }
         SettingsMessage::Apply(a) => {
-            if a.switch {
-                *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Apply {
-                    edid_key: a.edid_key,
-                    mode: Some(a.mode),
-                });
-            } else {
-                *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Apply {
-                    width: a.mode.width,
-                    height: a.mode.height,
-                    refresh_mhz: a.mode.refresh_mhz,
-                });
-            }
+            // Per-pipe mode change on the SELECTED monitor (multi-output: every output
+            // is independently driven, so this is never an active-output switch).
+            *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Apply {
+                edid_key: a.edid_key,
+                width: a.mode.width,
+                height: a.mode.height,
+                refresh_mhz: a.mode.refresh_mhz,
+            });
             state.inner.ping_control();
         }
         SettingsMessage::Keep(a) => {
-            if a.switch {
-                // Confirm the switch + persist the preferred monitor as the default
-                // output: set its mode, then move it to the front of `outputs`
-                // (`display.base` drives `profiles.first()` at startup).
-                *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Confirm);
-                pref::upsert_output(&mut state.inner.preference.outputs, &a.edid_key, pref::ModeRequest::Advertised {
-                    width: a.mode.width,
-                    height: a.mode.height,
-                    refresh_mhz: a.mode.refresh_mhz,
-                });
-                pref::set_default(&mut state.inner.preference.outputs, &a.edid_key);
-            } else {
-                *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Confirm);
-                let edid = state.inner.kernel.get(&OUTPUT_MODES_SNAPSHOT).edid_key.clone();
-                pref::upsert_output(&mut state.inner.preference.outputs, &edid, pref::ModeRequest::Advertised {
-                    width: a.mode.width,
-                    height: a.mode.height,
-                    refresh_mhz: a.mode.refresh_mhz,
-                });
-            }
+            *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Confirm);
+            // Persist to the SELECTED monitor's profile (multi-output).
+            pref::upsert_output(&mut state.inner.preference.outputs, &a.edid_key, pref::ModeRequest::Advertised {
+                width: a.mode.width,
+                height: a.mode.height,
+                refresh_mhz: a.mode.refresh_mhz,
+            });
             let _ = pref::save(&state.inner.preference);
             state.inner.ping_control();
         }
         SettingsMessage::Revert => {
-            // Revert whichever gate is armed (both are no-ops if nothing pending).
             *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
-            *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Revert);
             state.inner.ping_control();
         }
         SettingsMessage::Rebind(id, combo) => {
@@ -178,13 +173,66 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             let st = state.inner.kernel.get_mut(&SETTINGS_MUT);
             st.fps_wanted = matches!(t, Tab::Performance);
             st.tab = t.to_index(); // remember the module for the session (restored on reopen)
-            // Leaving Display abandons any provisional mode/switch change → revert
-            // it (both are no-ops in the kernel if nothing is pending).
+            // Leaving Display abandons any provisional mode change → revert it
+            // (a no-op in the kernel if nothing is pending).
             if !matches!(t, Tab::Display) {
                 *state.inner.kernel.get_mut(&OUTPUT_MODE_REQUEST_MUT) = Some(OutputModeRequest::Revert);
-                *state.inner.kernel.get_mut(&OUTPUT_SWITCH_REQUEST_MUT) = Some(OutputSwitchRequest::Revert);
                 state.inner.ping_control();
             }
+        }
+        // Cursor-teleport layout committed on drag-end: persist the whole
+        // arrangement and rebuild the live teleport layout so crossings take effect
+        // immediately (no reboot). Layout is teleport-only — no modeset.
+        SettingsMessage::LayoutCommit(placements) => {
+            pref::set_layout(&mut state.inner.preference, placements);
+            let _ = pref::save(&state.inner.preference);
+            let keys = connected_keys(state);
+            let layout = compositor_orchestration_driver_output_base::base::build_teleport(&state.inner.preference, &keys);
+            *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::TELEPORT_LAYOUT_MUT) = layout;
+            // The tracked placement may have been removed/renumbered; re-resolve lazily.
+            *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::CURSOR_PLACEMENT_MUT) = None;
+        }
+        // Activate / deactivate a monitor. `None` = deactivate ("Inactive"); refused
+        // if it's the last active+connected one. `Some(mode)` = (re)activate at `mode`.
+        // Persist, then ask the kernel to reconcile (bring the pipe up / tear it down);
+        // reconcile rebuilds the teleport map from the new active set.
+        SettingsMessage::SetActive(edid, mode_opt) => {
+            match mode_opt {
+                None => {
+                    let active_connected = state
+                        .inner
+                        .kernel
+                        .get(&OUTPUTS_SNAPSHOT)
+                        .displays
+                        .iter()
+                        .filter(|d| d.connected && d.enabled)
+                        .count();
+                    if active_connected <= 1 {
+                        return; // keep at least one active monitor
+                    }
+                    pref::set_active(&mut state.inner.preference.outputs, &edid, false);
+                }
+                Some(mode) => {
+                    pref::set_active(&mut state.inner.preference.outputs, &edid, true);
+                    pref::upsert_output(&mut state.inner.preference.outputs, &edid, pref::ModeRequest::Advertised {
+                        width: mode.width,
+                        height: mode.height,
+                        refresh_mhz: mode.refresh_mhz,
+                    });
+                }
+            }
+            let _ = pref::save(&state.inner.preference);
+            *state.inner.kernel.get_mut(&OUTPUT_RECONCILE_REQUEST_MUT) = true;
+            // Wake the control-plane ping so the kernel drains the reconcile request
+            // input-independently (it is no longer drained on the libinput source).
+            state.inner.ping_control();
+        }
+        SettingsMessage::SetCyclic(b) => {
+            state.inner.preference.teleport_cyclic = b;
+            let _ = pref::save(&state.inner.preference);
+            let keys = connected_keys(state);
+            let layout = compositor_orchestration_driver_output_base::base::build_teleport(&state.inner.preference, &keys);
+            *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::TELEPORT_LAYOUT_MUT) = layout;
         }
         SettingsMessage::Fps(_)
         | SettingsMessage::Tick
@@ -197,6 +245,16 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         | SettingsMessage::SyncShaderStatus(..)
         | SettingsMessage::SelectDisplay(_)
         | SettingsMessage::SelectMode(_)
+        | SettingsMessage::SelectInactive
+        // Staging an activate/deactivate is UI-local (arms the confirm bar); APPLY then
+        // forwards `SetActive`.
+        | SettingsMessage::StageActive(..)
+        // Layout edits are applied UI-locally in the view; only LayoutCommit forwards.
+        | SettingsMessage::LayoutPlace(..)
+        | SettingsMessage::LayoutMove(..)
+        | SettingsMessage::LayoutResize(..)
+        | SettingsMessage::LayoutSelect(_)
+        | SettingsMessage::LayoutRemove(_)
         | SettingsMessage::WifiSelect(_)
         | SettingsMessage::WifiPassword(_) => {}
     }
