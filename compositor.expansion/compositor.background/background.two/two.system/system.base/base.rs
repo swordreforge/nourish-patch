@@ -6,10 +6,9 @@ use compositor_support_system_world_frame_base::base::{self as layer, FramePlan,
 use smithay::backend::renderer::gles::GlesRenderer;
 use std::any::Any;
 
-/// The per-world background slot tokens now live in `two.storage`; re-exported
-/// here so existing `system_base::base::BG_TWO(_MUT)` consumers keep resolving.
-/// TRANSITIONAL: lock/capture still mutate the instance directly via `BG_TWO_MUT`.
-pub use compositor_background_two_storage_base::base::{BG_TWO, BG_TWO_MUT};
+// The per-world background slot tokens live in `two.storage`; the system reads
+// and writes that slot in update/draw/buffer.
+use compositor_background_two_storage_base::base::{BG_TWO, BG_TWO_MUT};
 
 enum TwoCmd {
     SetInstance(ParallaxBackground),

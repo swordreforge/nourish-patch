@@ -74,7 +74,7 @@ fn ensure_distant_parallax(state: &mut Loop, renderer: &mut GlesRenderer) {
         .worlds
         .get_mut(PICKER_WORLD)
         .storage_mut()
-        .try_get_mut(&compositor_background_two_system_base::base::BG_TWO_MUT)
+        .try_get_mut(&compositor_background_two_storage_base::base::BG_TWO_MUT)
     {
         let sel = compositor_developer_stats_registry_base::base::background_shader_default();
         let inst = two

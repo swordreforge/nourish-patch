@@ -103,7 +103,7 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                 .worlds
                 .active_mut()
                 .storage_mut()
-                .try_get_mut(&compositor_background_two_system_base::base::BG_TWO_MUT)
+                .try_get_mut(&compositor_background_two_storage_base::base::BG_TWO_MUT)
             {
                 two.background_shader = if name.is_empty() { None } else { Some(name) };
                 two.instance = None;
@@ -120,7 +120,7 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                 .worlds
                 .active_mut()
                 .storage_mut()
-                .try_get_mut(&compositor_background_two_system_base::base::BG_TWO_MUT)
+                .try_get_mut(&compositor_background_two_storage_base::base::BG_TWO_MUT)
             {
                 two.params = values.clone();
                 // Map the name-keyed overrides onto the live instance's param

@@ -49,7 +49,7 @@ fn shader_state(state: &Loop) -> (Vec<String>, Option<String>, Vec<ShaderProp>, 
         .worlds
         .active()
         .storage()
-        .try_get(&compositor_background_two_system_base::base::BG_TWO);
+        .try_get(&compositor_background_two_storage_base::base::BG_TWO);
     // The selected shader's compile error (set by the background system on load).
     let status = two.and_then(|t| t.shader_error.clone());
     let current = two
