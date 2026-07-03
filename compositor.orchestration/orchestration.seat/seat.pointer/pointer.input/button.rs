@@ -7,16 +7,6 @@ use compositor_y5_surface_interface_base::hit::surface_under_filtered;
 use compositor_y5_window_interface_draw::visible::DrawWindow;
 
 pub fn button<I: InputBackend>(event: &<I as InputBackend>::PointerButtonEvent, _loop: &mut Loop) {
-    // Track held buttons FIRST (before any early return below), synchronously in the
-    // same input pipeline as motion — no message-round-trip race. The teleport path
-    // reads this together with `world_grab_active()` to suppress teleport ONLY for a
-    // screen-surface drag (the settings layout-canvas pan), while keeping it enabled
-    // for a compositor grab-to-move (so windows still move across monitors).
-    match event.state() {
-        ButtonState::Pressed => _loop.inner.buttons_held = _loop.inner.buttons_held.saturating_add(1),
-        ButtonState::Released => _loop.inner.buttons_held = _loop.inner.buttons_held.saturating_sub(1),
-    }
-
     // Overview overlay open → the overview layer handles + swallows the click
     // (menu bar / grid cell / globe); windows never receive it.
     if compositor_y5_overview_input_pointer::pointer::button::<I>(event, _loop) {
@@ -32,7 +22,17 @@ pub fn button<I: InputBackend>(event: &<I as InputBackend>::PointerButtonEvent, 
     };
     match event.state() {
         ButtonState::Pressed => {
-            if _loop.try_begin_separator_drag(cursor_phys) {
+            // Separator drag hit-tests against the current output's viewport layout, so
+            // it needs the output's physical bounds; the drag STATE + math live in
+            // `viewport.interaction` (keeps the Orchestrator slim).
+            let bounds = {
+                let (pw, ph) = _loop.size_ctx_all().screen_size_physical;
+                smithay::utils::Rectangle::new(
+                    smithay::utils::Point::from((0, 0)),
+                    smithay::utils::Size::from((pw.round() as i32, ph.round() as i32)),
+                )
+            };
+            if compositor_y5_viewport_interaction_base::interaction::try_begin_separator(_loop.inner.output_views_mut(), bounds, cursor_phys) {
                 return;
             }
             // Floating pane move (Super-drag) / resize (Super+Shift-drag) near an
@@ -45,18 +45,18 @@ pub fn button<I: InputBackend>(event: &<I as InputBackend>::PointerButtonEvent, 
                 _ => None,
             };
             if let Some(resize) = tool {
-                if _loop.try_begin_floating_drag(cursor_phys, resize) {
+                if compositor_y5_viewport_interaction_base::interaction::try_begin_floating(_loop.inner.output_views_mut(), cursor_phys, resize) {
                     return;
                 }
             }
         }
         ButtonState::Released => {
-            if _loop.inner.separator_drag.is_some() {
-                _loop.end_separator_drag();
+            if _loop.inner.output_views().separator_drag.is_some() {
+                compositor_y5_viewport_interaction_base::interaction::end_separator(_loop.inner.output_views_mut());
                 return;
             }
-            if _loop.inner.floating_drag.is_some() {
-                _loop.end_floating_drag();
+            if _loop.inner.output_views().floating_drag.is_some() {
+                compositor_y5_viewport_interaction_base::interaction::end_floating(_loop.inner.output_views_mut());
                 return;
             }
         }

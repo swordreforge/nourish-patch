@@ -111,10 +111,10 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             pref::set_layout(&mut state.inner.preference, placements);
             let _ = pref::save(&state.inner.preference);
             let keys = connected_keys(state);
-            state.inner.teleport =
-                compositor_orchestration_core_state_base::state::build_teleport(&state.inner.preference, &keys);
+            let layout = compositor_orchestration_driver_output_base::base::build_teleport(&state.inner.preference, &keys);
+            *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::TELEPORT_LAYOUT_MUT) = layout;
             // The tracked placement may have been removed/renumbered; re-resolve lazily.
-            state.inner.cursor_placement = None;
+            *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::CURSOR_PLACEMENT_MUT) = None;
         }
         // Activate / deactivate a monitor. `None` = deactivate ("Inactive"); refused
         // if it's the last active+connected one. `Some(mode)` = (re)activate at `mode`.
@@ -152,8 +152,8 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             state.inner.preference.teleport_cyclic = b;
             let _ = pref::save(&state.inner.preference);
             let keys = connected_keys(state);
-            state.inner.teleport =
-                compositor_orchestration_core_state_base::state::build_teleport(&state.inner.preference, &keys);
+            let layout = compositor_orchestration_driver_output_base::base::build_teleport(&state.inner.preference, &keys);
+            *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::TELEPORT_LAYOUT_MUT) = layout;
         }
         SettingsMessage::Fps(_)
         | SettingsMessage::ModeResult(_)

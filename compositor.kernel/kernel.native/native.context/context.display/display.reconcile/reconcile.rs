@@ -398,9 +398,9 @@ pub fn reconcile(state: &mut Loop, ctx_rc: &Ctx) -> Option<OutputChange> {
     // Rebuild the live cursor-teleport map: only active + connected monitors' placements
     // survive (`build_teleport` filters). The active flags come from the live in-memory
     // prefs (settings updates memory + disk together before requesting a reconcile).
-    state.inner.teleport =
-        compositor_orchestration_core_state_base::state::build_teleport(&state.inner.preference, &connected_keys);
-    state.inner.cursor_placement = None;
+    let layout = compositor_orchestration_driver_output_base::base::build_teleport(&state.inner.preference, &connected_keys);
+    *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::TELEPORT_LAYOUT_MUT) = layout;
+    *state.inner.kernel.get_mut(&compositor_orchestration_driver_output_base::base::CURSOR_PLACEMENT_MUT) = None;
     // A pipe brought up in this reconcile has never flipped, so the per-CRTC vblank path
     // (`RenderScope::Crtc`) will never render it. FORCE the redraw ping (which runs
     // `execute(RenderScope::All)`) so the new pipe gets its first frame and starts its own

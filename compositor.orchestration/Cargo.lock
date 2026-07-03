@@ -3090,7 +3090,6 @@ dependencies = [
  "compositor_orchestration_environment_type_base",
  "compositor_orchestration_seat_gesture_state",
  "compositor_orchestration_seat_pointer_state",
- "compositor_orchestration_seat_pointer_teleport",
  "compositor_orchestration_seat_pointer_texture",
  "compositor_orchestration_seat_system_pointer",
  "compositor_orchestration_storage_state_base",
@@ -3330,6 +3329,7 @@ dependencies = [
 name = "compositor_orchestration_driver_output_base"
 version = "0.0.1"
 dependencies = [
+ "compositor_developer_environment_preference_base",
  "compositor_support_system_storage_token_base",
 ]
 
@@ -3534,8 +3534,8 @@ dependencies = [
  "compositor_monitor_compositor_iced_base",
  "compositor_orchestration_core_state_base",
  "compositor_orchestration_draw_layer_base",
+ "compositor_orchestration_driver_output_base",
  "compositor_orchestration_input_drive_base",
- "compositor_orchestration_seat_pointer_teleport",
  "compositor_orchestration_seat_system_pointer",
  "compositor_support_iced_core_engine_base",
  "compositor_support_smithay_dispatch_state_base",
@@ -3550,6 +3550,7 @@ dependencies = [
  "compositor_y5_overview_input_pointer",
  "compositor_y5_surface_interface_base",
  "compositor_y5_surface_system_base",
+ "compositor_y5_viewport_interaction_base",
  "compositor_y5_window_interface_draw",
  "compositor_y5_window_interface_record",
  "smithay",
@@ -3569,10 +3570,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
 ]
-
-[[package]]
-name = "compositor_orchestration_seat_pointer_teleport"
-version = "0.0.1"
 
 [[package]]
 name = "compositor_orchestration_seat_pointer_texture"
@@ -6120,6 +6117,7 @@ dependencies = [
  "compositor_monitor_compositor_iced_base",
  "compositor_orchestration_draw_layer_base",
  "compositor_orchestration_draw_platform_base",
+ "compositor_orchestration_driver_output_base",
  "compositor_orchestration_storage_state_base",
  "compositor_support_smithay_dispatch_state_base",
  "compositor_support_system_buffer_token_base",
@@ -7793,6 +7791,15 @@ dependencies = [
  "compositor_support_system_storage_token_base",
  "compositor_support_system_trait_system_base",
  "compositor_y5_surface_state_base",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_y5_viewport_interaction_base"
+version = "0.0.1"
+dependencies = [
+ "compositor_y5_viewport_layout_base",
+ "compositor_y5_viewport_state_base",
  "smithay",
 ]
 

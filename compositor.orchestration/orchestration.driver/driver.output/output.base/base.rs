@@ -119,3 +119,216 @@ pub struct OutputsSnapshot {
 /// Kernel-written full connector list, read by the settings Display panel.
 pub static OUTPUTS_SNAPSHOT: Token<OutputsSnapshot> = Token::new();
 pub static OUTPUTS_SNAPSHOT_MUT: TokenMut<OutputsSnapshot> = TokenMut::new(&OUTPUTS_SNAPSHOT);
+
+// ── Cursor-teleport layout ────────────────────────────────────────────────────
+// The output arrangement the cursor crosses between monitors. Primitive (String /
+// f32 / u64 / bool), so it lives in this smithay-free rim output-data crate — NOT on
+// the Orchestrator (kept slim). Rebuilt from preferences by the settings handler and
+// the kernel reconcile; read by the pointer-motion path. Moved here from the former
+// `orchestration.seat.pointer.teleport` crate.
+
+/// The side of a placement the cursor crossed (or entered through).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Edge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl Edge {
+    /// The edge on the far side — the side a neighbor is entered through.
+    pub fn opposite(self) -> Edge {
+        match self {
+            Edge::Left => Edge::Right,
+            Edge::Right => Edge::Left,
+            Edge::Top => Edge::Bottom,
+            Edge::Bottom => Edge::Top,
+        }
+    }
+}
+
+/// One placed monitor square in abstract layout space (`size` = side length; the
+/// square spans `[x, x+size] × [y, y+size]`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Placement {
+    pub id: u64,
+    pub key: String,
+    pub x: f32,
+    pub y: f32,
+    pub size: f32,
+}
+
+/// The result of a successful crossing: the entered placement plus where along its
+/// entry edge the cursor lands (proportional, clamped to `[0, 1]`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Neighbor {
+    pub id: u64,
+    pub key: String,
+    /// The edge of the entered placement the cursor comes in through.
+    pub entry_edge: Edge,
+    /// Position along `entry_edge`, `0.0` = its start (top for L/R, left for T/B).
+    pub entry_frac: f32,
+}
+
+/// The full arrangement of teleport zones (empty on single-monitor / no layout).
+/// Only ACTIVE + CONNECTED monitors' placements are present — [`build_teleport`]
+/// filters inactive/disconnected ones out (they stay in preferences, just not here).
+#[derive(Clone, Debug, Default)]
+pub struct TeleportLayout {
+    pub placements: Vec<Placement>,
+    /// Wrap around the layout edges instead of clamping when the pointer exits a
+    /// side with no monitor across it (the settings "cyclic" option).
+    pub cyclic: bool,
+}
+
+impl TeleportLayout {
+    pub fn new(placements: Vec<Placement>, cyclic: bool) -> Self {
+        TeleportLayout { placements, cyclic }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.placements.is_empty()
+    }
+
+    pub fn get(&self, id: u64) -> Option<&Placement> {
+        self.placements.iter().find(|p| p.id == id)
+    }
+
+    /// The first placement of monitor `key`, if any — the zone the cursor starts in
+    /// when it lands on that monitor with no more specific placement known.
+    pub fn first_of(&self, key: &str) -> Option<&Placement> {
+        self.placements.iter().find(|p| p.key == key)
+    }
+
+    /// Given the cursor is leaving placement `from_id` across `edge` at `exit_frac`
+    /// (`0.0` = start of that edge: top for Left/Right, left for Top/Bottom), find the
+    /// placement to enter by ORTHOGONAL PROJECTION: cast a ray perpendicular to the
+    /// crossed edge and pick the NEAREST placement in that direction whose facing span
+    /// covers the crossing point. Placements need not touch (unlike snap-adjacency), so
+    /// gapped layouts still cross. If nothing lies across that edge and `cyclic` is set,
+    /// wrap around and enter from the opposite side of the layout; otherwise `None`
+    /// (the caller clamps at the edge).
+    pub fn neighbor(&self, from_id: u64, edge: Edge, exit_frac: f32) -> Option<Neighbor> {
+        let from = self.get(from_id)?;
+        let f = exit_frac.clamp(0.0, 1.0);
+        // The crossing point in abstract space, on `from`'s `edge`.
+        let (ex, ey) = match edge {
+            Edge::Right => (from.x + from.size, from.y + f * from.size),
+            Edge::Left => (from.x, from.y + f * from.size),
+            Edge::Bottom => (from.x + f * from.size, from.y + from.size),
+            Edge::Top => (from.x + f * from.size, from.y),
+        };
+        let entry_edge = edge.opposite();
+        // The crossing coordinate on the axis PARALLEL to the crossed edge (y for a
+        // Left/Right crossing, x for Top/Bottom) — the ray's fixed coordinate. The
+        // entered placement's facing edge must span it.
+        let cross = match edge { Edge::Left | Edge::Right => ey, Edge::Top | Edge::Bottom => ex };
+        let covers = |q: &Placement| match edge {
+            Edge::Left | Edge::Right => within(cross, q.y, q.y + q.size),
+            Edge::Top | Edge::Bottom => within(cross, q.x, q.x + q.size),
+        };
+
+        // Nearest placement in the travel direction whose facing span covers `cross`.
+        let mut best: Option<(&Placement, f32)> = None; // (placement, ranking key; lower = better)
+        for q in &self.placements {
+            if q.id == from_id || !covers(q) {
+                continue;
+            }
+            // Distance along the travel direction; `None` if `q` isn't in that direction.
+            let dist = match edge {
+                Edge::Right => (q.x + q.size > ex).then(|| (q.x - ex).max(0.0)),
+                Edge::Left => (q.x < ex).then(|| (ex - (q.x + q.size)).max(0.0)),
+                Edge::Bottom => (q.y + q.size > ey).then(|| (q.y - ey).max(0.0)),
+                Edge::Top => (q.y < ey).then(|| (ey - (q.y + q.size)).max(0.0)),
+            };
+            if let Some(d) = dist {
+                if best.map_or(true, |(_, bd)| d < bd) {
+                    best = Some((q, d));
+                }
+            }
+        }
+
+        // Cyclic wrap: nothing across that edge → re-enter from the far side of the
+        // whole layout (the extreme placement on the opposite side that covers `cross`).
+        if best.is_none() && self.cyclic {
+            for q in &self.placements {
+                if q.id == from_id || !covers(q) {
+                    continue;
+                }
+                // Rank so the wrap-side extreme wins: exit Right → leftmost (min x),
+                // Left → rightmost, Bottom → topmost, Top → bottommost.
+                let key = match edge {
+                    Edge::Right => q.x,
+                    Edge::Left => -(q.x + q.size),
+                    Edge::Bottom => q.y,
+                    Edge::Top => -(q.y + q.size),
+                };
+                if best.map_or(true, |(_, bk)| key < bk) {
+                    best = Some((q, key));
+                }
+            }
+        }
+
+        let (q, _) = best?;
+        // Where along `q`'s entry edge the cursor lands, proportionally.
+        let entry_frac = match entry_edge {
+            Edge::Left | Edge::Right => (ey - q.y) / q.size,
+            Edge::Top | Edge::Bottom => (ex - q.x) / q.size,
+        };
+        Some(Neighbor {
+            id: q.id,
+            key: q.key.clone(),
+            entry_edge,
+            entry_frac: entry_frac.clamp(0.0, 1.0),
+        })
+    }
+}
+
+/// `v` within `[lo, hi]` (inclusive), tolerant of ordering noise.
+fn within(v: f32, lo: f32, hi: f32) -> bool {
+    v >= lo - f32::EPSILON && v <= hi + f32::EPSILON
+}
+
+/// Build the runtime cursor-teleport layout from the persisted placements
+/// (`preferences.json` → `outputs_layout`). Only ACTIVE (not user-deactivated) AND
+/// CONNECTED monitors' placements enter the live map; inactive/disconnected ones stay
+/// in preferences but are dropped here (so reactivating/replugging restores them in
+/// place). Empty when no layout is set (single-monitor default → the pointer clamps).
+pub fn build_teleport(
+    prefs: &compositor_developer_environment_preference_base::base::Preference,
+    connected_keys: &[String],
+) -> TeleportLayout {
+    use compositor_developer_environment_preference_base::base::output_active;
+    TeleportLayout::new(
+        prefs
+            .outputs_layout
+            .iter()
+            .filter(|p| {
+                connected_keys.iter().any(|k| k == &p.identity) && output_active(&prefs.outputs, &p.identity)
+            })
+            .map(|p| Placement { id: p.id, key: p.identity.clone(), x: p.x, y: p.y, size: p.size })
+            .collect(),
+        prefs.teleport_cyclic,
+    )
+}
+
+/// The live cursor-teleport layout (rebuilt on activate/deactivate/hotplug + layout
+/// commit). Read by the pointer-motion path to cross the cursor between monitors.
+pub static TELEPORT_LAYOUT: Token<TeleportLayout> = Token::new();
+pub static TELEPORT_LAYOUT_MUT: TokenMut<TeleportLayout> = TokenMut::new(&TELEPORT_LAYOUT);
+
+/// The teleport placement the cursor currently occupies (disambiguates duplicate
+/// placements of one monitor). `None` until the pointer resolves it; reset on reconcile.
+pub static CURSOR_PLACEMENT: Token<Option<u64>> = Token::new();
+pub static CURSOR_PLACEMENT_MUT: TokenMut<Option<u64>> = TokenMut::new(&CURSOR_PLACEMENT);
+
+/// Teleport-suppression LOCK COUNTER (a refcount). The pointer-motion path suppresses
+/// cursor teleportation between monitors while this is > 0 — it knows nothing about WHY.
+/// Any world system may acquire (increment) / release (decrement) it around an operation
+/// that must pin the cursor to its output (e.g. a canvas pan holds it for the pan's
+/// duration). A counter, not a bool, so overlapping lockers compose. Lives in WORLD
+/// storage (written by systems via `cx.storage`; read by the rim on the spawn-target
+/// world). Balanced acquire/release is each locker's responsibility.
+pub static TELEPORT_SUPPRESS: Token<u32> = Token::new();
+pub static TELEPORT_SUPPRESS_MUT: TokenMut<u32> = TokenMut::new(&TELEPORT_SUPPRESS);

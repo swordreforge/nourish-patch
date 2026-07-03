@@ -8,10 +8,10 @@
   "compositor.orchestration/orchestration.driver/driver.output/output.base": [
     "size"
   ],
-  "compositor.orchestration/orchestration.seat/seat.pointer/pointer.teleport": [
+  "compositor.expansion/compositor.y5/y5.viewport/viewport.state/state.base": [
     "size"
   ],
-  "compositor.expansion/compositor.y5/y5.viewport/viewport.state/state.base": [
+  "compositor.expansion/compositor.y5/y5.viewport/viewport.interaction/interaction.base": [
     "size"
   ],
   "compositor.extension/compositor.configurator/configurator.settings/settings.interface/interface.handle": [

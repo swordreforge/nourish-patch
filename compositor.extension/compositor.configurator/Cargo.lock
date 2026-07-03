@@ -2845,7 +2845,6 @@ dependencies = [
  "compositor_orchestration_environment_type_base",
  "compositor_orchestration_seat_gesture_state",
  "compositor_orchestration_seat_pointer_state",
- "compositor_orchestration_seat_pointer_teleport",
  "compositor_orchestration_seat_pointer_texture",
  "compositor_orchestration_seat_system_pointer",
  "compositor_orchestration_storage_state_base",
@@ -2975,6 +2974,7 @@ dependencies = [
 name = "compositor_orchestration_driver_output_base"
 version = "0.0.1"
 dependencies = [
+ "compositor_developer_environment_preference_base",
  "compositor_support_system_storage_token_base",
 ]
 
@@ -3059,10 +3059,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
 ]
-
-[[package]]
-name = "compositor_orchestration_seat_pointer_teleport"
-version = "0.0.1"
 
 [[package]]
 name = "compositor_orchestration_seat_pointer_texture"

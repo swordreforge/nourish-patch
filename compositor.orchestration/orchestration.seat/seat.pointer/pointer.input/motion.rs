@@ -41,7 +41,9 @@ pub fn absolute<I: InputBackend>(
 
     // Separator / floating-pane drag in progress → apply it and move the cursor,
     // but do not route to the canvas/window grab systems.
-    if _loop.update_separator_drag(position_screen) || _loop.update_floating_drag(position_screen) {
+    if compositor_y5_viewport_interaction_base::interaction::update_separator(_loop.inner.output_views_mut(), position_screen)
+        || compositor_y5_viewport_interaction_base::interaction::update_floating(_loop.inner.output_views_mut(), position_screen)
+    {
         native_motion::absolute::input_received_normalized::<I>(event, _loop, position_normalized, &raw_pos);
         return;
     }
@@ -126,13 +128,11 @@ fn teleport_cross(
     pw: f64,
     ph: f64,
 ) -> Option<(Point<f64, Physical>, compositor_y5_camera_transform_translate::transform::Context)> {
-    use compositor_orchestration_seat_pointer_teleport::teleport::Edge;
-    // Suppress teleport for a SCREEN-SURFACE drag (a held button with no compositor
-    // world/pane grab) — e.g. panning the settings layout canvas: clamp at the edge
-    // instead of jumping the cursor to another monitor. A compositor grab-to-move
-    // (window/pane) keeps teleport enabled so a window can be moved across monitors.
-    let screen_surface_drag = _loop.inner.buttons_held > 0 && !_loop.inner.world_grab_active();
-    if screen_surface_drag || _loop.inner.teleport.is_empty() {
+    use compositor_orchestration_driver_output_base::base::{Edge, CURSOR_PLACEMENT_MUT, TELEPORT_LAYOUT};
+    // Teleport is suppressed while ANY system holds the suppression lock (a refcount);
+    // a canvas pan is the built-in client (it pins the cursor to its output for the pan's
+    // duration). This path knows nothing about pan specifically — just the lock.
+    if _loop.inner.teleport_suppressed() || _loop.inner.kernel.get(&TELEPORT_LAYOUT).is_empty() {
         return None;
     }
     // Which edge did the cursor cross, and where along it (proportionally 0..1)?
@@ -148,14 +148,14 @@ fn teleport_cross(
         return None; // still inside the output → not a crossing
     };
     let from_id = current_placement(_loop)?;
-    let n = _loop.inner.teleport.neighbor(from_id, edge, frac)?;
+    let n = _loop.inner.kernel.get(&TELEPORT_LAYOUT).neighbor(from_id, edge, frac)?;
     // Adopt the entered monitor + zone. The teleport layout and `output_key` share
     // the same EDID identity, so the placement key IS the output key. Point the
     // per-output view state at it so the input systems (pan/zoom on this monitor)
     // operate on THIS monitor's own camera.
     _loop.inner.cursor_output = Some(n.key.clone());
     _loop.inner.output_views_mut().set_current(&n.key);
-    _loop.inner.cursor_placement = Some(n.id);
+    *_loop.inner.kernel.get_mut(&CURSOR_PLACEMENT_MUT) = Some(n.id);
     // Entry point on the new output (opposite the crossed edge, 1px inset).
     let (npw, nph) = _loop.size_ctx_all().screen_size_physical;
     const INSET: f64 = 1.0;
@@ -173,19 +173,18 @@ fn teleport_cross(
 /// The placement the cursor currently occupies, seeded on first use to the current
 /// output's first placement (else the first placement overall).
 fn current_placement(_loop: &mut Loop) -> Option<u64> {
-    if let Some(id) = _loop.inner.cursor_placement {
-        if _loop.inner.teleport.get(id).is_some() {
+    use compositor_orchestration_driver_output_base::base::{CURSOR_PLACEMENT, CURSOR_PLACEMENT_MUT, TELEPORT_LAYOUT};
+    if let Some(id) = *_loop.inner.kernel.get(&CURSOR_PLACEMENT) {
+        if _loop.inner.kernel.get(&TELEPORT_LAYOUT).get(id).is_some() {
             return Some(id);
         }
     }
     let key = _loop.inner.current_output_key();
-    let id = _loop
-        .inner
-        .teleport
-        .first_of(&key)
-        .or_else(|| _loop.inner.teleport.placements.first())
-        .map(|p| p.id)?;
-    _loop.inner.cursor_placement = Some(id);
+    let id = {
+        let t = _loop.inner.kernel.get(&TELEPORT_LAYOUT);
+        t.first_of(&key).or_else(|| t.placements.first()).map(|p| p.id)?
+    };
+    *_loop.inner.kernel.get_mut(&CURSOR_PLACEMENT_MUT) = Some(id);
     Some(id)
 }
 
@@ -386,7 +385,9 @@ pub fn relative<I: InputBackend>(
     // Separator / floating drag in progress → apply + move cursor, skip canvas.
     // `position_screen` carries physical values under a Logical marker; re-tag.
     let cursor_phys = Point::<f64, Physical>::from((position_screen.x, position_screen.y));
-    if _loop.update_separator_drag(cursor_phys) || _loop.update_floating_drag(cursor_phys) {
+    if compositor_y5_viewport_interaction_base::interaction::update_separator(_loop.inner.output_views_mut(), cursor_phys)
+        || compositor_y5_viewport_interaction_base::interaction::update_floating(_loop.inner.output_views_mut(), cursor_phys)
+    {
         native_motion::relative::input_received_normalized::<I>(
             event,
             _loop,
