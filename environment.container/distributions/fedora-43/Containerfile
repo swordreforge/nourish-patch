@@ -32,6 +32,9 @@ WORKDIR /working.directory
 # Compile into the host-mounted cache (image.sh: -v <.cache>/<distro>:/y5-target) so a changed
 # clone rebuilds incrementally — the compiled dependency graph persists between builds.
 ENV Y5_TARGET_DIR=/y5-target
+# Skip the workspace lint here: node is present (for the devtool build) so build.sh would run it,
+# but ci.yml lints authoritatively — a packaged-node hiccup must not fail a binary build.
+ENV Y5_SKIP_LINT=1
 
 # /repo is bind-mounted at build time from the prepared self-contained clone
 # (image.sh passes `-v <DIST_SRC>:/repo:ro`). Clone it into the image (offline; no network).
