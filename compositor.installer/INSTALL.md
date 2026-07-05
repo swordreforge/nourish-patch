@@ -1,8 +1,17 @@
 # Installing y5
 
-The y5 compositor ships as a **prebuilt release tarball** for **Fedora 44**. Because
-the binaries are already compiled, installing pulls only the runtime shared
-libraries — no Rust toolchain, no `-devel` headers.
+The y5 compositor ships as **prebuilt release tarballs**. The Fedora 44 bundle is the
+main one (the one-liner below); per-distro × per-arch bundles for **Debian 12/13,
+Ubuntu 24.04/26.04 and Arch** are published as the `multiarch-latest` GitHub release. Because
+the binaries are already compiled, installing pulls only the runtime shared libraries —
+no Rust toolchain, no `-devel` headers.
+
+The interactive installer is **distro-aware**: it detects your package manager
+(`dnf` / `apt-get` / `pacman`) from `/etc/os-release` and installs that distro's runtime
+package names. On **NixOS** it installs nothing — NixOS is declarative and non-FHS, so it
+prints a `programs.nix-ld` snippet (the runtime libs as nixpkgs attributes) to add to your
+`configuration.nix`, then tells you to `nixos-rebuild switch`; use any glibc bundle (e.g.
+the Fedora one) with it.
 
 ## One command
 
@@ -35,9 +44,11 @@ After install, log out and pick the **"Y5 Compositor"** session in your display 
 1. **Detects your GPU** (`lspci`). On NVIDIA it does not install a driver — it checks
    the bound kernel driver and warns if `nouveau` is in use or none is bound (see the
    NVIDIA note below).
-2. **Installs the runtime packages** (see below) via `dnf`. The install is **strict**:
-   if a package is unavailable, it aborts rather than continuing half-installed. Every
-   default package is in base Fedora repos, so this only fails if your repos are broken.
+2. **Installs the runtime packages** (see below) via the detected package manager
+   (`dnf` / `apt-get` / `pacman`). The install is **strict**: if a package is unavailable,
+   it aborts rather than continuing half-installed. Every default package is in that
+   distro's base repos, so this only fails if your repos are broken. (Debian 12 also
+   enables `bookworm-backports` for `libdisplay-info2`; NixOS prints a profile instead.)
 3. Prompts the Y5 Compositor configuration (render node, color depth, VRR, …) and
    **seeds `~/.config/y5.compositor/settings.json`** from your answers. The session
    wrapper never rewrites it afterwards, so later edits (via `y5.compositor.settings`)
@@ -53,26 +64,39 @@ These are the **exact** runtime dependencies of the prebuilt `y5_compositor`
 binary, derived from the binary itself — its ELF `NEEDED` entries (directly linked)
 plus the sonames it `dlopen`s at runtime (Wayland, Vulkan, EGL):
 
-| Shared library | Fedora package | How the binary uses it |
-| --- | --- | --- |
-| `libpam.so.0` | `pam` | linked |
-| `libdbus-1.so.3` | `dbus-libs` | linked |
-| `libpulse.so.0` | `pulseaudio-libs` | linked |
-| `libudev.so.1` | `systemd-libs` | linked |
-| `libinput.so.10` | `libinput` | linked |
-| `libseat.so.1` | `libseat` | linked |
-| `libxkbcommon.so.0` | `libxkbcommon` | linked |
-| `libpixman-1.so.0` | `pixman` | linked |
-| `libgbm.so.1` | `mesa-libgbm` (→ `libdrm`) | linked |
-| `libwayland-{client,server}.so.0` | `libwayland-client`, `libwayland-server` | dlopen |
-| `libwayland-egl.so.1` | `libwayland-egl` | dlopen |
-| `libvulkan.so.1` | `vulkan-loader` + driver | dlopen (default renderer) |
-| `libEGL.so.1` / GLES | `libglvnd-egl`/`libglvnd-gles` + `mesa-libEGL` | dlopen (GLES fallback) |
+The same soname set is installed under each distro's own package names (the installer
+picks the right column from `/etc/os-release`):
 
-The generic Mesa Vulkan driver (`mesa-vulkan-drivers`, for AMD/Intel) ships in the
-required `runtime` group, so **Vulkan rendering works with no extra repos**;
-`libdisplay-info` (EDID parsing) and `xorg-x11-server-Xwayland` (X11 clients) round
-out the default set.
+| Shared library (how used) | Fedora (`dnf`) | Debian/Ubuntu (`apt`) | Arch (`pacman`) | NixOS (nixpkgs) |
+| --- | --- | --- | --- | --- |
+| `libpam.so.0` (linked) | `pam` | `libpam0g` | `pam` | `pam` |
+| `libdbus-1.so.3` (linked) | `dbus-libs` | `libdbus-1-3` | `dbus` | `dbus` |
+| `libpulse.so.0` (linked) | `pulseaudio-libs` | `libpulse0` | `libpulse` | `libpulseaudio` |
+| `libudev.so.1` (linked) | `systemd-libs` | `libudev1` | `systemd-libs` | `systemd` |
+| `libinput.so.10` (linked) | `libinput` | `libinput10` | `libinput` | `libinput` |
+| `libseat.so.1` (linked) | `libseat` | `libseat1` | `seatd` | `seatd` |
+| `libxkbcommon.so.0` (linked) | `libxkbcommon` | `libxkbcommon0` | `libxkbcommon` | `libxkbcommon` |
+| `libpixman-1.so.0` (linked) | `pixman` | `libpixman-1-0` | `pixman` | `pixman` |
+| `libgbm.so.1`, `libdrm.so.2` (linked) | `mesa-libgbm`, `libdrm` | `libgbm1`, `libdrm2` | `mesa`, `libdrm` | `mesa`, `libdrm` |
+| `libdisplay-info.so.N` (linked) | `libdisplay-info` | `libdisplay-info{1,2,3}`¹ | `libdisplay-info` | `libdisplay-info` |
+| `libav*.so` (linked, capture) | `libav*-free` | `ffmpeg`² | `ffmpeg` | `ffmpeg` |
+| `libwayland-{client,server,egl}.so` (dlopen) | `libwayland-{client,server,egl}` | `libwayland-{client0,server0,egl1}` | `wayland` | `wayland` |
+| `libvulkan.so.1` + driver (dlopen, renderer) | `vulkan-loader` + `mesa-vulkan-drivers` | `libvulkan1` + `mesa-vulkan-drivers` | `vulkan-icd-loader` + `vulkan-swrast`/vendor³ | `vulkan-loader` |
+| `libEGL.so.1` / GLES (dlopen, fallback) | `libglvnd-egl`/`-gles` + `mesa-libEGL` | `libglvnd0`, `libegl1`, `libgles2`, `libegl-mesa0` | `libglvnd` (via `mesa`) | `libglvnd`, `libGL` |
+| Xwayland (X11 clients) | `xorg-x11-server-Xwayland` | `xwayland` | `xorg-xwayland` | `xwayland` |
+
+¹ Soversion tracks each release's `libdisplay-info-dev`: Debian 12/13 → `libdisplay-info2`
+(Debian 12 from `bookworm-backports`, enabled automatically), Ubuntu 24.04 → `libdisplay-info1`,
+Ubuntu 26.04 → `libdisplay-info3`. ² The `ffmpeg` package pulls the
+exact soversion-suffixed `libav*` runtime for the release, so we don't name it. ³ Arch has
+no generic `mesa-vulkan-drivers`; the installer adds the vendor ICD (`vulkan-radeon` /
+`vulkan-intel`) for the detected GPU on top of the software `vulkan-swrast`.
+
+On NixOS these attributes go into `programs.nix-ld.libraries` (the installer prints the
+snippet) rather than being installed system-wide.
+
+The generic Mesa Vulkan driver (for AMD/Intel) ships in the required `runtime` group, so
+**Vulkan rendering works with no extra repos** on every distro.
 
 > **Note for AMD users:** some have reported that Vulkan does not work on AMD. If
 > you're on an AMD card, set `renderer` to `gles` when prompted.

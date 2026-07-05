@@ -80,8 +80,12 @@ jobs:
           - { distro: fedora-44,    arch: aarch64, runner: ubuntu-24.04-arm }
           - { distro: debian-12,    arch: x86_64,  runner: ubuntu-24.04 }
           - { distro: debian-12,    arch: aarch64, runner: ubuntu-24.04-arm }
+          - { distro: debian-13,    arch: x86_64,  runner: ubuntu-24.04 }
+          - { distro: debian-13,    arch: aarch64, runner: ubuntu-24.04-arm }
           - { distro: ubuntu-24.04, arch: x86_64,  runner: ubuntu-24.04 }
           - { distro: ubuntu-24.04, arch: aarch64, runner: ubuntu-24.04-arm }
+          - { distro: ubuntu-26.04, arch: x86_64,  runner: ubuntu-24.04 }
+          - { distro: ubuntu-26.04, arch: aarch64, runner: ubuntu-24.04-arm }
           - { distro: arch,         arch: x86_64,  runner: ubuntu-24.04 }
     steps:
       - uses: actions/checkout@v4

@@ -27,6 +27,10 @@ fn main() {
         info::emit_presets();
         return;
     }
+    // Pre-CI package-name verifier hook: dump a manager's package names and exit.
+    if let Some(spec) = args.iter().find_map(|a| a.strip_prefix("--emit-packages=")) {
+        std::process::exit(if info::emit_packages(spec) { 0 } else { 2 });
+    }
 
     // Must run as the normal user, NOT root/sudo: per-action sudo handles the steps that
     // need privilege, and $HOME must be the user's so settings.json + the user systemd

@@ -15,6 +15,28 @@ pub fn emit_presets() {
     }
 }
 
+/// Non-interactive: print the runtime package names for a manager, one per line, across
+/// EVERY group (runtime, xwayland, devtool, diagnostics, toolchain). Used by the pre-CI
+/// `verify-packages.sh` gate to resolve names against each distro's base image without a
+/// build. `spec` is `<mgr>` or `<mgr>:<release>` (e.g. `apt:12`). Returns false on a bad
+/// spec so `main` can exit nonzero.
+pub fn emit_packages(spec: &str) -> bool {
+    let (mgr_str, release) = match spec.split_once(':') {
+        Some((m, r)) => (m, Some(r.to_string())),
+        None => (spec, None),
+    };
+    let Some(mgr) = pkg::PackageManager::parse(mgr_str) else {
+        eprintln!("--emit-packages: unknown manager '{mgr_str}' (want dnf|apt|pacman|nix)");
+        return false;
+    };
+    for group in pkg::groups(mgr, release.as_deref()) {
+        for p in group.packages {
+            println!("{p}");
+        }
+    }
+    true
+}
+
 pub fn print_help() {
     println!(
         "y5-install — interactive y5 compositor installer\n\n\
@@ -22,7 +44,10 @@ pub fn print_help() {
          Run from the unzipped artifact directory (prebuilt binaries + templates\n\
          next to this executable, or set Y5_INSTALL_STAGE).\n\n\
          OPTIONS:\n  \
-         -n, --dry-run   Print the dnf + file actions without changing anything.\n  \
-         -h, --help      Show this help.\n"
+         -n, --dry-run              Print the install + file actions without changing anything.\n  \
+         --emit-packages=<mgr[:rel]> List every runtime package name for a manager\n  \
+         \x20                        (dnf|apt|pacman|nix), one per line, and exit. For the\n  \
+         \x20                        pre-CI package-name verifier. e.g. --emit-packages=apt:12\n  \
+         -h, --help                 Show this help.\n"
     );
 }

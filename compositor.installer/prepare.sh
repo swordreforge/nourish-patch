@@ -139,19 +139,24 @@ install -m644 "$HERE/installation-y5-lock" "$TPL/pam/installation-y5-lock"
 
 # 8) In-artifact README so the unpacked tree is self-documenting.
 cat > "$STAGE/README.txt" <<'EOF'
-y5 compositor — install bundle (Fedora 44)
-==========================================
+y5 compositor — install bundle
+==============================
 
 Prebuilt binaries + the interactive installer. Installing pulls only the runtime
 shared libraries (no Rust toolchain, no -devel headers) because everything here is
-already compiled.
+already compiled. The installer is distro-aware: it detects your package manager
+(dnf / apt-get / pacman) from /etc/os-release and installs that distro's runtime
+package names. On NixOS it prints a nix-ld profile to add instead of installing.
 
-One command (downloads + installs in one go):
+NOTE: each bundle's binaries are dynamically linked to ONE distro's system libraries
+(the distro it was built on) — use the bundle that matches your distro. The Fedora
+one-command install:
 
     curl -fsSL https://nourish.snowies.com/release/latest/fedora44/package.tar.gz \
         | tar -xz && y5-install/install.sh
 
-Already have this tree unpacked? Just run:
+(Debian/Ubuntu/Arch: download package-<distro>-<arch>.tar.gz from the multiarch
+release instead.) Already have this tree unpacked? Just run:
 
     ./install.sh                 # interactive install (uses sudo for system steps)
     ./install.sh --dry-run       # preview without changing anything
