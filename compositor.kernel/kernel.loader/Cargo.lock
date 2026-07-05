@@ -7833,6 +7833,7 @@ name = "compositor_y5_camera_transform_translate"
 version = "0.0.1"
 dependencies = [
  "bitflags 2.13.0",
+ "compositor_support_smithay_state_compositor_place",
  "compositor_y5_camera_transform_state",
  "smithay",
  "tracing",
@@ -9444,10 +9445,12 @@ dependencies = [
  "compositor_orchestration_draw_layer_base",
  "compositor_orchestration_driver_introspection_base",
  "compositor_support_smithay_state_compositor_base",
+ "compositor_support_smithay_state_compositor_place",
  "compositor_support_smithay_state_fractional_base",
  "compositor_support_smithay_state_fractional_dispatch",
  "compositor_support_system_persist_mark_base",
  "compositor_support_world_order_track_base",
+ "compositor_y5_camera_transform_translate",
  "compositor_y5_lock_system_base",
  "compositor_y5_placeholder_protocol_base",
  "compositor_y5_placeholder_record_base",
@@ -10027,6 +10030,7 @@ dependencies = [
  "bitflags 2.13.0",
  "compositor_developer_debug_instance_record",
  "compositor_orchestration_core_state_base",
+ "compositor_support_smithay_state_compositor_place",
  "compositor_support_world_order_track_base",
  "compositor_y5_camera_state_base",
  "compositor_y5_camera_system_base",
