@@ -156,11 +156,21 @@ pub fn on_window_map_initial(state: &mut Loop, window: Window) -> bool {
             state.inner.register_drawable(uuid, compositor_support_world_order_track_base::base::DrawLayer::CONTENT);
         }
 
+        let restored_size = Size::new(restored_ph.size.0, restored_ph.size.1);
         let toplevel = window.toplevel().unwrap_or_else(|| abort!("reform expects toplevels only."));
         toplevel.with_pending_state(|state| {
             state.states.set(xdg_toplevel::State::Resizing);
-            state.size = Some(Size::new(restored_ph.size.0, restored_ph.size.1));
+            state.size = Some(restored_size);
         });
+
+        // Lock the slot to the restored size (`Decided`), mirroring `_reform`. This restore path is
+        // a distinct entry from `_initial_mapped` — it returns early there — so without this the
+        // window would be configured with the persisted size yet left slot-unset (uncontrolled).
+        compositor_y5_camera_transform_translate::slot::set_expected_size(&window, restored_size);
+
+        // Arm the startup grace too (mirrors initial map): jiggle the restored size back at a client
+        // that re-sizes itself during a staged boot, for ~5s. Any explicit resize disarms it.
+        compositor_support_smithay_state_compositor_place::arm_size_propagation(&window, restored_size);
 
         // At this point, window lifecycle may still attempt to place.
         // Check order.
