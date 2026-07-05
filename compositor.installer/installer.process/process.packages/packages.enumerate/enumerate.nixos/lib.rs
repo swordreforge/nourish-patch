@@ -56,22 +56,12 @@ pub fn groups(_release: Option<&str>) -> Vec<PackageGroup> {
     ]
 }
 
-/// Render the `configuration.nix` snippet from the user's selected groups: `runtime` +
+/// Render a plain `configuration.nix` module from the selected groups: `runtime` +
 /// `devtool` packages become `programs.nix-ld.libraries`; the rest (`xwayland`,
-/// `diagnostics`) become `environment.systemPackages`. Returns the snippet only — the
+/// `diagnostics`) become `environment.systemPackages`. Returns the module only — the
 /// caller prints the surrounding "how to apply" instructions (see execute.packages).
 pub fn render_profile(selected: &[PackageGroup]) -> String {
-    let pick = |lib: bool| -> String {
-        selected
-            .iter()
-            .filter(|g| is_library_group(g.key) == lib)
-            .flat_map(|g| g.packages.iter().copied())
-            .map(|p| format!("    {p}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    let libs = pick(true);
-    let progs = pick(false);
+    let (libs, progs) = split(selected, "    "); // 4-space: attrs sit at module top level
     format!(
         "{{ pkgs, ... }}:\n\
          {{\n\
@@ -87,8 +77,44 @@ pub fn render_profile(selected: &[PackageGroup]) -> String {
     )
 }
 
-/// Whether a group's packages are shared libraries (→ nix-ld) vs standalone programs
-/// (→ systemPackages).
-fn is_library_group(key: &str) -> bool {
-    matches!(key, "runtime" | "devtool")
+/// Render the SAME module wrapped in a self-contained **flake** exposing
+/// `nixosModules.default`, so a flakes user integrates it with one input + one import:
+///   `inputs.y5.url = "path:/path/to/y5-install/nixos";`
+///   `imports = [ inputs.y5.nixosModules.default ];`
+/// No flake inputs (nixpkgs comes from the consumer's eval), so it pins nothing.
+pub fn render_flake(selected: &[PackageGroup]) -> String {
+    let (libs, progs) = split(selected, "        "); // 8-space: nested inside the module fn
+    format!(
+        "{{\n\
+         \x20 description = \"y5 compositor — NixOS nix-ld integration for the prebuilt bundle\";\n\
+         \n\
+         \x20 outputs = {{ self }}: {{\n\
+         \x20   # Import into your NixOS config: imports = [ inputs.y5.nixosModules.default ];\n\
+         \x20   nixosModules.default = {{ pkgs, ... }}: {{\n\
+         \x20     programs.nix-ld.enable = true;\n\
+         \x20     programs.nix-ld.libraries = with pkgs; [\n\
+         {libs}\n\
+         \x20     ];\n\
+         \x20     environment.systemPackages = with pkgs; [\n\
+         {progs}\n\
+         \x20     ];\n\
+         \x20   }};\n\
+         \x20 }};\n\
+         }}\n"
+    )
+}
+
+/// Split selected groups into (nix-ld libraries, systemPackages) at the given indent —
+/// `runtime`/`devtool` are shared libraries (→ nix-ld); the rest are standalone programs.
+fn split(selected: &[PackageGroup], indent: &str) -> (String, String) {
+    let pick = |lib: bool| -> String {
+        selected
+            .iter()
+            .filter(|g| matches!(g.key, "runtime" | "devtool") == lib)
+            .flat_map(|g| g.packages.iter().copied())
+            .map(|p| format!("{indent}{p}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    (pick(true), pick(false))
 }

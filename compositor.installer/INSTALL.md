@@ -8,28 +8,39 @@ no Rust toolchain, no `-devel` headers.
 
 The interactive installer is **distro-aware**: it detects your package manager
 (`dnf` / `apt-get` / `pacman`) from `/etc/os-release` and installs that distro's runtime
-package names. On **NixOS** it installs nothing — NixOS is declarative and non-FHS, so it
-prints a `programs.nix-ld` snippet (the runtime libs as nixpkgs attributes) to add to your
-`configuration.nix`, then tells you to `nixos-rebuild switch`; use any glibc bundle (e.g.
-the Fedora one) with it.
+package names. On **NixOS** the interactive installer does not apply — NixOS is declarative and non-FHS,
+so its `sudo`-into-`/usr` session steps don't fit. Instead the bundle ships a native entry
+point: unpack any glibc bundle (e.g. the Fedora one) and run **`./y5-install/nixos-setup.sh`**.
+It prints the ready `programs.nix-ld` module (`nixos/configuration-y5.nix`, the runtime libs
+as nixpkgs attributes) and how to add it; after `sudo nixos-rebuild switch`, nix-ld lets the
+prebuilt binaries in `y5-install/binaries/` run. (The wayland-session / display-manager wiring
+is still manual on NixOS — a full declarative flake/module is future work.)
 
-## One command
+## One command (any distro — auto-detects)
+
+```bash
+curl -fsSL https://nourish.snowies.com/install | bash
+```
+
+That runs the universal bootstrap ([`bootstrap.sh`](bootstrap.sh)): it detects your distro
+and CPU arch, downloads the matching `package-<distro>-<arch>.tar.gz` from the multiarch
+release, **verifies it against `SHA256SUMS` (mandatory — no skip)**, unpacks it, and launches
+the interactive installer. On **NixOS** it instead fetches a glibc bundle and runs its
+`nixos-setup.sh` (prints the nix-ld module/flake — installs nothing). Run it as **your normal
+user, not with `sudo`** — the installer invokes `sudo` itself only for system steps, so your
+config lands in `$HOME/.config` (it refuses to run as root). Safe to re-run.
+
+Pin a specific release with `Y5_RELEASE_TAG` (e.g. `multiarch-v1.4.1-rc.2`), force a target
+with `Y5_DISTRO`/`Y5_ARCH`, or list what's available with `bootstrap.sh --list`.
+
+### Fedora only (the classic path)
 
 ```bash
 curl -fsSL https://nourish.snowies.com/release/latest/fedora44/package.tar.gz | tar -xz && y5-install/install.sh
 ```
 
-That downloads the release, unpacks it to `./y5-install/`, and launches the
-interactive installer. Run it as **your normal user, not with `sudo`** — it invokes
-`sudo` itself only for the system-level steps, so your configuration lands in your
-`$HOME/.config` (it refuses to run as root). It is safe to re-run.
-
-If you host the bootstrap script ([`get.sh`](get.sh)) at a stable URL, the command
-becomes even shorter:
-
-```bash
-curl -fsSL https://nourish.snowies.com/install | bash
-```
+This pulls the Fedora bundle directly (via [`get.sh`](get.sh) behind the shorter
+`…/install-fedora` URL). It unpacks to `./y5-install/` and launches the same installer.
 
 ### Preview without changing anything
 
