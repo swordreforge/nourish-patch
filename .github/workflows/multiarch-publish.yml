@@ -158,6 +158,7 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4      # for compositor.installer/bootstrap.sh (the install file)
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -178,19 +179,31 @@ jobs:
           each built natively in that distro's image with the full component set (compositor, devtool,
           polkit, MX daemon, xwayland, settings, installer) — the same \`prepare.sh\` the Fedora channel uses.
 
-          Download \`package-<distro>-<arch>.tar.gz\` matching your distro **and** CPU arch, verify against
-          \`SHA256SUMS\`, then:
+          One \`bootstrap.sh\` (the single cross-platform install file) is attached too: it detects your
+          distro + arch, downloads the matching bundle from THIS release, verifies it against
+          \`SHA256SUMS\` (mandatory), and runs the installer — on NixOS it prints the nix-ld module/flake.
           \`\`\`
-          tar -xzf package-<distro>-<arch>.tar.gz && y5-install/install.sh
+          curl -fsSL <this release>/bootstrap.sh | bash
+          # or manually: tar -xzf package-<distro>-<arch>.tar.gz && y5-install/install.sh
           \`\`\`
-          These are dynamically linked to each distro's system libraries — not portable across distros."
+          The bundles are dynamically linked to each distro's system libraries — not portable across distros."
+
+          # Stamp the published bootstrap so it targets THIS repo. The rolling copy tracks
+          # multiarch-latest (always-newest); the pinned copy defaults to this exact rc tag so a
+          # versioned download pulls its MATCHING bundles. Both still honor Y5_RELEASE_* overrides.
+          mkdir -p pinned
+          sed "s|\${Y5_RELEASE_REPO:-y5-snowies/nourish}|\${Y5_RELEASE_REPO:-$GITHUB_REPOSITORY}|" \
+            compositor.installer/bootstrap.sh > release/bootstrap.sh
+          sed -e "s|\${Y5_RELEASE_REPO:-y5-snowies/nourish}|\${Y5_RELEASE_REPO:-$GITHUB_REPOSITORY}|" \
+              -e "s|\${Y5_RELEASE_TAG:-multiarch-latest}|\${Y5_RELEASE_TAG:-multiarch-v$VERSION}|" \
+            compositor.installer/bootstrap.sh > pinned/bootstrap.sh
 
           # 1) Immutable, versioned rc release. The multiarch-v<rc> tag pins THIS commit; created
           #    once, then a re-run of the same commit just refreshes the assets (--clobber). Its own
           #    `multiarch-v*` namespace so it never touches release-rc.yml's v<rc>/latest-rc.
           if gh release view "multiarch-v$VERSION" >/dev/null 2>&1; then
             echo ">> multiarch-v$VERSION exists — refreshing assets"
-            gh release upload "multiarch-v$VERSION" release/*.tar.gz release/SHA256SUMS --clobber
+            gh release upload "multiarch-v$VERSION" release/*.tar.gz release/SHA256SUMS pinned/bootstrap.sh --clobber
           else
             gh release create "multiarch-v$VERSION" \
               --target "$GITHUB_SHA" \
@@ -200,11 +213,11 @@ jobs:
               --notes "Nourish multiarch bundles **v$VERSION** (release candidate).
 
           $notes" \
-              release/*.tar.gz release/SHA256SUMS
+              release/*.tar.gz release/SHA256SUMS pinned/bootstrap.sh
           fi
 
           # 2) Rolling "multiarch-latest" — recreated so its tag tracks the current commit; the
-          #    stable URL to grab the newest per-distro bundles from.
+          #    stable URL to grab the newest per-distro bundles (+ the always-newest bootstrap) from.
           gh release delete multiarch-latest --yes --cleanup-tag 2>/dev/null || true
           gh release create multiarch-latest \
             --target "$GITHUB_SHA" \
@@ -215,4 +228,4 @@ jobs:
           \`candidate\` @ \`${GITHUB_SHA:0:7}\`).
 
           $notes" \
-            release/*.tar.gz release/SHA256SUMS
+            release/*.tar.gz release/SHA256SUMS release/bootstrap.sh
