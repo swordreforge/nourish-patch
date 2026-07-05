@@ -88,6 +88,10 @@ pub enum SettingsMessage {
     Cursor(f32),
     /// Live touchpad natural-scroll (forwarded).
     NaturalScroll(bool),
+    /// Toggle the per-monitor FPS overlay (forwarded; persisted to preferences).
+    SetShowFps(bool),
+    /// Toggle releasing hidden iced surfaces' GPU memory (forwarded; persisted).
+    SetReleaseHidden(bool),
     /// A full edited Environment to write back to settings.json (forwarded;
     /// sets the reboot-dirty banner). Carrying the whole struct keeps one
     /// message variant instead of 19 field-specific ones.
