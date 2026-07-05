@@ -399,6 +399,7 @@ impl IcedUi for Settings {
             // Forwarded-only actions: no local UI state change.
             SettingsMessage::SetDefaultSink(_)
             | SettingsMessage::SetSinkVolume(_, _)
+            | SettingsMessage::SetSinkMute(_, _)
             | SettingsMessage::WifiEnable(_)
             | SettingsMessage::WifiScan
             | SettingsMessage::BtPower(_)

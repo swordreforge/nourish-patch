@@ -3625,6 +3625,7 @@ dependencies = [
  "compositor_orchestration_draw_state_lifecycle",
  "compositor_orchestration_driver_capture_base",
  "compositor_orchestration_driver_introspection_base",
+ "compositor_orchestration_driver_remote_base",
  "compositor_orchestration_environment_interface_lifecycle",
  "compositor_orchestration_environment_type_base",
  "compositor_orchestration_seat_system_pointer",
@@ -4061,6 +4062,7 @@ dependencies = [
  "compositor_kernel_seat_lifecycle_pause_base",
  "compositor_kernel_seat_lifecycle_resume_base",
  "compositor_orchestration_core_state_base",
+ "compositor_orchestration_driver_remote_base",
  "compositor_orchestration_driver_resume_base",
  "compositor_y5_graphic_capture_interface",
  "smithay",
@@ -5153,6 +5155,7 @@ version = "0.0.1"
 dependencies = [
  "compositor_remote_message_state_base",
  "compositor_support_system_storage_token_base",
+ "tokio",
 ]
 
 [[package]]
