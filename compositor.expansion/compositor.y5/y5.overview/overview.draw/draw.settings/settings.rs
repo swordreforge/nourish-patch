@@ -47,7 +47,12 @@ fn settings_rect(size: Size<i32, Physical>) -> Rectangle<i32, Physical> {
 /// + the variable controls. Resolution: world override → preference default.
 #[allow(clippy::type_complexity)]
 fn shader_state(state: &Loop) -> (Vec<String>, Option<String>, Vec<ShaderProp>, String, Option<String>) {
-    let options = compositor_background_two_shader_locate::list_bundles();
+    // The compiled-in built-in worlds first, then every user bundle on disk.
+    let mut options: Vec<String> = compositor_background_two_shader_builtin::builtins()
+        .iter()
+        .map(|b| b.id.to_string())
+        .collect();
+    options.extend(compositor_background_two_shader_locate::list_bundles());
     let two = state
         .inner
         .worlds
