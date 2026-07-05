@@ -267,6 +267,16 @@ pub fn spawn_visible(state: &mut Loop, renderer: &mut GlesRenderer, ph: Placehol
         compositor_orchestration_draw_layer_base::base::Layer::SCENE.bits(),
     );
 
+    // The placeholder paints its whole rect with an opaque background, so it
+    // occludes anything fully behind it — e.g. a previous placeholder retained
+    // at the same tile. Marking it lets the registry skip rasterizing/compositing
+    // the covered one entirely (see `set_opaque_occluder_by_id`).
+    state.inner.surface_mut()
+        .registry
+        .as_mut()
+        .unwrap()
+        .set_opaque_occluder_by_id(handle.id, true);
+
     let tx = state.inner.surface_mut().surface_message_buffer_channel.0.clone();
     let ph_uuid = ph.uuid;
     state.inner.surface_mut()

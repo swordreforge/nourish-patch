@@ -214,6 +214,8 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
     state.inner.keybinding = compositor_developer_environment_keybinding_base::base::load();
     let cursor = state.inner.preference.cursor_sensitivity as f32;
     let natural = state.inner.preference.input_natural_scroll;
+    let show_fps = state.inner.preference.show_fps;
+    let release_hidden = state.inner.preference.release_hidden_surfaces;
     let snap = state.inner.kernel.get(&OUTPUTS_SNAPSHOT).clone();
     let mut keys = compositor_y5_overlay_interface_keyboard::keyboard::registry(&state.inner.keybinding);
     keys.extend(compositor_y5_canvas_input_keyboard::navigator::registry(&state.inner.keybinding));
@@ -224,7 +226,7 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
     let cyclic = state.inner.preference.teleport_cyclic;
     let ime = state.inner.preference.ime.clone().unwrap_or_default();
     let keyboard = state.inner.preference.keyboard.clone();
-    let ui = Settings::new(env, cursor, natural, snap, keys, tab, layout, cyclic, ime, keyboard);
+    let ui = Settings::new(env, cursor, natural, show_fps, release_hidden, snap, keys, tab, layout, cyclic, ime, keyboard);
     let handle = load(state, renderer, ui, rect, IcedSpace::Screen, Layer::SCENE.bits());
     install_handler(state, handle);
     let untyped = handle.untyped();
