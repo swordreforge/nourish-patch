@@ -141,9 +141,10 @@ pub enum SettingsMessage {
     /// Set the current world's shader variables, keyed by `@prop` name (forwarded:
     /// persists + drives the live background, no rebuild).
     SetWorldShaderParams(Vec<(String, f32)>),
-    /// Audio (forwarded): make a sink default / set a sink's volume.
+    /// Audio (forwarded): make a sink default / set a sink's volume / mute a sink.
     SetDefaultSink(String),
     SetSinkVolume(String, f32),
+    SetSinkMute(String, bool),
     /// Wi-Fi: enable/scan/connect are forwarded; Select/Password are UI-local.
     WifiEnable(bool),
     WifiScan,

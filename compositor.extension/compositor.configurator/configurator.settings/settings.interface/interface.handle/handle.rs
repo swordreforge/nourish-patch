@@ -143,6 +143,11 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
                 let _ = a.set_sink_volume(&name, v as f64);
             }
         }
+        SettingsMessage::SetSinkMute(name, muted) => {
+            if let Some(a) = state.inner.kernel.get(&AUDIO) {
+                let _ = a.set_sink_mute(&name, muted);
+            }
+        }
         SettingsMessage::WifiEnable(b) => wifi::command(WifiCmd::SetEnabled(b)),
         SettingsMessage::WifiScan => wifi::command(WifiCmd::Scan),
         SettingsMessage::WifiConnect(ssid, pw) => wifi::command(WifiCmd::Connect(ssid, pw)),
