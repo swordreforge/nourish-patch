@@ -2,7 +2,7 @@
 
 The y5 compositor ships as **prebuilt release tarballs**. The Fedora 44 bundle is the
 main one (the one-liner below); per-distro × per-arch bundles for **Debian 12/13,
-Ubuntu 24.04/26.04 and Arch** are published as the `multiarch-latest` GitHub release. Because
+Ubuntu 24.04/26.04 and Arch** are published as the `bundles-rolling` GitHub release. Because
 the binaries are already compiled, installing pulls only the runtime shared libraries —
 no Rust toolchain, no `-devel` headers.
 
@@ -30,7 +30,7 @@ the interactive installer. On **NixOS** it instead fetches a glibc bundle and ru
 user, not with `sudo`** — the installer invokes `sudo` itself only for system steps, so your
 config lands in `$HOME/.config` (it refuses to run as root). Safe to re-run.
 
-Pin a specific release with `Y5_RELEASE_TAG` (e.g. `multiarch-v1.4.1-rc.2`), force a target
+Pin a specific release with `Y5_RELEASE_TAG` (e.g. `bundles-v1.4.1-rc.2`), force a target
 with `Y5_DISTRO`/`Y5_ARCH`, or list what's available with `bootstrap.sh --list`.
 
 ### Fedora only (the classic path)

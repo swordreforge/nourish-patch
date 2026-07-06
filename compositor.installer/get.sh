@@ -35,7 +35,7 @@ need sha256sum
 # are dynamically linked to Fedora's system libraries and won't reliably run elsewhere. The
 # interactive installer is distro-aware (it detects apt/pacman/dnf and, on NixOS, prints a
 # nix-ld profile), but that only helps once you have a bundle built for YOUR distro. Debian/
-# Ubuntu/Arch users should grab `package-<distro>-<arch>.tar.gz` from the `multiarch-latest`
+# Ubuntu/Arch users should grab `package-<distro>-<arch>.tar.gz` from the `bundles-rolling`
 # release instead of this Fedora one.
 if [ -r /etc/os-release ]; then
     . /etc/os-release
