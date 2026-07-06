@@ -22,6 +22,33 @@ impl VulkanRenderer {
         Ok(())
     }
 
+    /// Lazily build the `Y5_AA` experiment pipeline for `format`, once the live
+    /// AA mode goes non-Off. Held for the renderer's lifetime.
+    pub(super) fn ensure_aa_pipeline(&mut self, format: vk::Format) -> Result<(), VulkanError> {
+        if self.aa_pipelines.contains_key(&format) {
+            return Ok(());
+        }
+        let inst = self.phd.instance().handle();
+        let handle = self.phd.handle();
+        let feats = unsafe { inst.get_physical_device_features(handle) };
+        let max_anisotropy = if feats.sampler_anisotropy == vk::TRUE {
+            let props = unsafe { inst.get_physical_device_properties(handle) };
+            props.limits.max_sampler_anisotropy
+        } else {
+            1.0
+        };
+        let aa = compositor_kernel_vulkan_pipeline_composite_base::composite::AaComposite::create(
+            &self.dev,
+            self.pipeline_cache,
+            format,
+            max_anisotropy,
+        )
+        .map_err(|e| VulkanError::Vk(format!("aa pipeline: {e}")))?;
+        self.aa_pipelines.insert(format, aa);
+        info!("vulkan: Y5_AA composite pipeline created for {format:?}");
+        Ok(())
+    }
+
     /// Lazily build the HDR composite pipeline for `format`.
     pub(super) fn ensure_hdr_pipeline(&mut self, format: vk::Format) -> Result<(), VulkanError> {
         if self.hdr_pipelines.contains_key(&format) {

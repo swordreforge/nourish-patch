@@ -35,6 +35,18 @@ impl VulkanRenderer {
             }
         }
 
+        // Live `Y5_AA` mode (windows + iced AA), SDR path only for now. Build
+        // the experiment pipeline lazily the first time a non-Off mode is seen.
+        // Live graphics config (settings "Graphics" tab, via preferences) +
+        // current world zoom → the effective, zoom-weighted AA knobs.
+        let gfx = compositor_developer_environment_graphics_base::base::get();
+        let zoom = compositor_developer_stats_registry_base::base::world_zoom() as f32;
+        let eff = gfx.effective(zoom);
+        let aa_active = eff.active && !use_hdr;
+        if aa_active {
+            self.ensure_aa_pipeline(format)?;
+        }
+
         // The native-fence path reuses one command buffer + descriptor pool and
         // does NOT device_wait_idle, so before re-recording we must ensure the
         // previous frame's GPU work finished. Pace on the VkFence (created
@@ -95,6 +107,7 @@ impl VulkanRenderer {
             let sdr = [0.0_f32; 4];
             compositor_kernel_vulkan_command_record_base::record::record_composition(
                 dev, cmd, image, view, extent, clear, pipelines,
+                |_cmd| {},
                 |cmd| {
                     hdr.begin_frame(dev, cmd);
                     for op in ops.iter() {
@@ -106,7 +119,7 @@ impl VulkanRenderer {
                                     fp.draw(dev, cmd, &v.push);
                                 }
                             }
-                            DrawOp::Textured { quad, view: v, surf } => {
+                            DrawOp::Textured { quad, view: v, surf, .. } => {
                                 match hdr.texture_set(dev, *v) {
                                     Ok(set) => hdr.draw_textured(dev, cmd, set, to_push(quad, *surf)),
                                     Err(e) => warn!("hdr texture set: {e}"),
@@ -118,31 +131,109 @@ impl VulkanRenderer {
             )
             .map_err(|e| VulkanError::Vk(format!("hdr record: {e}")))?;
         } else {
+            // `Y5_AA` on: textured (window + iced) draws route through the AA
+            // pipeline (its own separate-binding sets from its own pool);
+            // solids + the parallax shader-pass are untouched. Off: the plain
+            // combined-sampler composite path below.
+            let aa = if aa_active {
+                self.aa_pipelines.get(&format)
+            } else {
+                None
+            };
+            let aa_taps = eff.taps;
+            let aa_spread = eff.spread;
+            let aa_sharpen = eff.sharpen;
+            let aa_lod_bias = eff.lod_bias;
+            // Which pre-built sampler the composite draws bind for this method.
+            use compositor_kernel_vulkan_pipeline_composite_base::composite::SamplerSel;
+            use compositor_developer_environment_graphics_base::base::AaMethod;
+            let comp_sel = match eff.method {
+                AaMethod::Trilinear => SamplerSel::Trilinear,
+                AaMethod::Anisotropic => SamplerSel::Aniso,
+                _ => SamplerSel::Bilinear,
+            };
+            // AA is decided PER OP: only minified world content (windows +
+            // iced-world) is eligible — screen-space iced and the 1:1 bevy
+            // background stay on the plain composite path. Aniso/trilinear also
+            // need a per-surface mip chain (render-to-mip0 + blit-down) before
+            // the composite pass.
+            let method_mips = aa_active && eff.method.needs_mips();
+            let mem_props = if method_mips {
+                Some(unsafe {
+                    self.phd
+                        .instance()
+                        .handle()
+                        .get_physical_device_memory_properties(self.phd.handle())
+                })
+            } else {
+                None
+            };
+            if let Some(aa) = aa {
+                aa.begin_frame(dev);
+            }
             unsafe {
                 dev.device
                     .reset_descriptor_pool(pool, vk::DescriptorPoolResetFlags::empty())?;
             }
 
-            // One descriptor set per textured op, in order; None for solids.
+            // Per textured op: its descriptor set, whether it draws via the AA
+            // pipeline (`aa_op`), and (for mip methods) its mip pre-pass job.
             let mut sets: Vec<Option<vk::DescriptorSet>> = Vec::with_capacity(ops.len());
-            for op in &ops {
-                match op {
-                    DrawOp::Solid { .. } => sets.push(None),
-                    DrawOp::ShaderPass { .. } => sets.push(None),
-                    DrawOp::Textured { view, .. } => {
-                        let layouts = [pipelines.descriptor_layout];
-                        let info = vk::DescriptorSetAllocateInfo::default()
-                            .descriptor_pool(pool)
-                            .set_layouts(&layouts);
-                        let set = unsafe { dev.device.allocate_descriptor_sets(&info)? }[0];
-                        compositor_kernel_vulkan_element_texture_base::texture::bind_texture(
-                            dev, pipelines, set, *view,
-                        );
-                        sets.push(Some(set));
+            let mut aa_op: Vec<bool> = Vec::with_capacity(ops.len());
+            let mut mip_jobs: Vec<(usize, vk::DescriptorSet)> = Vec::new();
+            {
+                let mut mg = self.mipgen.borrow_mut();
+                if method_mips {
+                    mg.begin_frame();
+                }
+                for op in &ops {
+                    match op {
+                        DrawOp::Textured { view, tex_w, tex_h, meta, .. } => {
+                            let op_aa = aa_active && meta.is_world();
+                            if op_aa {
+                                let aa = aa.expect("aa pipeline ensured when aa_active");
+                                if method_mips {
+                                    let mp = mem_props.as_ref().unwrap();
+                                    let idx = mg
+                                        .acquire(dev, mp, format, *tex_w, *tex_h)
+                                        .map_err(|e| VulkanError::Vk(format!("mip acquire: {e}")))?;
+                                    let fill = aa
+                                        .texture_set(dev, *view, SamplerSel::Bilinear)
+                                        .map_err(|e| VulkanError::Vk(format!("mip fill set: {e}")))?;
+                                    let comp = aa
+                                        .texture_set(dev, mg.view_of(idx), comp_sel)
+                                        .map_err(|e| VulkanError::Vk(format!("mip comp set: {e}")))?;
+                                    mip_jobs.push((idx, fill));
+                                    sets.push(Some(comp));
+                                } else {
+                                    let set = aa
+                                        .texture_set(dev, *view, comp_sel)
+                                        .map_err(|e| VulkanError::Vk(format!("aa set: {e}")))?;
+                                    sets.push(Some(set));
+                                }
+                                aa_op.push(true);
+                            } else {
+                                let layouts = [pipelines.descriptor_layout];
+                                let info = vk::DescriptorSetAllocateInfo::default()
+                                    .descriptor_pool(pool)
+                                    .set_layouts(&layouts);
+                                let set = unsafe { dev.device.allocate_descriptor_sets(&info)? }[0];
+                                compositor_kernel_vulkan_element_texture_base::texture::bind_texture(
+                                    dev, pipelines, set, *view,
+                                );
+                                sets.push(Some(set));
+                                aa_op.push(false);
+                            }
+                        }
+                        _ => {
+                            sets.push(None);
+                            aa_op.push(false);
+                        }
                     }
                 }
             }
 
+            let mipgen = &self.mipgen;
             compositor_kernel_vulkan_command_record_base::record::record_composition(
                 dev,
                 cmd,
@@ -152,7 +243,18 @@ impl VulkanRenderer {
                 clear,
                 pipelines,
                 |cmd| {
-                    for (op, set) in ops.iter().zip(sets.iter()) {
+                    // Pre-pass: (re)generate the mip chain for each AA mip op.
+                    if !mip_jobs.is_empty() {
+                        if let Some(aa) = aa {
+                            let mg = mipgen.borrow();
+                            for (idx, fill) in &mip_jobs {
+                                mg.record(dev, cmd, aa, *fill, *idx);
+                            }
+                        }
+                    }
+                },
+                |cmd| {
+                    for (i, (op, set)) in ops.iter().zip(sets.iter()).enumerate() {
                         match op {
                             DrawOp::Solid { quad } => {
                                 compositor_kernel_vulkan_element_solid_base::solid::draw(
@@ -166,13 +268,25 @@ impl VulkanRenderer {
                                 }
                             }
                             DrawOp::Textured { quad, .. } => {
-                                compositor_kernel_vulkan_element_texture_base::texture::draw(
-                                    dev,
-                                    pipelines,
-                                    cmd,
-                                    set.expect("textured op has a set"),
-                                    *quad,
-                                );
+                                let set = set.expect("textured op has a set");
+                                if aa_op[i] {
+                                    let aa = aa.expect("aa pipeline present for aa op");
+                                    aa.draw(
+                                        dev,
+                                        cmd,
+                                        set,
+                                        compositor_kernel_vulkan_pipeline_composite_base::composite::AaPush {
+                                            dst: quad.dst,
+                                            src: quad.src,
+                                            color: quad.color,
+                                            params: [aa_taps as f32, aa_spread, aa_sharpen, aa_lod_bias],
+                                        },
+                                    );
+                                } else {
+                                    compositor_kernel_vulkan_element_texture_base::texture::draw(
+                                        dev, pipelines, cmd, set, *quad,
+                                    );
+                                }
                             }
                         }
                     }

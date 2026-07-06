@@ -26,6 +26,8 @@ pub struct Settings {
     pub ime: Ime,
     /// Keyboard layout (Misc tab), persisted + applied live.
     pub keyboard: KeyboardLayout,
+    /// Graphics / anti-aliasing config (Graphics tab), persisted + applied live.
+    pub graphics: compositor_developer_environment_graphics_base::base::GraphicsAaConfig,
     pub dirty: bool,
     /// Every connected monitor (active + connected-but-inactive), for the picker.
     pub displays: Vec<DisplayInfo>,
@@ -139,6 +141,8 @@ impl Settings {
             env,
             ime,
             keyboard,
+            // Seeded from the process-global (mirrors the persisted preference).
+            graphics: compositor_developer_environment_graphics_base::base::get(),
             dirty: false,
             displays: snap.displays,
             active_edid: active_edid.clone(),
@@ -237,6 +241,7 @@ impl IcedUi for Settings {
                 }
                 ApplyResult::Provisional => {}
             },
+            SettingsMessage::SetGraphics(g) => self.graphics = g,
             SettingsMessage::Cursor(v) => self.cursor_sensitivity = v,
             SettingsMessage::NaturalScroll(b) => self.natural_scroll = b,
             SettingsMessage::SetShowFps(b) => self.show_fps = b,
@@ -470,6 +475,7 @@ impl IcedUi for Settings {
             self.invert_pan_x,
             self.invert_pan_y,
             self.srgb,
+            &self.graphics,
         )
     }
 }

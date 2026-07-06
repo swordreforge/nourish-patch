@@ -22,6 +22,10 @@ pub fn record_composition(
     extent: (u32, u32),
     clear: [f32; 4],
     pipelines: &compositor_kernel_vulkan_pipeline_composite_base::composite::CompositePipelines,
+    // Runs after the command buffer begins but BEFORE the composite render pass
+    // — for pre-pass work that must be outside the pass (e.g. `Y5_AA` trilinear
+    // mip generation: render-to-mip0 + blit-down). No-op for most frames.
+    pre: impl FnOnce(vk::CommandBuffer),
     compose: impl FnOnce(vk::CommandBuffer),
 ) -> Result<(), RecordError> {
     let dev = &device.device;
@@ -31,6 +35,8 @@ pub fn record_composition(
         dev.begin_command_buffer(cmd, &begin_info)
             .map_err(|e| RecordError::Vk(format!("begin: {e}")))?;
     }
+
+    pre(cmd);
 
     let subresource = vk::ImageSubresourceRange {
         aspect_mask: vk::ImageAspectFlags::COLOR,
