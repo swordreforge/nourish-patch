@@ -15,7 +15,7 @@
 #
 # Overridable via env:
 #   Y5_RELEASE_REPO  GitHub owner/repo         (default: y5-snowies/nourish)
-#   Y5_RELEASE_TAG   release tag               (default: multiarch-latest; pin e.g. multiarch-v1.4.1-rc.2)
+#   Y5_RELEASE_TAG   release tag               (default: bundles-rolling; pin e.g. bundles-v1.4.1-rc.2)
 #   Y5_RELEASE_BASE  full asset base URL       (default: https://github.com/<repo>/releases/download/<tag>)
 #   Y5_DISTRO        force the distro dir       (e.g. debian-13; skips detection)
 #   Y5_ARCH          force the arch            (x86_64 | aarch64; skips uname)
@@ -25,7 +25,7 @@
 set -euo pipefail
 
 REPO="${Y5_RELEASE_REPO:-y5-snowies/nourish}"
-TAG="${Y5_RELEASE_TAG:-multiarch-latest}"
+TAG="${Y5_RELEASE_TAG:-bundles-rolling}"
 BASE="${Y5_RELEASE_BASE:-https://github.com/$REPO/releases/download/$TAG}"
 
 # The distro dirs the multiarch pipeline builds (must match .github/workflows/multiarch-publish.yml).
