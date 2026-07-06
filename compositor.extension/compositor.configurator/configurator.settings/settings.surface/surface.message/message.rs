@@ -145,6 +145,18 @@ pub enum SettingsMessage {
     /// Set the current world's shader variables, keyed by `@prop` name (forwarded:
     /// persists + drives the live background, no rebuild).
     SetWorldShaderParams(Vec<(String, f32)>),
+    /// Invert the current world's background pan on the horizontal / vertical axis
+    /// (forwarded: persists + flips the live background's pan on that axis, no rebuild).
+    SetWorldInvertPanX(bool),
+    SetWorldInvertPanY(bool),
+    /// Gamma-encode the current world's background to sRGB (forwarded: persists +
+    /// flips the live background, no rebuild). On = brighter, preview-matching output.
+    SetWorldSrgb(bool),
+    /// The current world's pan-inversion state (invert X, invert Y), pushed by the
+    /// embed (NOT forwarded): sets the toggles when the panel opens / the world switches.
+    SyncWorldInvert(bool, bool),
+    /// The current world's sRGB-output state, pushed by the embed (NOT forwarded).
+    SyncWorldSrgb(bool),
     /// Audio (forwarded): make a sink default / set a sink's volume / mute a sink.
     SetDefaultSink(String),
     SetSinkVolume(String, f32),

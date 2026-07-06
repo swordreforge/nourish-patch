@@ -32,13 +32,17 @@ pub struct Builtin {
 /// first, then the three "inside the world" surface scenes. The stock space
 /// parallax is NOT listed here — it stays the unnamed default (`None` selection).
 pub fn builtins() -> &'static [Builtin] {
+    // The extra built-in worlds are commented out so the picker shows only the stock
+    // parallax default (the `None` selection). Uncomment any line to bring that world
+    // back into the picker — the shader files are kept in `shaders/`.
     &[
-        Builtin { id: "builtin:leafy-galaxy", wgsl: include_str!("shaders/leafy.wgsl") },
-        Builtin { id: "builtin:rocky-galaxy", wgsl: include_str!("shaders/rocky.wgsl") },
-        Builtin { id: "builtin:fiery-galaxy", wgsl: include_str!("shaders/fiery.wgsl") },
-        Builtin { id: "builtin:leafy-drift", wgsl: include_str!("shaders/leafy_drift.wgsl") },
-        Builtin { id: "builtin:rocky-cave", wgsl: include_str!("shaders/rocky_cave.wgsl") },
-        Builtin { id: "builtin:fiery-cavern", wgsl: include_str!("shaders/fiery_cavern.wgsl") },
+        // Builtin { id: "builtin:leafy-galaxy", wgsl: include_str!("shaders/leafy.wgsl") },
+        // Builtin { id: "builtin:rocky-galaxy", wgsl: include_str!("shaders/rocky.wgsl") },
+        // Builtin { id: "builtin:fiery-galaxy", wgsl: include_str!("shaders/fiery.wgsl") },
+        // Builtin { id: "builtin:leafy-drift", wgsl: include_str!("shaders/leafy_drift.wgsl") },
+        // Builtin { id: "builtin:rocky-cave", wgsl: include_str!("shaders/rocky_cave.wgsl") },
+        // Builtin { id: "builtin:fiery-cavern", wgsl: include_str!("shaders/fiery_cavern.wgsl") },
+        // Builtin { id: "builtin:leafy-bough", wgsl: include_str!("shaders/leafy_bough.wgsl") },
     ]
 }
 

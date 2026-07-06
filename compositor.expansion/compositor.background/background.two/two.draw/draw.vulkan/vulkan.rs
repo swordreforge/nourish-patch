@@ -65,7 +65,7 @@ impl ParallaxPass {
     pub fn new(u: &ParallaxUniforms, params: &[f32; 16]) -> Self {
         let res_zoom_time = [u.resolution[0], u.resolution[1], u.zoom, u.time];
         let pan_flow = [u.pan[0], u.pan[1], u.flow_offset[0], u.flow_offset[1]];
-        let lock_alpha = [u.lock_amount, u.alpha, 0.0, 0.0];
+        let lock_alpha = [u.lock_amount, u.alpha, u.srgb, 0.0];
         let params = params_vec4(params);
         let t = compositor_developer_stats_registry_base::base::hdr_tuning();
         Self {
@@ -115,7 +115,7 @@ pub fn engine_push(u: &ParallaxUniforms, params: &[f32; 16]) -> [u8; 112] {
     let p = SdrPush {
         res_zoom_time: [u.resolution[0], u.resolution[1], u.zoom, u.time],
         pan_flow: [u.pan[0], u.pan[1], u.flow_offset[0], u.flow_offset[1]],
-        lock_alpha: [u.lock_amount, u.alpha, 0.0, 0.0],
+        lock_alpha: [u.lock_amount, u.alpha, u.srgb, 0.0],
         params: params_vec4(params),
     };
     let mut out = [0u8; 112];

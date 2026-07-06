@@ -69,6 +69,12 @@ pub struct Settings {
     pub preview_source: String,
     /// The selected shader's compile error (active renderer), if it failed.
     pub shader_status: Option<String>,
+    /// The active world's per-axis background pan inversion (pushed via
+    /// `SyncWorldInvert`); mirrored on toggle so the switches reflect immediately.
+    pub invert_pan_x: bool,
+    pub invert_pan_y: bool,
+    /// The active world's sRGB-output toggle (pushed via `SyncWorldSrgb`).
+    pub srgb: bool,
     /// The cursor-teleport layout squares (Display tab canvas, multi-monitor). Each
     /// is a monitor (`identity`) placed at an abstract `(x,y)` with side `size`.
     pub layout: Vec<LayoutPlacement>,
@@ -155,6 +161,9 @@ impl Settings {
             shader_props: Vec::new(),
             preview_source: String::new(),
             shader_status: None,
+            invert_pan_x: false,
+            invert_pan_y: false,
+            srgb: false,
             layout,
             selected_placement: None,
             next_placement_id,
@@ -322,6 +331,13 @@ impl IcedUi for Settings {
             SettingsMessage::SyncShaderProps(props) => self.shader_props = props,
             SettingsMessage::SyncShaderPreview(src) => self.preview_source = src,
             SettingsMessage::SyncShaderStatus(status) => self.shader_status = status,
+            // Pan-inversion: pushed state, plus the UI mirror of each toggle (both
+            // also forwarded to persist + flip the live background).
+            SettingsMessage::SyncWorldInvert(x, y) => { self.invert_pan_x = x; self.invert_pan_y = y; }
+            SettingsMessage::SetWorldInvertPanX(v) => self.invert_pan_x = v,
+            SettingsMessage::SetWorldInvertPanY(v) => self.invert_pan_y = v,
+            SettingsMessage::SyncWorldSrgb(v) => self.srgb = v,
+            SettingsMessage::SetWorldSrgb(v) => self.srgb = v,
             // UI mirror of an edit; also forwarded to persist + drive the shader.
             SettingsMessage::SetWorldShaderParams(values) => {
                 for p in &mut self.shader_props {
@@ -451,6 +467,9 @@ impl IcedUi for Settings {
             &self.shader_props,
             &self.preview_source,
             self.shader_status.as_deref(),
+            self.invert_pan_x,
+            self.invert_pan_y,
+            self.srgb,
         )
     }
 }

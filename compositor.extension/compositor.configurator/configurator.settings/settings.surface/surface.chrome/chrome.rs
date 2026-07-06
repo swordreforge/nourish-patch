@@ -85,6 +85,7 @@ pub fn render<'a>(
     ime: &'a Ime, keyboard: &'a KeyboardLayout,
     shaders: &'a [String], shader_current: Option<&'a str>, shader_props: &'a [ShaderProp],
     preview_source: &'a str, shader_status: Option<&'a str>,
+    invert_pan_x: bool, invert_pan_y: bool, srgb: bool,
 ) -> El<'a> {
     let body: El<'a> = match tab {
         Tab::Display => display::build(displays, active_edid, selected_display, selected_mode, confirming, pending, staged_active, layout, selected_placement, cyclic, selected_inactive),
@@ -98,7 +99,7 @@ pub fn render<'a>(
         Tab::Performance => performance(fps, show_fps, release_hidden),
         Tab::System => environment::build(env, devices),
         Tab::Misc => misc::build(ime, keyboard),
-        Tab::World => world::build(shaders, shader_current, shader_props, preview_source, shader_status),
+        Tab::World => world::build(shaders, shader_current, shader_props, preview_source, shader_status, invert_pan_x, invert_pan_y, srgb),
     };
     // Each section still scrolls its own lists vertically. The content area holds a
     // MINIMUM width (`MIN_CONTENT`) so panes never squish/overflow on a narrow window;

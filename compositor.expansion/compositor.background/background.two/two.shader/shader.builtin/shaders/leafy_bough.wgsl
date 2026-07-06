@@ -1,32 +1,30 @@
-// Built-in background: "Fiery Cavern" — the molten companion to Rocky Cave.
-// You're deep inside a volcanic chamber: a wall of cooled low-poly basalt chunks,
-// riddled with holes that open onto flowing molten lava. The seams between the
-// rocks glow where lava seeps through. Same faceted, low-poly construction as the
-// Rocky Cave, but lit from within by heat instead of daylight.
+// Built-in background: "Leafy Bough" — the woody companion to Rocky Cave and Fiery
+// Cavern. You're tucked inside a hollow tree branch: a wall of low-poly bark chunks,
+// riddled with knot-holes that open onto dappled green canopy light. Same faceted,
+// holed construction as the cave scenes, lit by soft forest daylight.
 //
-// Design notes:
-//   * The wall is a Voronoi array of flat-shaded basalt facets (a low-poly look),
-//     each catching a dim key light differently. The crevices between them glow —
-//     hot cracks where lava shows through the cooled crust.
-//   * MANY holes are punched through the wall on a jittered grid, each opening onto
-//     a pool of molten lava — mostly cooled dark crust with the melt glowing softly
-//     in the cracks between crust plates, creeping slowly. A chunk is "open" when its
-//     facet falls inside the nearest hole, so every pool is angular, not a smooth oval.
+// Design notes (kept deliberately restful):
+//   * The wall is a Voronoi array of flat-shaded bark facets (a low-poly look), with
+//     a fine wood grain drawn through them and thin dark crevices between chunks.
+//   * MANY knot-holes are punched through the wall on a jittered grid, each opening
+//     onto a dappled canopy — layered greens with warm sun breaking through the
+//     leaves. A chunk is "open" when its facet falls inside the nearest hole, so
+//     every hole is angular, following the bark edges — not a smooth oval.
 //   * Each hole's size is `hole_size`, scattered per hole by a noise draw
-//     (`hole_variation`); `hole_spacing` sets how far apart the pools sit (raise it
-//     with `hole_size` for a few large lava pools).
-//   * Embers rise from the heat. The rock wall parallaxes more than the lava.
+//     (`hole_variation`); `hole_spacing` sets how far apart the holes sit (raise it
+//     with `hole_size` for a few big openings).
+//   * Pollen motes drift in the light. The bark wall parallaxes more than the canopy.
 //
 // Author-exposed knobs (parsed from the `@prop` lines below → params slots):
-// @prop drift_speed float default=1.0 min=0.0 max=6.0 label="Flow & embers" group="Cavern"
-// @prop ember_density float default=1.0 min=0.0 max=2.0 label="Ember density" group="Cavern"
-// @prop glow float default=1.0 min=0.0 max=2.0 label="Lava glow" group="Cavern"
-// @prop vignette float default=0.0 min=0.0 max=1.0 label="Vignette amount" group="Cavern"
-// @prop vignette_radius float default=1.12 min=0.5 max=2.0 label="Vignette radius" group="Cavern"
-// @prop vignette_softness float default=0.6 min=0.05 max=2.0 label="Vignette softness" group="Cavern"
-// @prop hole_size float default=0.16 min=0.04 max=1.5 label="Lava pool size" group="Cavern"
-// @prop hole_variation float default=0.55 min=0.0 max=1.0 label="Pool size variation" group="Cavern"
-// @prop hole_spacing float default=1.0 min=0.3 max=4.0 label="Pool spacing" group="Cavern"
+// @prop drift_speed float default=1.0 min=0.0 max=6.0 label="Sway & motes" group="Bough"
+// @prop mote_density float default=1.0 min=0.0 max=2.0 label="Pollen density" group="Bough"
+// @prop daylight float default=1.0 min=0.0 max=2.0 label="Canopy light" group="Bough"
+// @prop vignette float default=0.0 min=0.0 max=1.0 label="Vignette amount" group="Bough"
+// @prop vignette_radius float default=1.12 min=0.5 max=2.0 label="Vignette radius" group="Bough"
+// @prop vignette_softness float default=0.6 min=0.05 max=2.0 label="Vignette softness" group="Bough"
+// @prop hole_size float default=0.14 min=0.04 max=1.5 label="Knot-hole size" group="Bough"
+// @prop hole_variation float default=0.55 min=0.0 max=1.0 label="Hole size variation" group="Bough"
+// @prop hole_spacing float default=1.0 min=0.3 max=4.0 label="Hole spacing" group="Bough"
 
 struct Push {
     res_zoom_time: vec4<f32>,
@@ -104,28 +102,19 @@ fn voronoi(p: vec2<f32>) -> Voro {
     return r;
 }
 
-// The molten lava seen through a hole. Realistic reading: mostly cooled dark crust
-// with the melt glowing softly in the cracks between the crust plates — not a bright
-// churning sheet. `p` is world space; `time` drives a slow convective creep.
-fn lava(p: vec2<f32>, glow: f32, time: f32) -> vec3<f32> {
-    // Slow convection so the melt creeps rather than boils.
-    let flow = vec2<f32>(time * 0.012, -time * 0.02);
-    // Low-frequency crust plates; the low valleys between them are the hot cracks.
-    let plates = fbm(p * 2.0 + flow);
-    let fine = fbm(p * 5.5 - flow * 1.3);
-    let t = plates * 0.72 + fine * 0.28;
-    // Glow lives in the valleys (cracks); soft-shaped so it eases in, not a hard edge.
-    let crack = smoothstep(0.58, 0.30, t);
-    let hot = crack * crack;
-    // Emission stays deep and mostly red-orange; the hottest cracks only reach a
-    // muted amber, never white — keeps it subtle.
-    var c = vec3<f32>(0.024, 0.010, 0.007);                                // cooled basalt crust
-    c = mix(c, vec3<f32>(0.42, 0.07, 0.012), smoothstep(0.10, 0.55, hot)); // dull red melt
-    c = mix(c, vec3<f32>(0.72, 0.26, 0.04), smoothstep(0.5, 0.85, hot));   // ember orange
-    c = mix(c, vec3<f32>(0.90, 0.52, 0.16), smoothstep(0.85, 1.0, hot));   // muted amber peak
-    // Faint slow shimmer only in the melt, so the crust stays still.
-    c = c * (0.94 + 0.06 * sin(time * 0.6 + t * 5.0));
-    return c * (0.55 + 0.5 * glow);
+// The dappled canopy seen through a knot-hole: layered forest green with warm sun
+// breaking through gaps in the leaves. `p` is world space; `time` sways it gently.
+fn canopy(p: vec2<f32>, daylight: f32, time: f32) -> vec3<f32> {
+    let sway = vec2<f32>(sin(time * 0.25) * 0.06, time * 0.02);
+    let leaves = fbm(p * 3.0 + sway);
+    let dapple = fbm(p * 7.0 - sway * 1.4);
+    // Shaded canopy depths → sunlit leaf.
+    var c = mix(vec3<f32>(0.05, 0.09, 0.035), vec3<f32>(0.20, 0.33, 0.12), smoothstep(0.35, 0.65, leaves));
+    // Warm light spilling through gaps in the leaves, with brighter hotspots.
+    let sun = smoothstep(0.60, 0.80, dapple);
+    c = mix(c, vec3<f32>(0.80, 0.82, 0.48), sun);
+    c = c + vec3<f32>(0.35, 0.34, 0.16) * smoothstep(0.82, 0.95, dapple);
+    return c * (0.55 + 0.6 * daylight);
 }
 
 // Holes sit on a jittered grid; `gscale` = cells per world unit (higher = more,
@@ -157,7 +146,7 @@ fn nearest_hole(p: vec2<f32>, gscale: f32) -> Hole {
 
 // The radius of hole `id` at angle `a`: the author's base `size`, scattered per hole
 // by a noise draw (`variation` = how far sizes wander), times a little angular
-// jaggedness so the opening follows the rock, not a smooth oval.
+// jaggedness so the opening follows the bark, not a smooth oval.
 fn hole_radius(a: f32, id: f32, size: f32, variation: f32) -> f32 {
     let scatter = 1.0 + variation * (fbm(vec2<f32>(id * 7.3, id * 3.1)) * 2.0 - 1.0);
     let base = size * clamp(scatter, 0.2, 2.5);
@@ -177,15 +166,15 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let alpha = pc.lock_alpha.y;
 
     let drift = pc.params[0].x;
-    let ember_density = pc.params[0].y;
-    let glow = pc.params[0].z;
+    let mote_density = pc.params[0].y;
+    let daylight = pc.params[0].z;
     let vignette = pc.params[0].w;
     let vig_radius = pc.params[1].x;
     let vig_softness = pc.params[1].y;
     let hole_size = pc.params[1].z;
     let hole_variation = pc.params[1].w;
     let hole_spacing = pc.params[2].x;
-    // Cells per world unit: raising hole_spacing widens the grid → fewer, farther pools.
+    // Cells per world unit: raising hole_spacing widens the grid → fewer, farther holes.
     let hole_grid = 2.4 / max(hole_spacing, 0.05);
 
     var uv = (frag - 0.5 * res) / res.y;
@@ -197,13 +186,13 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let pan = vec2<f32>(-pan_in.x, -pan_in.y);
 
     let world = uv - pan * 0.0006;
-    // Rock-facet field in the (near-parallaxed) frame space.
+    // Bark-facet field in the (near-parallaxed) frame space.
     let scale = 5.5;
     let fp = world * scale;
     let v = voronoi(fp);
 
-    // Is this facet part of a lava hole? Test the facet's CENTRE against the nearest
-    // hole, so every opening follows the angular rock edges (not a smooth oval).
+    // Is this facet a knot-hole? Test the facet's CENTRE against the nearest hole,
+    // so every opening follows the angular bark edges (not a smooth oval).
     let fc = v.center / scale;                         // this facet's centre (world)
     let ch = nearest_hole(fc, hole_grid);
     let crel = fc - ch.center;
@@ -213,53 +202,53 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
     var col: vec3<f32>;
     if (is_open) {
-        // Molten lava churning behind the wall (far, slow parallax).
-        col = lava(uv * 0.9 - pan * 0.00018, glow, time * drift);
+        // Dappled canopy through the knot-hole (far, slow parallax).
+        col = canopy(uv * 0.9 - pan * 0.00018, daylight, time * drift);
     } else {
-        // Flat-shaded low-poly basalt facet: a constant pseudo-normal per cell lit by
-        // a fixed dim key, so each chunk catches a different dark tone.
+        // Flat-shaded low-poly bark facet: a constant pseudo-normal per cell lit by
+        // a fixed key, so each chunk catches a different flat tone.
         let nrm = normalize(vec3<f32>((hash2(v.cell) - 0.5) * 1.6, 0.85));
         let key = normalize(vec3<f32>(-0.45, 0.55, 0.55));
         let sh = clamp(dot(nrm, key), 0.0, 1.0);
-        var rock = mix(vec3<f32>(0.016, 0.011, 0.009), vec3<f32>(0.055, 0.038, 0.032), sh * sh);
-        // Glowing seams: lava seeping through the cracks between facets (Voronoi
-        // edges). Kept thin (cubed) and dim, with a slow, faint flicker.
-        let seam = smoothstep(0.05, 0.0, v.f2 - v.f1);
-        let flick = 0.9 + 0.1 * sin(time * 0.7 * drift + v.cell.x * 5.0 + v.cell.y * 3.0);
-        rock = rock + vec3<f32>(0.52, 0.13, 0.02) * seam * seam * seam * (0.3 + 0.45 * glow) * flick;
-        // Warm rim: facets hugging a pool edge catch a soft scorch from its heat.
-        let rim = smoothstep(0.30, 0.0, crad - chr);
-        rock = rock + vec3<f32>(0.55, 0.20, 0.05) * rim * rim * (0.28 + 0.4 * glow);
-        col = rock;
+        var wood = mix(vec3<f32>(0.055, 0.036, 0.022), vec3<f32>(0.17, 0.115, 0.070), sh * sh);
+        // Wood grain: fine noise stretched along the branch, varying within a facet.
+        let grain = fbm(vec2<f32>(world.x * 3.0, world.y * 26.0));
+        wood = wood * (0.82 + 0.32 * grain);
+        // Thin dark crevices between the bark chunks (Voronoi edges).
+        let edge = smoothstep(0.0, 0.05, v.f2 - v.f1);
+        wood = wood * (0.4 + 0.6 * edge);
+        // Green-gold rim: bark hugging a knot-hole catches canopy spill light.
+        let rim = smoothstep(0.22, 0.0, crad - chr);
+        wood = wood + vec3<f32>(0.28, 0.30, 0.14) * rim * rim * (0.4 + 0.4 * daylight);
+        col = wood;
     }
 
-    // Heat haze glowing out from each pool (per-fragment nearest hole).
+    // Soft shafts of canopy light reaching in from the holes (per-fragment nearest hole).
     let fh = nearest_hole(world, hole_grid);
     let hrel = world - fh.center;
     let hrad = length(hrel * vec2<f32>(1.0, 1.18));
     let hr = hole_radius(atan2(hrel.y, hrel.x), fh.id, hole_size, hole_variation);
-    col = col + vec3<f32>(0.16, 0.055, 0.012) * exp(-(hrad - hr) * 2.4) * f32(!is_open) * smoothstep(hr + 0.7, hr, hrad) * (0.3 + 0.45 * glow);
+    col = col + vec3<f32>(0.10, 0.11, 0.05) * exp(-(hrad - hr) * 3.0) * f32(!is_open) * smoothstep(hr + 0.5, hr, hrad) * (0.4 + 0.4 * daylight);
 
-    // Embers rising off the heat, brightest near the lava pools.
+    // Pollen motes drifting in the light near the knot-holes.
     for (var i = 0; i < 2; i = i + 1) {
         let depth = 1.0 + f32(i) * 0.7;
-        let sp = vec2<f32>(uv.x * (11.0 / depth) + pan.x * 0.0011 * depth + sin(time * 0.5 + f32(i)) * 0.3,
-                           uv.y * (11.0 / depth) - time * 0.14 * drift / depth + pan.y * 0.0011 * depth);
+        let sp = vec2<f32>(uv.x * (10.0 / depth) + pan.x * 0.0011 * depth + time * 0.02 * drift / depth,
+                           uv.y * (10.0 / depth) - time * 0.015 * drift / depth + pan.y * 0.0011 * depth);
         let id = floor(sp);
         let f = fract(sp) - 0.5;
         let h = hash(id + f32(i) * 29.0);
-        if (h > 1.0 - 0.04 * ember_density) {
+        if (h > 1.0 - 0.05 * mote_density) {
             let dd = length(f);
-            let near_heat = smoothstep(hr + 0.9, hr - 0.1, hrad);
-            let twk = 0.3 + 0.5 * sin(time * 1.6 + h * 30.0);
-            col = col + vec3<f32>(0.85, 0.4, 0.11) * smoothstep(0.05, 0.0, dd) * twk * near_heat / (depth * 3.4);
+            let near_light = smoothstep(hr + 0.6, hr - 0.1, hrad);
+            col = col + vec3<f32>(0.5, 0.5, 0.28) * smoothstep(0.06, 0.0, dd) * (0.5 + 0.5 * sin(time + h * 30.0)) * near_light / (depth * 3.0);
         }
     }
 
-    // Lock-screen ease: let the cavern cool and darken toward a deep ember red.
+    // Lock-screen ease: let the canopy dim toward a still, dusky green.
     var l = clamp(lock_amount, 0.0, 1.0);
     l = l * l * (3.0 - 2.0 * l);
-    col = mix(col, col * 0.5 + vec3<f32>(0.020, 0.006, 0.004), l);
+    col = mix(col, col * 0.5 + vec3<f32>(0.006, 0.009, 0.006), l);
 
     let vig = smoothstep(vig_radius, vig_radius - vig_softness, length(screen_uv));
     col = col * mix(1.0, vig, clamp(vignette, 0.0, 1.0));
