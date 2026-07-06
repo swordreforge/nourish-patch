@@ -75,7 +75,7 @@ pub fn create(phd: &PhysicalDevice) -> Result<VulkanDevice, DeviceError> {
         .dynamic_rendering(true)
         .synchronization2(true);
 
-    // Enable anisotropic sampling when the device advertises it, so the `Y5_AA`
+    // Enable anisotropic sampling when the device advertises it, so the world anti-aliasing
     // `aniso` composite sampler is legal. No cost when unused; skipped on the
     // rare device that lacks it (the composite path falls back to isotropic).
     let supported = unsafe { instance.get_physical_device_features(phd.handle()) };

@@ -47,7 +47,7 @@ pub fn fence_fallback() {
 
 /// Live world-camera zoom (`f64` via `to_bits`), pushed from the one camera
 /// `SetZoom` write point and read every frame by the Vulkan renderer to
-/// zoom-weight the anti-aliasing knobs (`Y5_AA` graphics config). `1.0` == 100%.
+/// zoom-weight the anti-aliasing knobs (world anti-aliasing graphics config). `1.0` == 100%.
 pub static WORLD_CAMERA_ZOOM: AtomicU64 = AtomicU64::new(0x3FF0_0000_0000_0000); // 1.0f64
 
 /// Record whether the active compositor renderer composites from dmabufs

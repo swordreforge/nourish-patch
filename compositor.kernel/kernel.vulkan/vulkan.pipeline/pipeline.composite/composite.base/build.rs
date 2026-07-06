@@ -1,4 +1,4 @@
-//! Ahead-of-time compilation of the `Y5_AA` experiment shader.
+//! Ahead-of-time compilation of the world anti-aliasing shader.
 //!
 //! `aa.wgsl` (the anti-aliasing composite: sampler-based aniso/trilinear +
 //! in-shader N×N supersample) is compiled to SPIR-V by naga at build time, the

@@ -294,7 +294,7 @@ fn bytes_of(quad: &PushQuad) -> &[u8] {
 }
 
 // ===========================================================================
-// Y5_AA experiment pipeline (see shaders/aa.wgsl).
+// world anti-aliasing pipeline (see shaders/aa.wgsl).
 // ===========================================================================
 
 /// The `aa.wgsl` module, naga-compiled to SPIR-V by `build.rs`.
@@ -324,7 +324,7 @@ pub struct AaPush {
     pub params: [f32; 4],
 }
 
-/// The `Y5_AA` composite pipeline: one WGSL pipeline with three pre-built
+/// The world anti-aliasing composite pipeline: one WGSL pipeline with three pre-built
 /// sampler variants, selected per draw by [`SamplerSel`]. Separate
 /// image+sampler bindings (naga can't emit combined samplers), so it carries
 /// its own descriptor layout + per-frame pool, independent of the plain GLSL
@@ -334,7 +334,10 @@ pub struct AaComposite {
     layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     sampler_bilinear: vk::Sampler,
-    sampler_aniso: vk::Sampler,
+    /// Anisotropic samplers at a few max-anisotropy levels (each also LINEAR-mip
+    /// so it samples the generated mip chain). Empty when the device lacks
+    /// anisotropy — `sampler_for` then falls back to trilinear.
+    aniso: Vec<(f32, vk::Sampler)>,
     sampler_trilinear: vk::Sampler,
     tex_pool: vk::DescriptorPool,
     pub color_format: vk::Format,
@@ -362,18 +365,31 @@ impl AaComposite {
                 .map_err(|e| CompositeError::Vk(format!("aa sampler: {e}")))
         };
         let sampler_bilinear = mk(&base())?;
-        // Anisotropy only when the device offers it; else a plain bilinear clone.
-        let sampler_aniso = if max_anisotropy > 1.0 {
-            mk(&base().anisotropy_enable(true).max_anisotropy(max_anisotropy))?
-        } else {
-            mk(&base())?
+        // Trilinear: LINEAR mipmap sampling of the generated mip chain.
+        let trilinear_info = || {
+            base()
+                .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+                .min_lod(0.0)
+                .max_lod(vk::LOD_CLAMP_NONE)
         };
-        // Trilinear: LINEAR mipmap sampling. Inert until per-surface mip chains
-        // land (single-mip images sample level 0), but the sampler is ready.
-        let sampler_trilinear = mk(&base()
-            .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
-            .min_lod(0.0)
-            .max_lod(vk::LOD_CLAMP_NONE))?;
+        let sampler_trilinear = mk(&trilinear_info())?;
+        // Anisotropic (mip-sampling) samplers at a few levels, each clamped to
+        // the device max; `sampler_for` picks the nearest to the config value.
+        let mut aniso: Vec<(f32, vk::Sampler)> = Vec::new();
+        if max_anisotropy > 1.0 {
+            for lvl in [2.0f32, 4.0, 8.0, 16.0] {
+                if lvl <= max_anisotropy + 0.5 {
+                    let s = mk(&trilinear_info().anisotropy_enable(true).max_anisotropy(lvl))?;
+                    aniso.push((lvl, s));
+                }
+            }
+            if aniso.is_empty() {
+                let s = mk(&trilinear_info()
+                    .anisotropy_enable(true)
+                    .max_anisotropy(max_anisotropy))?;
+                aniso.push((max_anisotropy, s));
+            }
+        }
 
         let set_bindings = [
             vk::DescriptorSetLayoutBinding::default()
@@ -489,18 +505,31 @@ impl AaComposite {
             layout,
             pipeline,
             sampler_bilinear,
-            sampler_aniso,
+            aniso,
             sampler_trilinear,
             tex_pool,
             color_format,
         })
     }
 
-    fn sampler_for(&self, sel: SamplerSel) -> vk::Sampler {
+    fn sampler_for(&self, sel: SamplerSel, aniso_level: f32) -> vk::Sampler {
         match sel {
             SamplerSel::Trilinear => self.sampler_trilinear,
-            SamplerSel::Aniso => self.sampler_aniso,
             SamplerSel::Bilinear => self.sampler_bilinear,
+            // Highest built level not exceeding the requested one (fall back to
+            // the smallest, or to trilinear if the device has no anisotropy).
+            SamplerSel::Aniso => {
+                let mut chosen = match self.aniso.first() {
+                    Some(&(_, s)) => s,
+                    None => return self.sampler_trilinear,
+                };
+                for &(lvl, s) in &self.aniso {
+                    if lvl <= aniso_level + 0.5 {
+                        chosen = s;
+                    }
+                }
+                chosen
+            }
         }
     }
 
@@ -514,11 +543,14 @@ impl AaComposite {
     }
 
     /// Allocate + write a set (image + selected sampler) for one draw.
+    /// `aniso_level` selects the anisotropy sampler for `SamplerSel::Aniso`
+    /// (ignored otherwise).
     pub fn texture_set(
         &self,
         device: &VulkanDevice,
         view: vk::ImageView,
         sel: SamplerSel,
+        aniso_level: f32,
     ) -> Result<vk::DescriptorSet, CompositeError> {
         let dev = &device.device;
         let set = unsafe {
@@ -532,7 +564,7 @@ impl AaComposite {
         let img = vk::DescriptorImageInfo::default()
             .image_view(view)
             .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL);
-        let smp = vk::DescriptorImageInfo::default().sampler(self.sampler_for(sel));
+        let smp = vk::DescriptorImageInfo::default().sampler(self.sampler_for(sel, aniso_level));
         unsafe {
             dev.update_descriptor_sets(
                 &[
@@ -587,7 +619,9 @@ impl AaComposite {
         unsafe {
             dev.destroy_descriptor_pool(self.tex_pool, None);
             dev.destroy_sampler(self.sampler_bilinear, None);
-            dev.destroy_sampler(self.sampler_aniso, None);
+            for &(_, s) in &self.aniso {
+                dev.destroy_sampler(s, None);
+            }
             dev.destroy_sampler(self.sampler_trilinear, None);
             dev.destroy_pipeline(self.pipeline, None);
             dev.destroy_pipeline_layout(self.layout, None);

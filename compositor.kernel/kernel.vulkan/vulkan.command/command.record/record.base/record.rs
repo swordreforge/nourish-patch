@@ -23,7 +23,7 @@ pub fn record_composition(
     clear: [f32; 4],
     pipelines: &compositor_kernel_vulkan_pipeline_composite_base::composite::CompositePipelines,
     // Runs after the command buffer begins but BEFORE the composite render pass
-    // — for pre-pass work that must be outside the pass (e.g. `Y5_AA` trilinear
+    // — for pre-pass work that must be outside the pass (e.g. world anti-aliasing trilinear
     // mip generation: render-to-mip0 + blit-down). No-op for most frames.
     pre: impl FnOnce(vk::CommandBuffer),
     compose: impl FnOnce(vk::CommandBuffer),

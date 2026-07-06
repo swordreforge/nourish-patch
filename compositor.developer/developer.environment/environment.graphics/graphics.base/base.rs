@@ -1,4 +1,4 @@
-//! Shared anti-aliasing / graphics config for the `Y5_AA` experiment.
+//! Shared anti-aliasing / graphics config for the world anti-aliasing.
 //!
 //! One serde struct ([`GraphicsAaConfig`]) persisted in `preferences.json` and
 //! edited from the settings "Graphics" tab. Because the kernel renderer cannot
@@ -101,6 +101,10 @@ pub struct GraphicsAaConfig {
 }
 
 impl GraphicsAaConfig {
+    /// Hard ceiling on effective SSAA taps per axis (→ `MAX_TAPS²` samples per
+    /// fragment). A production safety limit independent of the UI slider range.
+    pub const MAX_TAPS: u32 = 8;
+
     pub const DEFAULT: GraphicsAaConfig = GraphicsAaConfig {
         method: AaMethod::Off,
         activate_below_zoom: 1.0,
@@ -117,7 +121,10 @@ impl GraphicsAaConfig {
         let active = self.method != AaMethod::Off && zoom < self.activate_below_zoom;
         let zoom_out = ((1.0 / zoom.max(1e-4)) - 1.0).clamp(0.0, self.max_zoom_out.max(0.0));
         let taps = match self.method {
-            AaMethod::Ssaa => self.taps.eval(zoom_out).round().clamp(1.0, 32.0) as u32,
+            // Per-axis taps; the effective count is capped to `MAX_TAPS` so a
+            // heavy config can't request MAX_TAPS² samples/fragment and stall
+            // weaker GPUs.
+            AaMethod::Ssaa => self.taps.eval(zoom_out).round().clamp(1.0, Self::MAX_TAPS as f32) as u32,
             // Trilinear/aniso sample the mip chain directly (single tap).
             _ => 1,
         };

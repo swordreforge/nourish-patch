@@ -35,17 +35,22 @@ impl VulkanRenderer {
             }
         }
 
-        // Live `Y5_AA` mode (windows + iced AA), SDR path only for now. Build
-        // the experiment pipeline lazily the first time a non-Off mode is seen.
         // Live graphics config (settings "Graphics" tab, via preferences) +
-        // current world zoom → the effective, zoom-weighted AA knobs.
+        // current world zoom → the effective, zoom-weighted AA knobs. AA applies
+        // to the SDR composite path only (HDR skips it). The pipeline is built
+        // lazily on activation and torn down on deactivation.
         let gfx = compositor_developer_environment_graphics_base::base::get();
         let zoom = compositor_developer_stats_registry_base::base::world_zoom() as f32;
         let eff = gfx.effective(zoom);
         let aa_active = eff.active && !use_hdr;
         if aa_active {
             self.ensure_aa_pipeline(format)?;
+        } else if self.aa_was_active {
+            // Deactivation edge: reclaim the AA pipeline(s) and per-surface mip
+            // images so a disabled AA config costs no resident GPU memory.
+            self.teardown_aa();
         }
+        self.aa_was_active = aa_active;
 
         // The native-fence path reuses one command buffer + descriptor pool and
         // does NOT device_wait_idle, so before re-recording we must ensure the
@@ -131,7 +136,7 @@ impl VulkanRenderer {
             )
             .map_err(|e| VulkanError::Vk(format!("hdr record: {e}")))?;
         } else {
-            // `Y5_AA` on: textured (window + iced) draws route through the AA
+            // world anti-aliasing on: textured (window + iced) draws route through the AA
             // pipeline (its own separate-binding sets from its own pool);
             // solids + the parallax shader-pass are untouched. Off: the plain
             // combined-sampler composite path below.
@@ -144,6 +149,7 @@ impl VulkanRenderer {
             let aa_spread = eff.spread;
             let aa_sharpen = eff.sharpen;
             let aa_lod_bias = eff.lod_bias;
+            let aa_aniso = eff.aniso;
             // Which pre-built sampler the composite draws bind for this method.
             use compositor_kernel_vulkan_pipeline_composite_base::composite::SamplerSel;
             use compositor_developer_environment_graphics_base::base::AaMethod;
@@ -189,28 +195,39 @@ impl VulkanRenderer {
                 for op in &ops {
                     match op {
                         DrawOp::Textured { view, tex_w, tex_h, meta, .. } => {
-                            let op_aa = aa_active && meta.is_world();
-                            if op_aa {
-                                let aa = aa.expect("aa pipeline ensured when aa_active");
+                            // Eligible world op? For mip methods, also try to
+                            // claim a mip image (None = over the per-frame cap →
+                            // fall back to the plain path for this surface).
+                            let mut mip_idx = None;
+                            let use_aa = if aa_active && meta.is_world() {
                                 if method_mips {
                                     let mp = mem_props.as_ref().unwrap();
-                                    let idx = mg
+                                    mip_idx = mg
                                         .acquire(dev, mp, format, *tex_w, *tex_h)
                                         .map_err(|e| VulkanError::Vk(format!("mip acquire: {e}")))?;
-                                    let fill = aa
-                                        .texture_set(dev, *view, SamplerSel::Bilinear)
-                                        .map_err(|e| VulkanError::Vk(format!("mip fill set: {e}")))?;
-                                    let comp = aa
-                                        .texture_set(dev, mg.view_of(idx), comp_sel)
-                                        .map_err(|e| VulkanError::Vk(format!("mip comp set: {e}")))?;
-                                    mip_jobs.push((idx, fill));
-                                    sets.push(Some(comp));
+                                    mip_idx.is_some()
                                 } else {
-                                    let set = aa
-                                        .texture_set(dev, *view, comp_sel)
-                                        .map_err(|e| VulkanError::Vk(format!("aa set: {e}")))?;
-                                    sets.push(Some(set));
+                                    true
                                 }
+                            } else {
+                                false
+                            };
+                            if use_aa {
+                                let aa = aa.expect("aa pipeline ensured when aa_active");
+                                let set = match mip_idx {
+                                    Some(idx) => {
+                                        let fill = aa
+                                            .texture_set(dev, *view, SamplerSel::Bilinear, 1.0)
+                                            .map_err(|e| VulkanError::Vk(format!("mip fill set: {e}")))?;
+                                        mip_jobs.push((idx, fill));
+                                        aa.texture_set(dev, mg.view_of(idx), comp_sel, aa_aniso)
+                                            .map_err(|e| VulkanError::Vk(format!("mip comp set: {e}")))?
+                                    }
+                                    None => aa
+                                        .texture_set(dev, *view, comp_sel, aa_aniso)
+                                        .map_err(|e| VulkanError::Vk(format!("aa set: {e}")))?,
+                                };
+                                sets.push(Some(set));
                                 aa_op.push(true);
                             } else {
                                 let layouts = [pipelines.descriptor_layout];

@@ -60,6 +60,7 @@ impl VulkanRenderer {
             pipelines: HashMap::new(),
             aa_pipelines: HashMap::new(),
             mipgen: std::cell::RefCell::new(crate::renderer::mipgen::MipGen::default()),
+            aa_was_active: false,
             shader_passes: HashMap::new(),
             hdr_pipelines: HashMap::new(),
             hdr_enabled: false,
