@@ -1640,6 +1640,7 @@ dependencies = [
  "bevy",
  "compositor_background_three_lock_solve",
  "compositor_background_three_lock_state",
+ "compositor_support_bevy_core_bridge_base",
 ]
 
 [[package]]
