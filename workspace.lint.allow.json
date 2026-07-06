@@ -253,6 +253,9 @@
   "compositor.kernel/kernel.vulkan/vulkan.capture/capture.blit/blit.base": [
     "size"
   ],
+  "compositor.kernel/kernel.vulkan/vulkan.device/device.factory/factory.base": [
+    "size"
+  ],
   "compositor.kernel/kernel.vulkan/vulkan.memory/memory.export/export.base": [
     "size"
   ],
@@ -290,6 +293,9 @@
   "compositor.orchestration/orchestration.draw/draw.node/node.base": [
     "size"
   ],
+  "compositor.orchestration/orchestration.draw/draw.dispatch/dispatch.frame": [
+    "size"
+  ],
   "compositor.orchestration/orchestration.draw/draw.scene/scene.frame": [
     "size"
   ],
@@ -318,6 +324,9 @@
   "compositor.developer/developer.environment/environment.config/config.base": [
     "size"
   ],
+  "compositor.developer/developer.environment/environment.graphics/graphics.base": [
+    "size"
+  ],
   "compositor.developer/developer.environment/environment.preference/preference.base": [
     "size"
   ],
@@ -328,6 +337,9 @@
     "size"
   ],
   "compositor.extension/compositor.configurator/configurator.settings/settings.surface/surface.view": [
+    "size"
+  ],
+  "compositor.extension/compositor.configurator/configurator.settings/settings.surface/surface.graphics": [
     "size"
   ],
   "compositor.extension/compositor.configurator/configurator.settings/settings.surface/surface.chrome": [
