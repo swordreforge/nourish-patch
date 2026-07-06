@@ -64,6 +64,12 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             state.inner.preference.cursor_sensitivity = v as f64;
             let _ = pref::save(&state.inner.preference);
         }
+        SettingsMessage::SetGraphics(g) => {
+            // Persist to preferences.json; `pref::save` also pushes the config to
+            // the kernel-readable global, so the renderer applies it live.
+            state.inner.preference.graphics = g;
+            let _ = pref::save(&state.inner.preference);
+        }
         SettingsMessage::NaturalScroll(b) => {
             state.inner.preference.input_natural_scroll = b;
             let _ = pref::save(&state.inner.preference);
