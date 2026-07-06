@@ -284,7 +284,7 @@ impl System for CameraSystem {
                 let zoom = zoom.clamp(MIN_ZOOM, MAX_ZOOM);
                 camera.transform.zoom = zoom;
                 // Publish to the kernel side-channel so the Vulkan renderer can
-                // zoom-weight the anti-aliasing knobs (Y5_AA graphics config).
+                // zoom-weight the anti-aliasing knobs (world-AA graphics config).
                 compositor_developer_stats_registry_base::base::set_world_zoom(zoom);
                 cx.channels.send(&CAMERA_ZOOMED_TX, CameraZoomed { zoom });
             }

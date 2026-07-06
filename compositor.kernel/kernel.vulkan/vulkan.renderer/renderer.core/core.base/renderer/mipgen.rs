@@ -1,4 +1,4 @@
-//! Per-surface mip-chain generation for the `Y5_AA` trilinear / anisotropic
+//! Per-surface mip-chain generation for the world anti-aliasing trilinear / anisotropic
 //! modes.
 //!
 //! Client & iced buffers are single-mip, `SAMPLED`-only imports, so we cannot
@@ -8,8 +8,11 @@
 //! pipeline) into an owned mip-0, then the chain is generated with blits, and
 //! the AA composite samples that mipped copy with the trilinear/aniso sampler.
 //!
-//! Content regenerates every frame (no damage tracking — this is a debug mode);
-//! only the image allocations are reused, round-robin, across frames.
+//! Damage is handled upstream by smithay: undamaged elements aren't redrawn, so
+//! they never reach `render_texture_from_to` and their mips aren't regenerated
+//! (on the partial-damage path). The round-robin scratch images are reused
+//! across frames; `MAX_SURFACES` bounds mip VRAM (excess surfaces fall back to
+//! the plain path for the frame).
 
 use ash::vk;
 use compositor_kernel_vulkan_device_factory_base::factory::VulkanDevice;
@@ -102,13 +105,25 @@ fn barrier(
 }
 
 impl MipGen {
+    /// Cap on per-frame mipped surfaces — bounds mip VRAM. Surfaces beyond this
+    /// fall back to the plain composite path (no AA) for the frame.
+    const MAX_SURFACES: usize = 32;
+
     /// Reset the round-robin index — call once per frame before `acquire`.
     pub fn begin_frame(&mut self) {
         self.next = 0;
     }
 
+    /// No mip images currently allocated.
+    pub fn is_empty(&self) -> bool {
+        self.images.is_empty()
+    }
+
     /// Get (creating/reusing) the next mipped image sized to `(w,h)` in `format`.
-    /// Returns its index for `record`/`view_of`.
+    /// Returns its index for `record`/`view_of`, or `None` when the per-frame
+    /// surface cap is hit (the caller then falls back to the plain path for that
+    /// surface — a bound on mip VRAM regardless of how many world surfaces are
+    /// on screen).
     pub fn acquire(
         &mut self,
         dev: &VulkanDevice,
@@ -116,7 +131,10 @@ impl MipGen {
         format: vk::Format,
         w: u32,
         h: u32,
-    ) -> Result<usize, vk::Result> {
+    ) -> Result<Option<usize>, vk::Result> {
+        if self.next >= Self::MAX_SURFACES {
+            return Ok(None);
+        }
         let (w, h) = (w.max(1), h.max(1));
         let idx = self.next;
         self.next += 1;
@@ -133,7 +151,7 @@ impl MipGen {
                 self.images.push(fresh);
             }
         }
-        Ok(idx)
+        Ok(Some(idx))
     }
 
     pub fn view_of(&self, idx: usize) -> vk::ImageView {

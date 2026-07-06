@@ -47,7 +47,7 @@ pub struct VulkanRenderer {
     pub(super) cmd: vk::CommandBuffer,
     pub(super) pipeline_cache: vk::PipelineCache,
     pub(super) pipelines: HashMap<vk::Format, CompositePipelines>,
-    /// Per-format `Y5_AA` experiment pipelines (windows + iced AA). Built on
+    /// Per-format world anti-aliasing pipelines (windows + iced AA). Built on
     /// demand only when the live `AA_MODE` is non-Off; the plain `pipelines`
     /// above stay the untouched default path. See `pipeline.composite::aa`.
     pub(super) aa_pipelines: HashMap<vk::Format, AaComposite>,
@@ -55,6 +55,9 @@ pub struct VulkanRenderer {
     /// (`RefCell` so the per-frame acquire + record borrow cleanly alongside the
     /// other renderer field borrows in `submit`). Empty until such a mode runs.
     pub(super) mipgen: std::cell::RefCell<mipgen::MipGen>,
+    /// Whether AA was active last frame — drives lazy build on activation and
+    /// resource teardown on deactivation (see `teardown_aa`).
+    pub(super) aa_was_active: bool,
     /// Generic native fullscreen-shader passes, keyed by `(shader id, format)`.
     /// Built on demand from the scene's `DrawOp::ShaderPass` and held for the
     /// renderer's lifetime. The parallax background (SDR + HDR variants) is one

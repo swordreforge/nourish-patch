@@ -1,4 +1,4 @@
-// Y5_AA experiment composite for the textured (window + iced) arm. Separate
+// world anti-aliasing composite for the textured (window + iced) arm. Separate
 // image+sampler bindings (naga cannot emit combined image-samplers, so this
 // cannot reuse the GLSL composite's combined `sampler2D`). ONE pipeline serves
 // every AA mode: the sampler variant (bilinear / anisotropic / trilinear) is
