@@ -3963,6 +3963,7 @@ dependencies = [
  "compositor_kernel_scanout_plane_direct_base",
  "compositor_kernel_vulkan_renderer_core_base",
  "compositor_orchestration_core_state_base",
+ "compositor_orchestration_draw_dispatch_frame",
  "compositor_orchestration_draw_scene_element",
  "compositor_orchestration_draw_scene_frame",
  "compositor_orchestration_driver_capture_base",
