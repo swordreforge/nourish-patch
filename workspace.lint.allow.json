@@ -377,5 +377,17 @@
   ],
   "compositor.developer/developer.stats/stats.registry/registry.counter": [
     "size"
+  ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.debian": [
+    "size"
+  ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.fedora": [
+    "size"
+  ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.nixos": [
+    "size"
+  ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.platform": [
+    "size"
   ]
 }

@@ -141,6 +141,13 @@ pub fn on_window_map_initial(state: &mut Loop, window: Window) -> bool {
             .erase_visible(&placeholder_id)
             .unwrap_or_else(|| abort!("Restored PH to exist."));
 
+        // The placeholder tile holds a slot in the draw-order authority (its
+        // z-position within the CONTENT tier). Capture its drawable id before
+        // `destroy` consumes the handle so the restored window can inherit that
+        // exact slot below (id derived reversibly from the iced HandleId, matching
+        // `handle::load`).
+        let placeholder_drawable = uuid::Uuid::from_u128(restored_ph_handle.id.0 as u128);
+
         // Clears out the handle.
         if let Some(ref mut registry) = state.inner.surface_mut().registry {
             registry.destroy(restored_ph_handle);
@@ -151,9 +158,15 @@ pub fn on_window_map_initial(state: &mut Loop, window: Window) -> bool {
             Point::new(restored_ph.position.0, restored_ph.position.1),
             true,
         );
-        // Register in the draw-order authority too (restore is a map path).
+        // Register in the draw-order authority (restore is a map path). Hand the
+        // window the placeholder tile's EXACT slot (tier + z-position) so it draws
+        // where the tile was instead of popping to the top of CONTENT — and this
+        // GCs the tile's otherwise-dangling entry. Fall back to a normal top
+        // insert only if the tile had no slot (e.g. never registered).
         if let Some(uuid) = window.uuid() {
-            state.inner.register_drawable(uuid, compositor_support_world_order_track_base::base::DrawLayer::CONTENT);
+            if !state.inner.reassign_drawable(placeholder_drawable, uuid) {
+                state.inner.register_drawable(uuid, compositor_support_world_order_track_base::base::DrawLayer::CONTENT);
+            }
         }
 
         let restored_size = Size::new(restored_ph.size.0, restored_ph.size.1);
