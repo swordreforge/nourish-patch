@@ -272,12 +272,14 @@ impl MipGen {
             }]);
             device.cmd_set_scissor(cmd, 0, &[area]);
         }
-        // Full-screen copy: dst = whole NDC quad, src = whole texture, taps=1.
+        // Full-screen copy: dst = whole NDC quad, src = whole texture, taps=1,
+        // classic mode (params2.x = 0) — a plain bilinear blit into mip 0.
         aa.draw(dev, cmd, fill_set, AaPush {
             dst: [-1.0, -1.0, 2.0, 2.0],
             src: [0.0, 0.0, 1.0, 1.0],
             color: [1.0, 1.0, 1.0, 1.0],
             params: [1.0, 1.0, 0.0, 0.0],
+            params2: [0.0, 0.0, 0.0, 0.0],
         });
         unsafe { device.cmd_end_rendering(cmd) };
 

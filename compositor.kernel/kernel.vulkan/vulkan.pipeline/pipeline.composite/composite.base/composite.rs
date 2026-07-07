@@ -313,7 +313,7 @@ pub enum SamplerSel {
     Aniso,
 }
 
-/// Per-draw push constants — matches `aa.wgsl`'s `Push` (64 bytes).
+/// Per-draw push constants — matches `aa.wgsl`'s `Push` (80 bytes).
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct AaPush {
@@ -322,6 +322,10 @@ pub struct AaPush {
     pub color: [f32; 4],
     /// x = taps per axis (>= 1); y = spread; z = sharpen amount; w = mip LOD bias.
     pub params: [f32; 4],
+    /// FSR toggles + inputs (independent of the classic AA method in `params`).
+    /// x = EASU on (>0.5); y = RCAS strength (0 = RCAS off, else 0..1); z,w =
+    /// source texture width,height in texels (EASU/RCAS fetch by integer texel).
+    pub params2: [f32; 4],
 }
 
 /// The world anti-aliasing composite pipeline: one WGSL pipeline with three pre-built

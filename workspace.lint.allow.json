@@ -199,6 +199,18 @@
   "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.groups": [
     "size"
   ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.debian": [
+    "size"
+  ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.fedora": [
+    "size"
+  ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.nixos": [
+    "size"
+  ],
+  "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.platform": [
+    "size"
+  ],
   "compositor.kernel/kernel.drm/drm.edid/edid.parse/parse.base": [
     "size"
   ],

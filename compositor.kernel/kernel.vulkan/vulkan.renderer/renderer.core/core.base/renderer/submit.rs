@@ -150,20 +150,33 @@ impl VulkanRenderer {
             let aa_sharpen = eff.sharpen;
             let aa_lod_bias = eff.lod_bias;
             let aa_aniso = eff.aniso;
+            // FSR toggles (independent of the AA method). When either is on the
+            // shader takes over base sampling, so the classic mip methods (and
+            // their per-surface mip pre-pass) are bypassed for those draws.
+            let aa_easu = eff.easu;
+            let aa_rcas = eff.rcas;
+            let aa_rcas_strength = eff.rcas_sharpen;
+            let fsr = aa_easu || aa_rcas;
             // Which pre-built sampler the composite draws bind for this method.
             use compositor_kernel_vulkan_pipeline_composite_base::composite::SamplerSel;
             use compositor_developer_environment_graphics_base::base::AaMethod;
-            let comp_sel = match eff.method {
-                AaMethod::Trilinear => SamplerSel::Trilinear,
-                AaMethod::Anisotropic => SamplerSel::Aniso,
-                _ => SamplerSel::Bilinear,
+            let comp_sel = if fsr {
+                // EASU/RCAS fetch integer texels (textureLoad) and only bilinear-
+                // sample for alpha; the mip samplers don't apply.
+                SamplerSel::Bilinear
+            } else {
+                match eff.method {
+                    AaMethod::Trilinear => SamplerSel::Trilinear,
+                    AaMethod::Anisotropic => SamplerSel::Aniso,
+                    _ => SamplerSel::Bilinear,
+                }
             };
             // AA is decided PER OP: only minified world content (windows +
             // iced-world) is eligible — screen-space iced and the 1:1 bevy
             // background stay on the plain composite path. Aniso/trilinear also
             // need a per-surface mip chain (render-to-mip0 + blit-down) before
-            // the composite pass.
-            let method_mips = aa_active && eff.method.needs_mips();
+            // the composite pass — skipped when an FSR filter overrides sampling.
+            let method_mips = aa_active && eff.method.needs_mips() && !fsr;
             let mem_props = if method_mips {
                 Some(unsafe {
                     self.phd
@@ -284,7 +297,7 @@ impl VulkanRenderer {
                                     fp.draw(dev, cmd, &v.push);
                                 }
                             }
-                            DrawOp::Textured { quad, .. } => {
+                            DrawOp::Textured { quad, tex_w, tex_h, .. } => {
                                 let set = set.expect("textured op has a set");
                                 if aa_op[i] {
                                     let aa = aa.expect("aa pipeline present for aa op");
@@ -297,6 +310,12 @@ impl VulkanRenderer {
                                             src: quad.src,
                                             color: quad.color,
                                             params: [aa_taps as f32, aa_spread, aa_sharpen, aa_lod_bias],
+                                            params2: [
+                                                if aa_easu { 1.0 } else { 0.0 },
+                                                if aa_rcas { aa_rcas_strength } else { 0.0 },
+                                                *tex_w as f32,
+                                                *tex_h as f32,
+                                            ],
                                         },
                                     );
                                 } else {

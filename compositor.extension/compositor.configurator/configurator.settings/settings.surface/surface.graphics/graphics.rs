@@ -1,9 +1,11 @@
-//! The Graphics module: anti-aliasing method + every tunable knob, each with a
-//! per-zoom weight (`base` + `per_zoom`), plus the activation-zoom threshold.
+//! The Graphics module: two independent blocks — the ANTI-ALIASING method
+//! (SSAA/trilinear/aniso, minification, zoom-gated) and FSR (EASU + RCAS
+//! magnification filters, each an independent toggle). Every knob carries a
+//! per-zoom weight (`base` + `per_zoom`).
 //!
-//! Only the knobs that apply to the SELECTED method are shown. A live status
-//! line reports the current zoom and whether AA is running right now. Every knob
-//! has a numeric entry (clamped to its range) and a reset-to-default (↺); a
+//! Only the knobs that apply to the SELECTED AA method are shown; the FSR
+//! toggles are always available. A live status line reports the current zoom and
+//! what is running. Every knob has a numeric entry (clamped) and a reset (↺); a
 //! "Restore all defaults" button resets the whole config. Edits emit the full
 //! `GraphicsAaConfig`; the handler persists it to `preferences.json` and pushes
 //! it live to the renderer.
@@ -13,7 +15,7 @@ use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use iced_core::{Alignment, Element, Length, Theme};
-use iced_widget::{button, column, container, pick_list, row, scrollable, slider, text, text_input, Column};
+use iced_widget::{button, column, container, pick_list, row, scrollable, slider, text, text_input, toggler, Column};
 use std::ops::RangeInclusive;
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -145,9 +147,10 @@ fn status<'a>(cfg: &GraphicsAaConfig) -> El<'a> {
     let zoom = compositor_developer_stats_registry_base::base::world_zoom() as f32;
     let eff = cfg.effective(zoom);
     let line1 = format!("Current zoom {zoom:.2}×");
-    let (state, col) = if cfg.method == AaMethod::Off {
-        ("AA OFF — method is Off".to_string(), style::MUTED)
-    } else if eff.active {
+    // Anti-aliasing method line.
+    let (aa_state, aa_col) = if cfg.method == AaMethod::Off {
+        ("AA method: Off".to_string(), style::MUTED)
+    } else if eff.aa_on {
         (
             format!(
                 "AA ACTIVE · taps {} · spread {:.2} · sharpen {:.2} · lod {:+.2}",
@@ -158,14 +161,67 @@ fn status<'a>(cfg: &GraphicsAaConfig) -> El<'a> {
     } else {
         (
             format!(
-                "AA OFF right now — zoom {zoom:.2}× ≥ threshold {:.2}× (zoom out to enable)",
+                "AA off right now — zoom {zoom:.2}× ≥ threshold {:.2}× (zoom out to enable)",
                 cfg.activate_below_zoom
             ),
             style::MUTED,
         )
     };
+    // FSR line (independent of the AA method; gated on zoom-IN). `eff.easu/rcas`
+    // are already zoom-gated; `cfg.easu/rcas` are the raw toggles.
+    let (fsr_state, fsr_col) = if !cfg.easu && !cfg.rcas {
+        ("FSR: off".to_string(), style::MUTED)
+    } else if !eff.easu && !eff.rcas {
+        (
+            format!(
+                "FSR armed — zoom {zoom:.2}× ≤ threshold {:.2}× (zoom in to enable)",
+                cfg.fsr_activate_above_zoom
+            ),
+            style::MUTED,
+        )
+    } else if eff.easu && eff.rcas {
+        (format!("FSR ACTIVE: EASU → RCAS (sharpen {:.2})", eff.rcas_sharpen), style::ACCENT)
+    } else if eff.easu {
+        ("FSR ACTIVE: EASU (edge upscale)".to_string(), style::ACCENT)
+    } else {
+        (format!("FSR ACTIVE: RCAS (sharpen {:.2})", eff.rcas_sharpen), style::ACCENT)
+    };
     container(
-        column![text(line1).size(12).color(style::MUTED), text(state).size(12).color(col)].spacing(4).padding(12),
+        column![
+            text(line1).size(12).color(style::MUTED),
+            text(aa_state).size(12).color(aa_col),
+            text(fsr_state).size(12).color(fsr_col),
+        ]
+        .spacing(4)
+        .padding(12),
+    )
+    .style(style::card)
+    .width(Length::Fill)
+    .into()
+}
+
+/// A labeled on/off toggle that flips one `bool` field of the config.
+fn toggle_row<'a>(
+    label: &'a str,
+    sub: &'a str,
+    cfg: &GraphicsAaConfig,
+    value: bool,
+    set: fn(&mut GraphicsAaConfig, bool),
+) -> El<'a> {
+    let c = *cfg;
+    container(
+        row![
+            column![
+                text(label).size(13).color(style::ACCENT),
+                text(sub).size(11).color(style::MUTED),
+            ]
+            .spacing(2)
+            .width(Length::Fill),
+            toggler(value).on_toggle(move |v| msg(&c, |x| set(x, v))).style(control::toggler),
+        ]
+        .align_y(Alignment::Center)
+        .spacing(10)
+        .padding(12),
     )
     .style(style::card)
     .width(Length::Fill)
@@ -176,19 +232,24 @@ pub fn build<'a>(cfg: &GraphicsAaConfig) -> El<'a> {
     let mut rows: Vec<El<'a>> = vec![
         column![
             text("GRAPHICS").size(16).color(style::ACCENT),
-            text("Anti-aliasing for the pannable world — applied live, weighted by zoom.")
+            text("Anti-aliasing (minification) + FSR (magnification) for the pannable world — applied live.")
                 .size(11)
                 .color(style::MUTED),
         ]
         .spacing(4)
         .into(),
         status(cfg),
+        heading("ANTI-ALIASING", "Minification filter — keeps content clean as you zoom OUT."),
         method_row(cfg),
-        heading(
+    ];
+
+    // The zoom-activation gate belongs to the AA method only.
+    if cfg.method != AaMethod::Off {
+        rows.push(heading(
             "WHEN AA RUNS",
             "AA is OFF above this zoom; it turns on (and ramps) as you zoom out below it.",
-        ),
-        num(
+        ));
+        rows.push(num(
             "Activate below zoom (× )",
             cfg,
             cfg.activate_below_zoom,
@@ -196,8 +257,8 @@ pub fn build<'a>(cfg: &GraphicsAaConfig) -> El<'a> {
             0.1..=1.5,
             0.05,
             |x, v| x.activate_below_zoom = v,
-        ),
-        num(
+        ));
+        rows.push(num(
             "Max zoom-out (weight clamp)",
             cfg,
             cfg.max_zoom_out,
@@ -205,8 +266,8 @@ pub fn build<'a>(cfg: &GraphicsAaConfig) -> El<'a> {
             1.0..=48.0,
             1.0,
             |x, v| x.max_zoom_out = v,
-        ),
-    ];
+        ));
+    }
 
     // Only the knobs that apply to the chosen method.
     match cfg.method {
@@ -232,6 +293,68 @@ pub fn build<'a>(cfg: &GraphicsAaConfig) -> El<'a> {
             rows.push(heading("ANISOTROPIC", "Mip-based; helps oblique footprints. Level ≈ device max."));
             rows.push(num("Anisotropy (max)", cfg, cfg.aniso, DEF.aniso, 1.0..=16.0, 1.0, |x, v| x.aniso = v));
         }
+    }
+
+    // FSR (FidelityFX Super Resolution) — magnification filters, independent of
+    // the AA method above. EASU and RCAS are separate toggles and compose (the
+    // canonical FSR1 EASU→RCAS chain) when both are on.
+    rows.push(heading(
+        "FSR (FIDELITYFX SUPER RESOLUTION)",
+        "Magnification filters — sharpen content drawn LARGER than its buffer (zoomed in, \
+         low-res or fractional-scaled clients). Independent of the AA method.",
+    ));
+    rows.push(toggle_row(
+        "FSR EASU",
+        "Edge-adaptive upscale — reconstructs sharp edges when magnified.",
+        cfg,
+        cfg.easu,
+        |x, v| x.easu = v,
+    ));
+    rows.push(toggle_row(
+        "FSR RCAS",
+        "Robust contrast-adaptive sharpen — applied over the reconstructed image.",
+        cfg,
+        cfg.rcas,
+        |x, v| x.rcas = v,
+    ));
+
+    // FSR gates on zoom-IN (magnification) — the mirror of the AA method's
+    // zoom-out gate. Shown once either FSR filter is toggled on.
+    if cfg.easu || cfg.rcas {
+        rows.push(heading(
+            "WHEN FSR RUNS",
+            "FSR is OFF below this zoom; it turns on as you zoom IN past it.",
+        ));
+        rows.push(num(
+            "Activate above zoom (× )",
+            cfg,
+            cfg.fsr_activate_above_zoom,
+            DEF.fsr_activate_above_zoom,
+            1.0..=4.0,
+            0.05,
+            |x, v| x.fsr_activate_above_zoom = v,
+        ));
+        rows.push(num(
+            "Max zoom-in (weight clamp)",
+            cfg,
+            cfg.fsr_max_zoom_in,
+            DEF.fsr_max_zoom_in,
+            1.0..=16.0,
+            0.5,
+            |x, v| x.fsr_max_zoom_in = v,
+        ));
+    }
+    if cfg.rcas {
+        // RCAS strength ramps on the zoom-IN axis (unlike the AA knobs).
+        rows.push(
+            column![
+                text("RCAS strength").size(13).color(style::ACCENT),
+                num("value at 100% zoom", cfg, cfg.rcas_sharpen.base, DEF.rcas_sharpen.base, 0.0..=1.0, 0.05, |x, v| x.rcas_sharpen.base = v),
+                num("+ per zoom-in (ramps as you zoom in)", cfg, cfg.rcas_sharpen.per_zoom, DEF.rcas_sharpen.per_zoom, 0.0..=1.0, 0.05, |x, v| x.rcas_sharpen.per_zoom = v),
+            ]
+            .spacing(6)
+            .into(),
+        );
     }
 
     scrollable(Column::with_children(rows).spacing(12))
