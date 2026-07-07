@@ -163,14 +163,13 @@ pub fn on_window_map_initial(state: &mut Loop, window: Window) -> bool {
             state.size = Some(restored_size);
         });
 
-        // Lock the slot to the restored size (`Decided`), mirroring `_reform`. This restore path is
-        // a distinct entry from `_initial_mapped` — it returns early there — so without this the
-        // window would be configured with the persisted size yet left slot-unset (uncontrolled).
-        compositor_y5_camera_transform_translate::slot::set_expected_size(&window, restored_size);
-
-        // Arm the startup grace too (mirrors initial map): jiggle the restored size back at a client
-        // that re-sizes itself during a staged boot, for ~5s. Any explicit resize disarms it.
-        compositor_support_smithay_state_compositor_place::arm_size_propagation(&window, restored_size);
+        // Dialog/child toplevels (a set `parent`) size themselves — leave them `Auto`; lock+grace the rest to the restored size (mirrors `_initial_mapped`).
+        if toplevel.parent().is_some() {
+            compositor_y5_camera_transform_translate::slot::set_expected_auto(&window);
+        } else {
+            compositor_y5_camera_transform_translate::slot::set_expected_size(&window, restored_size);
+            compositor_support_smithay_state_compositor_place::arm_size_propagation(&window, restored_size);
+        }
 
         // At this point, window lifecycle may still attempt to place.
         // Check order.
