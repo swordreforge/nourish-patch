@@ -39,7 +39,7 @@ pub fn build<'a>(
 /// Per-world display toggles (persisted per world): flip the background parallax on
 /// either axis (handy when a scene reads reversed relative to the pan), and gamma-
 /// encode the output to sRGB for the brighter, preview-matching look on the display.
-fn display_row<'a>(invert_pan_x: bool, invert_pan_y: bool, _srgb: bool) -> El<'a> {
+fn display_row<'a>(invert_pan_x: bool, invert_pan_y: bool, srgb: bool) -> El<'a> {
     let toggle = |label: &'a str, on: bool, msg: fn(bool) -> SettingsMessage| -> El<'a> {
         row![
             text(label).size(12),
@@ -51,8 +51,7 @@ fn display_row<'a>(invert_pan_x: bool, invert_pan_y: bool, _srgb: bool) -> El<'a
             text("DISPLAY").size(10).color(style::MUTED).width(Length::Fill),
             toggle("Invert pan X", invert_pan_x, SettingsMessage::SetWorldInvertPanX),
             toggle("Invert pan Y", invert_pan_y, SettingsMessage::SetWorldInvertPanY),
-            // sRGB switch hidden for now (plumbing + per-world state stay intact):
-            // toggle("sRGB colour", srgb, SettingsMessage::SetWorldSrgb),
+            toggle("sRGB colour", srgb, SettingsMessage::SetWorldSrgb),
         ].spacing(20).align_y(Alignment::Center).padding(12),
     ).style(style::card).width(Length::Fill).into()
 }

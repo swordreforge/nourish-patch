@@ -5,6 +5,9 @@
   "compositor.expansion/compositor.background/background.two/two.shader/shader.load": [
     "size"
   ],
+  "compositor.expansion/compositor.background/background.two/two.shader/shader.builtin": [
+    "size"
+  ],
   "compositor.expansion/compositor.background/background.two/two.draw/draw.parallax": [
     "size"
   ],
@@ -388,6 +391,9 @@
     "size"
   ],
   "compositor.developer/developer.stats/stats.registry/registry.counter": [
+    "size"
+  ],
+  "compositor.orchestration/orchestration.draw/draw.dispatch/dispatch.uniforms": [
     "size"
   ],
   "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.debian": [

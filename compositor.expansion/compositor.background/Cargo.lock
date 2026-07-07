@@ -1870,6 +1870,7 @@ name = "compositor_background_two_shader_builtin"
 version = "0.0.1"
 dependencies = [
  "compositor_background_two_shader_property",
+ "compositor_background_two_shader_spirv",
 ]
 
 [[package]]

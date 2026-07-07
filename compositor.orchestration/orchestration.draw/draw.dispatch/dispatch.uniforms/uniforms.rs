@@ -13,6 +13,11 @@ pub struct ParallaxUniforms {
     pub time: f32,
     pub pan: [f32; 2],
     pub flow_offset: [f32; 2],
+    /// Smoothed pan velocity (world px/s). Fed to native shaders as two f16
+    /// halves packed into the `lock_alpha.w` push lane (`lock_alpha.z` carries
+    /// the sRGB flag) so velocity-reactive backgrounds (metaballs) can stretch
+    /// along motion. Shaders that ignore it are unaffected.
+    pub velocity: [f32; 2],
     pub lock_amount: f32,
     pub alpha: f32,
     pub srgb: f32, // push lock_alpha.z: 0 = raw output, 1 = gamma-encode to sRGB
