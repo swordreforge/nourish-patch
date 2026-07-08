@@ -264,13 +264,22 @@ pub fn on_window_destroy(state: &mut Loop, uuid: Uuid, renderer: &mut GlesRender
         return;
     }
 
-    spawn_visible(state, renderer, ph);
+    // Window's draw-order slot is still live (GC runs after this); tile inherits it.
+    spawn_visible(state, renderer, ph, Some(uuid));
 }
 
 /// Build the visible iced launcher surface for a placeholder and register it in
 /// the spawn-target world's `visible` set. Shared by window-destroy (live window →
 /// tile) and restore (disk → tile). No-op if the placeholder has no launch plan.
-pub fn spawn_visible(state: &mut Loop, renderer: &mut GlesRenderer, ph: Placeholder) {
+///
+/// `predecessor` is the captured window's UUID: the tile inherits its exact
+/// draw-order slot (mirror of the restore path). `None` for disk-restored tiles.
+pub fn spawn_visible(
+    state: &mut Loop,
+    renderer: &mut GlesRenderer,
+    ph: Placeholder,
+    predecessor: Option<Uuid>,
+) {
     let Some(plan) = ph.launch.clone() else {
         return; // no launch plan → nothing to relaunch; discard.
     };
@@ -288,6 +297,19 @@ pub fn spawn_visible(state: &mut Loop, renderer: &mut GlesRenderer, ph: Placehol
         compositor_y5_surface_draw_handle::handle::IcedSpace::World,
         compositor_orchestration_draw_layer_base::base::Layer::SCENE.bits(),
     );
+
+    // `handle::load` inserted the tile at CONTENT top; hand it the captured
+    // window's exact slot instead. `reassign` drops the tile's fresh entry before
+    // it finds the window, so re-insert on a miss (window never registered).
+    if let Some(win_uuid) = predecessor {
+        let placeholder_drawable = uuid::Uuid::from_u128(handle.id.0 as u128);
+        if !state.inner.reassign_drawable(win_uuid, placeholder_drawable) {
+            state.inner.register_drawable(
+                placeholder_drawable,
+                compositor_support_world_order_track_base::base::DrawLayer::CONTENT,
+            );
+        }
+    }
 
     // The placeholder paints its whole rect with an opaque background, so it
     // occludes anything fully behind it — e.g. a previous placeholder retained
@@ -325,7 +347,7 @@ pub fn promote_restored(state: &mut Loop, renderer: &mut GlesRenderer) {
     }
     let pending = std::mem::take(&mut state.inner.placeholder_mut().pending_restore);
     for ph in pending {
-        spawn_visible(state, renderer, ph);
+        spawn_visible(state, renderer, ph, None); // disk-restored: no predecessor window
     }
 }
 
