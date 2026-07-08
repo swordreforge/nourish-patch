@@ -66,8 +66,11 @@ pub fn record_composition(
     compositor_kernel_vulkan_pipeline_composite_base::composite::end(device, cmd);
     let _ = pipelines;
 
-    // COLOR_ATTACHMENT_OPTIMAL -> GENERAL for the external (scanout) consumer.
-    let to_external = vk::ImageMemoryBarrier2::default()
+    // COLOR_ATTACHMENT_OPTIMAL -> GENERAL, and RELEASE to the display engine
+    // (VK_QUEUE_FAMILY_FOREIGN_EXT) so the driver flushes/decompresses tiled/DCC
+    // framebuffers before KMS scans them out (else AMD white-screens). Mirror of
+    // the import-side acquire; MULTIPLANE_SUPPORT is what enables the extension.
+    let mut to_external = vk::ImageMemoryBarrier2::default()
         .src_stage_mask(vk::PipelineStageFlags2::COLOR_ATTACHMENT_OUTPUT)
         .src_access_mask(vk::AccessFlags2::COLOR_ATTACHMENT_WRITE)
         .dst_stage_mask(vk::PipelineStageFlags2::BOTTOM_OF_PIPE)
@@ -75,6 +78,11 @@ pub fn record_composition(
         .new_layout(vk::ImageLayout::GENERAL)
         .image(target_image)
         .subresource_range(subresource);
+    if compositor_kernel_vulkan_device_factory_base::factory::MULTIPLANE_SUPPORT {
+        to_external = to_external
+            .src_queue_family_index(device.queue_family_index)
+            .dst_queue_family_index(vk::QUEUE_FAMILY_FOREIGN_EXT);
+    }
     let dep = vk::DependencyInfo::default()
         .image_memory_barriers(std::slice::from_ref(&to_external));
     unsafe { dev.cmd_pipeline_barrier2(cmd, &dep) };
