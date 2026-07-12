@@ -63,6 +63,16 @@ pub enum InputEvent {
         x: f64,
         y: f64,
     },
+    /// Touchscreen touch event.
+    /// Carries the touch phase (down/motion/up/cancel), the touch slot ID
+    /// (for multi-touch tracking), and the position in the world's storage
+    /// space (normalized world point).
+    Touch {
+        phase: TouchPhase,
+        slot: i32,
+        x: f64,
+        y: f64,
+    },
 }
 
 /// Lifecycle phase of a [`InputEvent::PointerPinch`].
@@ -71,4 +81,13 @@ pub enum PinchPhase {
     Begin,
     Update,
     End,
+}
+
+/// Lifecycle phase of a [`InputEvent::Touch`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TouchPhase {
+    Down,
+    Motion,
+    Up,
+    Cancel,
 }
