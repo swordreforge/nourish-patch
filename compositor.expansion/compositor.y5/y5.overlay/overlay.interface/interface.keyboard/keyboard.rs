@@ -226,6 +226,10 @@ fn sleep(state: &mut Loop) {
     if matches!(state.inner.status, compositor_orchestration_core_state_base::state::Status::Locked { .. }) {
         return; // already locked
     }
+    // Cancel any in-progress touch before locking (niri pattern).
+    if let Some(touch) = state.state.seat.seat.get_touch() {
+        touch.cancel(&mut state.state);
+    }
     // Status set SYNCHRONOUSLY (sleep lock) + flag the engage, then wake the
     // control-plane ping: its source drains `lock_engage` and runs the renderer-free
     // `lock_logical` off-frame, event-driven (not polled per frame).

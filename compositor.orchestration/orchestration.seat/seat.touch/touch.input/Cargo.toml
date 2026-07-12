@@ -11,6 +11,7 @@ compositor_orchestration_core_state_base.workspace = true
 compositor_support_system_input_event_base = { workspace = true }
 compositor_orchestration_input_drive_base = { workspace = true }
 compositor_orchestration_seat_touch_state = { workspace = true }
+compositor_y5_surface_interface_base = { workspace = true }
 
 [lib]
 path = "lib.rs"

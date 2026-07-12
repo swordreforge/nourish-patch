@@ -283,6 +283,10 @@ fn lock(s: &mut Loop) {
     if matches!(s.inner.status, Status::Locked { .. }) {
         return; // already locked
     }
+    // Cancel any in-progress touch before locking (niri pattern).
+    if let Some(touch) = s.state.seat.seat.get_touch() {
+        touch.cancel(&mut s.state);
+    }
     // Set the lock status SYNCHRONOUSLY (so it holds even with no output) + flag the
     // engage, then wake the control-plane ping: its source drains `lock_engage` and
     // runs the renderer-free `lock_logical` off-frame, event-driven (not polled).

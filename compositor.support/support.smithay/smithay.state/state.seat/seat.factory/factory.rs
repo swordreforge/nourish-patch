@@ -72,6 +72,11 @@ where
     // client, causing them to draw hover states (like highlighting a button).
     seat.add_pointer();
 
+    // Notify clients that we have touch support.
+    // Side-effect: Exposes the wl_touch global. When touch events are dispatched through
+    // the touch handler, they trigger touch down/motion/up/cancel events on the client.
+    seat.add_touch();
+
     let relative_pointer_manager_state = RelativePointerManagerState::new::<I>(&display_handle);
 
     let pointer_constraints_state = PointerConstraintsState::new::<I>(&display_handle);
