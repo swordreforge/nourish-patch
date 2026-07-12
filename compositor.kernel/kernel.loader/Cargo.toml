@@ -450,6 +450,7 @@ compositor_orchestration_seat_pointer_input = { path = "../../compositor.orchest
 compositor_orchestration_seat_pointer_state = { path = "../../compositor.orchestration/orchestration.seat/seat.pointer/pointer.state" }
 compositor_orchestration_seat_pointer_texture = { path = "../../compositor.orchestration/orchestration.seat/seat.pointer/pointer.texture" }
 compositor_orchestration_seat_system_pointer = { path = "../../compositor.orchestration/orchestration.seat/seat.system/system.pointer" }
+compositor_orchestration_seat_touch_state = { path = "../../compositor.orchestration/orchestration.seat/seat.touch/touch.state" }
 compositor_orchestration_smithay_data_base = { path = "../../compositor.orchestration/orchestration.smithay/smithay.data/data.base" }
 compositor_orchestration_storage_state_base = { path = "../../compositor.orchestration/orchestration.storage/storage.state/state.base" }
 compositor_orchestration_world_manager_base = { path = "../../compositor.orchestration/orchestration.world/world.manager/manager.base" }
