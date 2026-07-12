@@ -1,0 +1,13 @@
+[package]
+name = "compositor_orchestration_seat_touch_state"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+bitflags = { workspace = true }
+smithay = { workspace = true }
+# Developer logging — provides error!/warn!/info!/trace!/abort! (see lib.rs).
+compositor_developer_debug_instance_record = { workspace = true }
+
+[lib]
+path = "lib.rs"
