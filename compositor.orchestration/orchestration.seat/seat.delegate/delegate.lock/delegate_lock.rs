@@ -34,11 +34,21 @@ pub fn process_input_event<I: InputBackend>(_loop: &mut Loop, event: &InputEvent
         InputEvent::GesturePinchEnd { .. } => {}
         InputEvent::GestureHoldBegin { .. } => {}
         InputEvent::GestureHoldEnd { .. } => {}
-        InputEvent::TouchDown { .. } => {}
-        InputEvent::TouchMotion { .. } => {}
-        InputEvent::TouchUp { .. } => {}
-        InputEvent::TouchCancel { .. } => {}
-        InputEvent::TouchFrame { .. } => {}
+        InputEvent::TouchDown { event, .. } => {
+            compositor_orchestration_seat_touch_input::input::down::<I>(event, _loop);
+        }
+        InputEvent::TouchMotion { event, .. } => {
+            compositor_orchestration_seat_touch_input::input::motion::<I>(event, _loop);
+        }
+        InputEvent::TouchUp { event, .. } => {
+            compositor_orchestration_seat_touch_input::input::up::<I>(event, _loop);
+        }
+        InputEvent::TouchCancel { event, .. } => {
+            compositor_orchestration_seat_touch_input::input::cancel::<I>(event, _loop);
+        }
+        InputEvent::TouchFrame { event, .. } => {
+            compositor_orchestration_seat_touch_input::input::frame::<I>(event, _loop);
+        }
         InputEvent::TabletToolAxis { .. } => {}
         InputEvent::TabletToolProximity { .. } => {}
         InputEvent::TabletToolTip { .. } => {}

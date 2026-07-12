@@ -105,6 +105,8 @@ pub struct Orchestrator {
     /// multiple input dispatches). World-agnostic raw delta; the y5 gesture
     /// handler turns it into a directional-view action at end-of-swipe.
     pub gesture: compositor_orchestration_seat_gesture_state::state::GestureAccumulator,
+    /// Per-seat touch state: tracks active touch points by slot ID.
+    pub touch: compositor_orchestration_seat_touch_state::state::TouchState,
     pub loader: Loader,
     /// The world set (phase 3, document/ARCHITECTURE.md). The active world
     /// hosts the kernel systems; grows per-output/lock/selection worlds later.
@@ -279,6 +281,7 @@ impl Orchestrator {
             __set_picker: None,
             status_session: StatusSession::Active,
             gesture: Default::default(),
+            touch: Default::default(),
             storage: compositor_orchestration_storage_state_base::state::Storage::new(nested),
             status: Status::Running,
             start_time,
