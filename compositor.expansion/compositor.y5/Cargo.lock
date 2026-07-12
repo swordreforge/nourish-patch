@@ -3303,6 +3303,7 @@ dependencies = [
  "compositor_orchestration_seat_pointer_state",
  "compositor_orchestration_seat_pointer_texture",
  "compositor_orchestration_seat_system_pointer",
+ "compositor_orchestration_seat_touch_state",
  "compositor_orchestration_storage_state_base",
  "compositor_orchestration_world_manager_base",
  "compositor_remote_message_server_base",
@@ -3677,6 +3678,15 @@ dependencies = [
  "compositor_orchestration_seat_pointer_state",
  "compositor_support_system_storage_token_base",
  "compositor_support_system_trait_system_base",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_orchestration_seat_touch_state"
+version = "0.0.1"
+dependencies = [
+ "bitflags 2.13.0",
+ "compositor_developer_debug_instance_record",
  "smithay",
 ]
 

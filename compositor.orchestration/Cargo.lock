@@ -3819,6 +3819,7 @@ dependencies = [
  "compositor_orchestration_input_drive_base",
  "compositor_orchestration_seat_touch_state",
  "compositor_support_system_input_event_base",
+ "compositor_y5_surface_interface_base",
  "smithay",
 ]
 
