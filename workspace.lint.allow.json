@@ -283,6 +283,13 @@
   "compositor.kernel/kernel.vulkan/vulkan.memory/memory.upload/upload.base": [
     "size"
   ],
+  "compositor.expansion/compositor.background/background.two/two.draw/draw.tile": [
+    "size",
+    "deps"
+  ],
+  "compositor.expansion/compositor.background/background.two/two.draw/draw.wallpaper": [
+    "size"
+  ],
   "compositor.expansion/compositor.background/background.two/two.draw/draw.vulkan": [
     "size"
   ],

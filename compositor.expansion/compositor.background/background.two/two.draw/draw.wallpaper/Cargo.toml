@@ -1,0 +1,11 @@
+[package]
+name = "compositor_background_two_draw_wallpaper"
+version = "0.0.1"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+compositor_background_two_draw_tile = { workspace = true }
+smithay = { workspace = true }

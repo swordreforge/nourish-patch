@@ -1,5 +1,6 @@
 //! `ParallaxBackground`: the infinite-canvas background render element.
 use compositor_background_two_draw_motion::Motion;
+use compositor_background_two_draw_wallpaper::TileBlit;
 use compositor_background_two_shader_spirv::VulkanModule;
 use compositor_orchestration_draw_dispatch_frame::SceneDispatch;
 use smithay::backend::renderer::RendererSuper;
@@ -41,6 +42,9 @@ pub struct ParallaxBackground {
     /// the shader gamma-encodes its final colour so the non-sRGB scanout buffer
     /// shows the brighter, preview-matching look. Carried to the shader in the push.
     pub srgb: bool,
+    /// Pre-uploaded wallpaper tile textures ready to blit in `draw()`.
+    /// Populated by `TwoSystem::buffer()` each frame.
+    pub wallpaper_tiles: Option<Vec<TileBlit>>,
     motion: Motion,
 }
 impl ParallaxBackground {
@@ -65,7 +69,7 @@ impl ParallaxBackground {
             lock_time: None,
             start_time: Instant::now(),
             pan: (0.0, 0.0), zoom: 1.0, params, shader_error,
-            invert_pan_x: false, invert_pan_y: false, srgb: false, motion: Motion::new(),
+            invert_pan_x: false, invert_pan_y: false, srgb: false, wallpaper_tiles: None, motion: Motion::new(),
         }
     }
     /// Call right before draw to splice the previous pan and bump damage.
@@ -107,6 +111,21 @@ impl<R: SceneDispatch> RenderElement<R> for ParallaxBackground {
         damage: &[Rectangle<i32, Physical>],
         _opaque_regions: &[Rectangle<i32, Physical>], _cache: Option<&UserDataMap>,
     ) -> Result<(), <R as RendererSuper>::Error> {
+        // WALLPAPER PATH: blit pre-uploaded tile textures and skip the shader.
+        if let Some(tiles) = &self.wallpaper_tiles {
+            if !tiles.is_empty() {
+                for tile in tiles {
+                    let src = Rectangle::from_loc_and_size(
+                        (0.0_f64, 0.0_f64),
+                        (tile.dst.size.w as f64, tile.dst.size.h as f64),
+                    );
+                    R::draw_prerendered_texture(
+                        frame, &tile.texture, src, tile.dst, &[tile.dst], 1.0,
+                    )?;
+                }
+                return Ok(());
+            }
+        }
         let time = self.start_time.elapsed().as_secs_f32();
         // Per-world pan inversion: flip the pan feeding the shader on each axis.
         let pan = (

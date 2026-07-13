@@ -14,6 +14,7 @@ compositor_support_system_trait_system_base = { workspace = true }
 compositor_background_two_state_base = { workspace = true }
 compositor_background_two_storage_base = { workspace = true }
 compositor_background_two_draw_element = { workspace = true }
+compositor_background_two_draw_wallpaper = { workspace = true }
 compositor_developer_stats_registry_base = { workspace = true }
 compositor_support_system_persist_entry_base = { workspace = true }
 bitflags = { workspace = true }

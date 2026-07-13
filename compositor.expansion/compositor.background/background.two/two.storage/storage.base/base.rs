@@ -20,6 +20,8 @@ struct BackgroundPersisted {
     invert_pan_y: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     srgb: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    wallpaper_path: Option<String>,
 }
 
 fn is_false(b: &bool) -> bool { !*b }
@@ -39,6 +41,7 @@ impl compositor_support_system_persist_trait_base::base::Persist for BackgroundP
             invert_pan_x: live.invert_pan_x,
             invert_pan_y: live.invert_pan_y,
             srgb: live.srgb,
+            wallpaper_path: live.wallpaper_path.clone(),
         }
     }
     fn from_persisted(p: BackgroundPersisted) -> Two {
@@ -48,6 +51,7 @@ impl compositor_support_system_persist_trait_base::base::Persist for BackgroundP
         two.invert_pan_x = p.invert_pan_x;
         two.invert_pan_y = p.invert_pan_y;
         two.srgb = p.srgb;
+        two.wallpaper_path = p.wallpaper_path;
         two
     }
 }

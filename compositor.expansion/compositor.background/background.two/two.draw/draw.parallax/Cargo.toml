@@ -11,5 +11,6 @@ compositor_background_two_draw_motion = { workspace = true }
 compositor_background_two_draw_select = { workspace = true }
 compositor_background_two_draw_vulkan = { workspace = true }
 compositor_background_two_shader_spirv = { workspace = true }
+compositor_background_two_draw_wallpaper = { workspace = true }
 compositor_orchestration_draw_dispatch_frame = { workspace = true }
 smithay = { workspace = true }
