@@ -9,6 +9,7 @@ bitflags.workspace = true
 smithay.workspace = true
 
 # Compositor dependencies (CI ensures availability in workspace)
+compositor_kernel_input_libinput_config_base.workspace = true
 compositor_kernel_input_loop_libinput_base.workspace = true
 compositor_kernel_native_context_render_base.workspace = true
 compositor_orchestration_core_state_base.workspace = true

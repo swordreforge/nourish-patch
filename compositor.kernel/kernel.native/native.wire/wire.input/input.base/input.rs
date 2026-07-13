@@ -1,6 +1,7 @@
 //! Input wiring: the libinput source -> compositor lifecycle + redraw
 //! scheduling. (Ex wire.rs `start()` libinput closure.)
 
+use compositor_kernel_input_libinput_config_base::config::{on_device_added, DeviceSettings};
 use compositor_kernel_input_loop_libinput_base::libinput::LibinputSource;
 use compositor_kernel_native_context_render_base::render::NativeRenderContext;
 use smithay::backend::input::InputEvent;
@@ -26,14 +27,17 @@ pub fn register(
             // LEDs, and seed each newly added keyboard with the current LED
             // state (e.g. the NumLock-on-by-default set at seat creation).
             match &event {
-                InputEvent::DeviceAdded { device }
-                    if device.has_capability(DeviceCapability::Keyboard) =>
-                {
-                    let mut device = device.clone();
-                    if let Some(keyboard) = state.state.seat.seat.get_keyboard() {
-                        device.led_update(keyboard.led_state().into());
+                InputEvent::DeviceAdded { device } => {
+                    let mut cfg_device = device.clone();
+                    on_device_added(&mut cfg_device, &DeviceSettings::default());
+
+                    if device.has_capability(DeviceCapability::Keyboard) {
+                        let mut kbd_device = device.clone();
+                        if let Some(keyboard) = state.state.seat.seat.get_keyboard() {
+                            kbd_device.led_update(keyboard.led_state().into());
+                        }
+                        state.state.seat.keyboards.push(kbd_device);
                     }
-                    state.state.seat.keyboards.push(device);
                 }
                 InputEvent::DeviceRemoved { device } => {
                     state.state.seat.keyboards.retain(|d| d != device);
