@@ -30,12 +30,22 @@ type GenResult = Arc<Mutex<Option<Result<(Arc<TileIndex>, PathBuf), compositor_b
 /// Wallpaper GPU cache lives here (system-local), keyed to the current path.
 pub struct TwoSystem {
     pub wallpaper_cache: Option<WallpaperGpuCache>,
-    /// Background thread generating the tile pyramid (non-blocking).
     generating: Option<GenResult>,
+    /// Dirty flag: skip prepare_tiles when viewport is stable.
+    last_pan: (f32, f32),
+    last_zoom: f32,
+    last_size: (f32, f32),
+    cached_blits: Vec<TileBlit>,
 }
 
 impl Default for TwoSystem {
-    fn default() -> Self { Self { wallpaper_cache: None, generating: None } }
+    fn default() -> Self {
+        Self {
+            wallpaper_cache: None, generating: None,
+            last_pan: (0.0, 0.0), last_zoom: 1.0, last_size: (0.0, 0.0),
+            cached_blits: Vec::new(),
+        }
+    }
 }
 
 impl System for TwoSystem {
@@ -106,6 +116,7 @@ impl System for TwoSystem {
                             &wallpaper_path, &index, &root, renderer,
                         ) {
                             self.wallpaper_cache = Some(cache);
+                            self.cached_blits.clear(); // force recompute with new cache
                         }
                     } else if let Some(Err(e)) = result {
                         warn!("TwoSystem::wallpaper: background generation FAILED: {e}");
@@ -145,11 +156,20 @@ impl System for TwoSystem {
             if let Some(cache) = &mut self.wallpaper_cache {
                 let pan = state.instance.as_ref().map(|i| i.pan).unwrap_or((0.0, 0.0));
                 let zoom = state.instance.as_ref().map(|i| i.zoom).unwrap_or(1.0);
-                let fm = compute_fill_mapping(state.wallpaper_fill, cache, screen_w, screen_h);
-                let blits = prepare_tiles(cache, renderer, pan, zoom, size, fm);
-                trace!("TwoSystem::wallpaper: {} tiles", blits.len());
-                cx.write(&TWO_BUF, TwoCmd::WallpaperTiles(blits));
+                // Skip recomputation when viewport hasn't changed.
+                if pan != self.last_pan || zoom != self.last_zoom || size != self.last_size || self.cached_blits.is_empty() {
+                    let fm = compute_fill_mapping(state.wallpaper_fill, cache, screen_w, screen_h);
+                    self.cached_blits = prepare_tiles(cache, renderer, pan, zoom, size, fm);
+                    self.last_pan = pan;
+                    self.last_zoom = zoom;
+                    self.last_size = size;
+                    trace!("TwoSystem::wallpaper: {} tiles (recomputed)", self.cached_blits.len());
+                } else {
+                    trace!("TwoSystem::wallpaper: {} tiles (cached)", self.cached_blits.len());
+                }
+                cx.write(&TWO_BUF, TwoCmd::WallpaperTiles(self.cached_blits.clone()));
             } else if !path_is_set {
+                self.cached_blits.clear();
                 cx.write(&TWO_BUF, TwoCmd::WallpaperTiles(vec![]));
             }
         }
