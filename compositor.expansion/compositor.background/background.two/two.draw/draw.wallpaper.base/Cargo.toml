@@ -9,4 +9,5 @@ path = "lib.rs"
 [dependencies]
 compositor_background_two_draw_tile = { workspace = true }
 compositor_background_two_draw_wallpaper_tex = { workspace = true }
+compositor_developer_debug_instance_record = { workspace = true }
 smithay = { workspace = true }

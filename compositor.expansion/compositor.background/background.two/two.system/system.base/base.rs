@@ -48,6 +48,7 @@ impl System for TwoSystem {
         let size = (size.w as f32, size.h as f32);
         let (screen_w, screen_h) = (size.0 as f64, size.1 as f64);
         let state = cx.storage.get(&BG_TWO);
+        trace!("TwoSystem::update: rebuild={} wallpaper_path={:?}", state.instance.is_none(), state.wallpaper_path);
         let stale = state.instance.as_ref().is_some_and(|i| i.output_size != size);
         let rebuild = state.instance.is_none();
         let override_sel = state.background_shader.clone();
@@ -87,6 +88,7 @@ impl System for TwoSystem {
         {
             let wallpaper_path = state.wallpaper_path.clone();
             let path_is_set = wallpaper_path.is_some();
+            trace!("TwoSystem::wallpaper: path={:?} cache_exists={}", wallpaper_path, self.wallpaper_cache.is_some());
 
             // Rebuild the cache when the path changes (load_or_generate is idempotent on disk).
             if path_is_set {
@@ -96,7 +98,10 @@ impl System for TwoSystem {
                     renderer,
                 );
                 if let Some(new_cache) = cache {
+                    info!("TwoSystem::wallpaper: cache built, {} levels", new_cache.index.levels.len());
                     self.wallpaper_cache = Some(new_cache);
+                } else if self.wallpaper_cache.is_none() {
+                    warn!("TwoSystem::wallpaper: cache build FAILED for {:?}", wallpaper_path);
                 }
             } else {
                 self.wallpaper_cache = None;
@@ -108,6 +113,7 @@ impl System for TwoSystem {
                 let zoom = state.instance.as_ref().map(|i| i.zoom).unwrap_or(1.0);
                 let fm = compute_fill_mapping(state.wallpaper_fill, cache, screen_w, screen_h);
                 let blits = prepare_tiles(cache, renderer, pan, zoom, size, fm);
+                trace!("TwoSystem::wallpaper: {} tiles", blits.len());
                 cx.write(&TWO_BUF, TwoCmd::WallpaperTiles(blits));
             } else if !path_is_set {
                 cx.write(&TWO_BUF, TwoCmd::WallpaperTiles(vec![]));

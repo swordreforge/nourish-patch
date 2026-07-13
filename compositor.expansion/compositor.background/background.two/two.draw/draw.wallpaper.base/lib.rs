@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate compositor_developer_debug_instance_record;
+
 use std::collections::HashMap;
 use std::path::PathBuf;
 use compositor_background_two_draw_tile::{cache_dir, load_or_generate, load_tile_bytes, RectF64, TileIndex};
@@ -7,19 +10,26 @@ use smithay::backend::renderer::gles::GlesRenderer;
 pub fn build_or_reuse_cache(path: Option<&str>, existing: Option<&mut WallpaperGpuCache>, gles: &mut GlesRenderer) -> Option<WallpaperGpuCache> {
     let source = match path { Some(p) if !p.is_empty() => PathBuf::from(p), _ => return None };
     if let Some(c) = existing { if c.source == source { return None; } }
-    let index = load_or_generate(&source).ok()?;
-    let root = cache_dir(&source);
-    let (mut textures, mut sizes) = (HashMap::new(), HashMap::new());
-    if let Some(lm) = index.levels.first() {
-        for row in 0..lm.rows { for col in 0..lm.cols {
-            let key = (0u8, col, row);
-            let (tw, th) = index.tile_dimensions(0, col, row);
-            if let Ok(bytes) = load_tile_bytes(&index, &root, 0, col, row) {
-                if let Ok(tex) = create_gles_texture(gles, &bytes, tw, th) { textures.insert(key, tex); sizes.insert(key, (tw, th)); }
+    match load_or_generate(&source) {
+        Ok(index) => {
+            let root = cache_dir(&source);
+            let (mut textures, mut sizes) = (HashMap::new(), HashMap::new());
+            if let Some(lm) = index.levels.first() {
+                for row in 0..lm.rows { for col in 0..lm.cols {
+                    let key = (0u8, col, row);
+                    let (tw, th) = index.tile_dimensions(0, col, row);
+                    if let Ok(bytes) = load_tile_bytes(&index, &root, 0, col, row) {
+                        if let Ok(tex) = create_gles_texture(gles, &bytes, tw, th) { textures.insert(key, tex); sizes.insert(key, (tw, th)); }
+                    }
+                }}
             }
-        }}
+            Some(WallpaperGpuCache { index, cache_root: root, textures, sizes, source })
+        }
+        Err(e) => {
+            warn!("wallpaper.base: FAILED to load/generate pyramid for {}: {}", source.display(), e);
+            None
+        }
     }
-    Some(WallpaperGpuCache { index, cache_root: root, textures, sizes, source })
 }
 
 /// Pre-computed fill mapping: (eff_scale, offset_x, offset_y) in image-pixel coords.

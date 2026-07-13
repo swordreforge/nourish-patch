@@ -1,4 +1,8 @@
 //! Tile pyramid disk I/O and cache directory helpers.
+
+#[macro_use]
+extern crate compositor_developer_debug_instance_record;
+
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -13,11 +17,14 @@ pub fn load_or_generate(source: &Path) -> Result<Arc<TileIndex>, TileError> {
     let root = cache_dir(source);
     let index_path = root.join("index.json");
     if index_path.exists() {
+        info!("tile.io: loading existing pyramid from {}", index_path.display());
         let raw = std::fs::read_to_string(&index_path)?;
         let index: TileIndex = serde_json::from_str(&raw)?;
         return Ok(Arc::new(index));
     }
+    warn!("tile.io: generating pyramid for {} (may take a while for large images)", source.display());
     let index = generate_pyramid(source, &root)?;
+    info!("tile.io: pyramid generated: {} levels, source {}x{}", index.levels.len(), index.source_w, index.source_h);
     Ok(Arc::new(index))
 }
 
