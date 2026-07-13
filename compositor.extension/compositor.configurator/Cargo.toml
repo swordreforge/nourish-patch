@@ -110,6 +110,7 @@ compositor_configurator_settings_surface_misc = { path = "configurator.settings/
 compositor_configurator_settings_surface_preview = { path = "configurator.settings/settings.surface/surface.preview" }
 compositor_configurator_settings_surface_style = { path = "configurator.settings/settings.surface/surface.style" }
 compositor_configurator_settings_surface_view = { path = "configurator.settings/settings.surface/surface.view" }
+compositor_configurator_settings_surface_wallpaper = { path = "configurator.settings/settings.surface/surface.wallpaper" }
 compositor_configurator_settings_surface_world = { path = "configurator.settings/settings.surface/surface.world" }
 compositor_developer_debug_instance_channel = { path = "../../compositor.developer/developer.debug/debug.instance/instance.channel" }
 compositor_developer_debug_instance_level = { path = "../../compositor.developer/developer.debug/debug.instance/instance.level" }

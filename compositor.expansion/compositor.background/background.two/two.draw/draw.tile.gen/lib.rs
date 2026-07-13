@@ -23,11 +23,7 @@ pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, T
         let lod_w = (source_w as f64 / 2u32.pow(lod) as f64).ceil() as u32;
         let lod_h = (source_h as f64 / 2u32.pow(lod) as f64).ceil() as u32;
 
-        let (clamped_w, clamped_h) = if lod == 0 {
-            (tile_size.min(lod_w), tile_size.min(lod_h))
-        } else {
-            (lod_w, lod_h)
-        };
+        let (clamped_w, clamped_h) = (lod_w, lod_h);
 
         let cols = clamped_w.div_ceil(tile_size);
         let rows = clamped_h.div_ceil(tile_size);

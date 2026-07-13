@@ -19,11 +19,12 @@ use compositor_configurator_settings_surface_misc::misc;
 use compositor_configurator_audio_tab_base::base as audio_tab;
 use compositor_configurator_network_tab_base::base as network_tab;
 use compositor_configurator_bluetooth_tab_base::base as bluetooth_tab;
-use compositor_configurator_settings_surface_message::message::{Applied, SettingsMessage, ShaderProp, Tab};
+use compositor_configurator_settings_surface_message::message::{Applied, SettingsMessage, ShaderProp, Tab, WallpaperFill};
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use compositor_configurator_settings_surface_world::world;
 use compositor_configurator_settings_surface_graphics::graphics;
+use compositor_configurator_settings_surface_wallpaper::wallpaper as wallpaper_panel;
 use compositor_developer_environment_graphics_base::base::GraphicsAaConfig;
 use iced_core::{Alignment, Element, Length, Padding, Theme};
 use compositor_support_library_i18n_base_core::t;
@@ -45,6 +46,7 @@ fn sidebar<'a>(sel: Tab) -> El<'a> {
     let list = column![
         text(t!("CONFIG MODULES")).size(10).color(style::MUTED),
         module("◑", t!("CURRENT WORLD"), Tab::World, sel),
+        module(" backgrounds", t!("WALLPAPER"), Tab::Wallpaper, sel),
         module("▦", t!("DISPLAY"), Tab::Display, sel),
         module("♪", t!("AUDIO"), Tab::Audio, sel),
         module("⌨", t!("INPUT"), Tab::Input, sel),
@@ -91,6 +93,9 @@ pub fn render<'a>(
     preview_source: &'a str, shader_status: Option<&'a str>,
     invert_pan_x: bool, invert_pan_y: bool, srgb: bool,
     graphics: &'a GraphicsAaConfig,
+    wallpaper_path: Option<&'a str>,
+    wallpaper_path_edit: &'a str,
+    wallpaper_fill: WallpaperFill,
 ) -> El<'a> {
     let body: El<'a> = match tab {
         Tab::Display => display::build(displays, active_edid, selected_display, selected_mode, confirming, pending, staged_active, layout, selected_placement, cyclic, selected_inactive),
@@ -106,6 +111,7 @@ pub fn render<'a>(
         Tab::Misc => misc::build(ime, keyboard),
         Tab::World => world::build(shaders, shader_current, shader_props, preview_source, shader_status, invert_pan_x, invert_pan_y, srgb),
         Tab::Graphics => graphics::build(graphics),
+        Tab::Wallpaper => wallpaper_panel::build(wallpaper_path, wallpaper_path_edit, wallpaper_fill),
     };
     // Each section still scrolls its own lists vertically. The content area holds a
     // MINIMUM width (`MIN_CONTENT`) so panes never squish/overflow on a narrow window;

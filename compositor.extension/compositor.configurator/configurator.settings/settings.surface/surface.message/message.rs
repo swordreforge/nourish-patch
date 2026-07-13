@@ -3,6 +3,24 @@
 use compositor_developer_environment_config_base::base::Environment;
 use compositor_developer_environment_preference_base::base::{Ime, KeyboardLayout};
 use compositor_orchestration_driver_output_base::base::{ApplyResult, DisplayInfo, ModeInfo};
+use compositor_background_two_state_base::state::WallpaperFillRaw;
+
+/// How the wallpaper image is mapped to the viewport.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WallpaperFill {
+    Tile, Cover, Fit, Center,
+}
+
+impl Default for WallpaperFill { fn default() -> Self { Self::Tile } }
+
+impl WallpaperFill {
+    pub fn from_raw(r: WallpaperFillRaw) -> Self {
+        match r.0 { 1 => Self::Cover, 2 => Self::Fit, 3 => Self::Center, _ => Self::Tile }
+    }
+    pub fn to_raw(self) -> WallpaperFillRaw {
+        WallpaperFillRaw(match self { Self::Tile => 0, Self::Cover => 1, Self::Fit => 2, Self::Center => 3 })
+    }
+}
 
 /// A provisional per-monitor mode change the user can Keep/Revert: the target
 /// monitor (by EDID identity key) and the mode to drive it at. Multi-output: every
@@ -32,6 +50,8 @@ pub enum Tab {
     World,
     /// Graphics / anti-aliasing tuning for the pannable world.
     Graphics,
+    /// Wallpaper image path + fill mode for the active world.
+    Wallpaper,
 }
 
 impl Tab {
@@ -41,14 +61,14 @@ impl Tab {
         match self {
             Tab::Display => 0, Tab::Audio => 1, Tab::Input => 2, Tab::Network => 3,
             Tab::Bluetooth => 4, Tab::Performance => 5, Tab::System => 6, Tab::Misc => 7,
-            Tab::World => 8, Tab::Graphics => 9,
+            Tab::World => 8, Tab::Graphics => 9, Tab::Wallpaper => 10,
         }
     }
     pub fn from_index(i: u8) -> Self {
         match i {
             1 => Tab::Audio, 2 => Tab::Input, 3 => Tab::Network, 4 => Tab::Bluetooth,
             5 => Tab::Performance, 6 => Tab::System, 7 => Tab::Misc, 8 => Tab::World,
-            9 => Tab::Graphics,
+            9 => Tab::Graphics, 10 => Tab::Wallpaper,
             _ => Tab::Display,
         }
     }
@@ -215,4 +235,15 @@ pub enum SettingsMessage {
     /// preferences.json AND apply live (forwarded). Carries the whole struct so
     /// the method dropdown + every knob share one variant.
     SetGraphics(compositor_developer_environment_graphics_base::base::GraphicsAaConfig),
+
+    // --- Wallpaper ---------------------------------------------------------------
+    /// Set the active world's wallpaper image path (forwarded: persists + rebuilds).
+    /// Empty string = clear wallpaper (back to shader).
+    SetWallpaperPath(String),
+    /// Set the active world's wallpaper fill mode (forwarded: persists + rebuilds).
+    SetWallpaperFill(WallpaperFill),
+    /// The active world's current wallpaper path, pushed by the embed (NOT forwarded).
+    SyncWallpaperPath(Option<String>),
+    /// The active world's current wallpaper fill mode, pushed by the embed (NOT forwarded).
+    SyncWallpaperFill(WallpaperFill),
 }

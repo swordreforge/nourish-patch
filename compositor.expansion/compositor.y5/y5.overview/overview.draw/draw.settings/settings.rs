@@ -8,7 +8,7 @@ use compositor_orchestration_driver_output_base::base::{OutputModeRequest, Outpu
 use compositor_orchestration_driver_settings_base::base::{SETTINGS, SETTINGS_MUT};
 use compositor_configurator_network_backend_base::base::{self as wifi, WifiCmd, WifiSnapshot};
 use compositor_configurator_bluetooth_backend_base::base::{self as bt, BtCmd, BtSnapshot};
-use compositor_configurator_settings_surface_message::message::{SettingsMessage, ShaderProp, ShaderPropKind};
+use compositor_configurator_settings_surface_message::message::{SettingsMessage, ShaderProp, ShaderPropKind, WallpaperFill};
 use compositor_configurator_settings_surface_view::Settings;
 use compositor_y5_audio_controller_interface::interface::{AudioState, AudioWatch};
 use compositor_y5_surface_draw_handle::handle::load;
@@ -34,6 +34,8 @@ thread_local! {
     /// screen-space and spans the output, so a mode/resolution change invalidates
     /// its rect — re-size only when this drifts (resizes reallocate a texture).
     static SIZED: RefCell<Option<Size<i32, Physical>>> = const { RefCell::new(None) };
+    /// Last wallpaper (path, fill) pushed to the panel.
+    static LAST_WALLPAPER: RefCell<Option<(Option<String>, WallpaperFill)>> = const { RefCell::new(None) };
 }
 
 /// Screen rect for the settings surface at the given output size: full width,
@@ -196,6 +198,24 @@ fn sync(state: &mut Loop, id: HandleId, size: Size<i32, Physical>) {
             let _ = reg.dispatch_message(handle, SettingsMessage::SyncWorldSrgb(srgb));
         }
     }
+    // Wallpaper path + fill mode: re-dispatch only when the active world's
+    // wallpaper state changes (world switch, path edit, fill mode edit).
+    let wp = state
+        .inner
+        .worlds
+        .active()
+        .storage()
+        .try_get(&compositor_background_two_storage_base::base::BG_TWO)
+        .map(|t| (t.wallpaper_path.clone(), WallpaperFill::from_raw(t.wallpaper_fill)))
+        .unwrap_or((None, WallpaperFill::Tile));
+    let wp_changed = LAST_WALLPAPER.with(|l| { let mut l = l.borrow_mut(); if l.as_ref() != Some(&wp) { *l = Some(wp.clone()); true } else { false } });
+    if wp_changed {
+        if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
+            let handle = IcedHandle::<Settings>::from_id(id);
+            let _ = reg.dispatch_message(handle, SettingsMessage::SyncWallpaperPath(wp.0));
+            let _ = reg.dispatch_message(handle, SettingsMessage::SyncWallpaperFill(wp.1));
+        }
+    }
     // Animate the live preview: while the Current-World tab is open, dispatch a
     // per-frame tick so the surface re-renders and the preview clock advances.
     if compositor_configurator_settings_surface_message::message::Tab::from_index(
@@ -250,6 +270,7 @@ fn create(state: &mut Loop, renderer: &mut GlesRenderer, size: Size<i32, Physica
     LAST.with(|l| *l.borrow_mut() = None);
     LAST_OUTPUTS.with(|l| *l.borrow_mut() = None);
     LAST_SHADERS.with(|l| *l.borrow_mut() = None);
+    LAST_WALLPAPER.with(|l| *l.borrow_mut() = None);
 }
 
 fn destroy(state: &mut Loop, id: HandleId) {
@@ -275,7 +296,7 @@ fn install_handler(state: &mut Loop, handle: IcedHandle<Settings>) {
                 // activate/deactivate live-provisionally through the handler (arming the
                 // auto-revert gate), so it must reach `interface.handle`. The rest here
                 // are UI-local (sync pushes, tab/selection state) and never forwarded.
-                if matches!(m, SettingsMessage::SyncSystem(..) | SettingsMessage::SyncDisplays(_) | SettingsMessage::SyncShaders(..) | SettingsMessage::SyncShaderProps(..) | SettingsMessage::SyncShaderPreview(..) | SettingsMessage::SyncShaderStatus(..) | SettingsMessage::Tick | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_) | SettingsMessage::SelectDisplay(_) | SettingsMessage::SelectMode(_) | SettingsMessage::SelectInactive) { return; }
+                if matches!(m, SettingsMessage::SyncSystem(..) | SettingsMessage::SyncDisplays(_) | SettingsMessage::SyncShaders(..) | SettingsMessage::SyncShaderProps(..) | SettingsMessage::SyncShaderPreview(..) | SettingsMessage::SyncShaderStatus(..) | SettingsMessage::SyncWallpaperPath(_) | SettingsMessage::SyncWallpaperFill(_) | SettingsMessage::Tick | SettingsMessage::WifiSelect(_) | SettingsMessage::WifiPassword(_) | SettingsMessage::SelectDisplay(_) | SettingsMessage::SelectMode(_) | SettingsMessage::SelectInactive) { return; }
                 let _ = tx.send(SurfaceMessage { message: SurfaceMessageType::Settings(m.clone()) });
             });
         }

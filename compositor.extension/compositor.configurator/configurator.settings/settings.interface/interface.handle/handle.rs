@@ -10,7 +10,7 @@ use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use compositor_orchestration_driver_settings_base::base::SETTINGS_MUT;
-use compositor_configurator_settings_surface_message::message::{SettingsMessage, Tab};
+use compositor_configurator_settings_surface_message::message::{SettingsMessage, Tab, WallpaperFill};
 use compositor_configurator_network_backend_base::base::{self as wifi, WifiCmd};
 use compositor_configurator_bluetooth_backend_base::base::{self as bt, BtCmd};
 use compositor_orchestration_driver_audio_base::base::AUDIO;
@@ -268,6 +268,36 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         SettingsMessage::SetWorldInvertPanX(v) => set_world_invert(state, Some(v), None),
         SettingsMessage::SetWorldInvertPanY(v) => set_world_invert(state, None, Some(v)),
         SettingsMessage::SetWorldSrgb(v) => set_world_srgb(state, v),
+        // Wallpaper: set path on the active world's Two slot, clear instance
+        // so TwoSystem rebuilds the GPU cache next frame.
+        SettingsMessage::SetWallpaperPath(path) => {
+            let world = state.inner.worlds.active_id();
+            if let Some(two) = state
+                .inner
+                .worlds
+                .active_mut()
+                .storage_mut()
+                .try_get_mut(&compositor_background_two_storage_base::base::BG_TWO_MUT)
+            {
+                two.wallpaper_path = if path.is_empty() { None } else { Some(path) };
+                two.instance = None;
+                compositor_support_system_persist_mark_base::base::mark_world(world, true);
+            }
+        }
+        SettingsMessage::SetWallpaperFill(fill) => {
+            let world = state.inner.worlds.active_id();
+            if let Some(two) = state
+                .inner
+                .worlds
+                .active_mut()
+                .storage_mut()
+                .try_get_mut(&compositor_background_two_storage_base::base::BG_TWO_MUT)
+            {
+                two.wallpaper_fill = fill.to_raw();
+                two.instance = None;
+                compositor_support_system_persist_mark_base::base::mark_world(world, true);
+            }
+        }
         SettingsMessage::Close => {
             state.inner.kernel.get_mut(&SETTINGS_MUT).open = false;
         }
@@ -372,6 +402,8 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         | SettingsMessage::SyncShaderStatus(..)
         | SettingsMessage::SyncWorldInvert(..)
         | SettingsMessage::SyncWorldSrgb(..)
+        | SettingsMessage::SyncWallpaperPath(_)
+        | SettingsMessage::SyncWallpaperFill(_)
         | SettingsMessage::SelectDisplay(_)
         | SettingsMessage::SelectMode(_)
         | SettingsMessage::SelectInactive

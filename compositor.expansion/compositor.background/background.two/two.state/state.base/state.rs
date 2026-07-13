@@ -1,5 +1,21 @@
 use compositor_background_two_draw_element::element::ParallaxBackground;
 
+/// Raw fill mode stored in `Two` (avoids a dependency on the settings message
+/// crate). Converts to/from the UI enum at the boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WallpaperFillRaw(pub u8);
+
+impl Default for WallpaperFillRaw {
+    fn default() -> Self { Self(0) }
+}
+
+impl WallpaperFillRaw {
+    pub const TILE: u8 = 0;
+    pub const COVER: u8 = 1;
+    pub const FIT: u8 = 2;
+    pub const CENTER: u8 = 3;
+}
+
 pub struct Two {
     pub instance: Option<ParallaxBackground>,
     /// This world's background-shader override (bundle name or absolute path);
@@ -25,6 +41,8 @@ pub struct Two {
     /// Optional wallpaper image path. When set, the background renders from a tiled
     /// image pyramid instead of the procedural shader. Persisted per world.
     pub wallpaper_path: Option<String>,
+    /// How the wallpaper image maps to the viewport. Persisted per world.
+    pub wallpaper_fill: WallpaperFillRaw,
 }
 
 impl Two {
@@ -38,6 +56,7 @@ impl Two {
             invert_pan_y: false,
             srgb: false,
             wallpaper_path: None,
+            wallpaper_fill: WallpaperFillRaw::default(),
         }
     }
 }

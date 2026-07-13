@@ -1,6 +1,6 @@
 use compositor_background_two_draw_element::element::ParallaxBackground;
-use compositor_background_two_draw_wallpaper::{build_or_reuse_cache, prepare_tiles, WallpaperGpuCache, TileBlit};
-use compositor_background_two_state_base::state::Two;
+use compositor_background_two_draw_wallpaper::{build_or_reuse_cache, prepare_tiles, FillMapping, WallpaperGpuCache, TileBlit};
+use compositor_background_two_state_base::state::{Two, WallpaperFillRaw};
 use compositor_support_system_buffer_token_base::y5_buffer;
 use compositor_support_system_trait_system_base::base::{BufferCx, System, SystemCx, WorldBuilder};
 use compositor_support_system_world_frame_base::base::{self as layer, FramePlan, FrameTick};
@@ -46,6 +46,7 @@ impl System for TwoSystem {
             .is_some_and(|b| b.example_lock_done) { return; }
         let size = cx.kernel.get(&compositor_orchestration_smithay_data_base::data::SCREEN).size;
         let size = (size.w as f32, size.h as f32);
+        let (screen_w, screen_h) = (size.0 as f64, size.1 as f64);
         let state = cx.storage.get(&BG_TWO);
         let stale = state.instance.as_ref().is_some_and(|i| i.output_size != size);
         let rebuild = state.instance.is_none();
@@ -105,7 +106,8 @@ impl System for TwoSystem {
             if let Some(cache) = &mut self.wallpaper_cache {
                 let pan = state.instance.as_ref().map(|i| i.pan).unwrap_or((0.0, 0.0));
                 let zoom = state.instance.as_ref().map(|i| i.zoom).unwrap_or(1.0);
-                let blits = prepare_tiles(cache, renderer, pan, zoom, size);
+                let fm = compute_fill_mapping(state.wallpaper_fill, cache, screen_w, screen_h);
+                let blits = prepare_tiles(cache, renderer, pan, zoom, size, fm);
                 cx.write(&TWO_BUF, TwoCmd::WallpaperTiles(blits));
             } else if !path_is_set {
                 cx.write(&TWO_BUF, TwoCmd::WallpaperTiles(vec![]));
@@ -155,4 +157,16 @@ impl TwoSystem {
     fn on_camera_zoomed(&mut self, cx: &mut SystemCx, event: &compositor_y5_camera_system_base::base::CameraZoomed) {
         cx.write(&TWO_BUF, TwoCmd::Zoom(event.zoom as f32));
     }
+}
+
+fn compute_fill_mapping(fill: WallpaperFillRaw, cache: &WallpaperGpuCache, sw: f64, sh: f64) -> FillMapping {
+    let (iw, ih) = cache.index.levels.first().map(|l| (l.w as f64, l.h as f64)).unwrap_or((512.0, 512.0));
+    let (ia, sa) = (iw / ih, sw / sh);
+    let (es, ox, oy) = match fill.0 {
+        WallpaperFillRaw::COVER => { let s = if ia > sa { sh / ih } else { sw / iw }; (s, 0.0, 0.0) }
+        WallpaperFillRaw::FIT => { let s = if ia > sa { sw / iw } else { sh / ih }; (s, 0.0, 0.0) }
+        WallpaperFillRaw::CENTER => (1.0, -(sw - iw) / 2.0, -(sh - ih) / 2.0),
+        _ => (1.0, 0.0, 0.0), // Tile
+    };
+    FillMapping(es, ox, oy)
 }

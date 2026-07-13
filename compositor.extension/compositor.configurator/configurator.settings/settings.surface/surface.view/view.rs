@@ -12,7 +12,7 @@ use compositor_configurator_network_backend_base::base::WifiSnapshot;
 use compositor_configurator_bluetooth_backend_base::base::BtSnapshot;
 use compositor_configurator_hardware_gpu_base::base::{render_devices, RenderDevice};
 use compositor_configurator_settings_surface_chrome::chrome;
-use compositor_configurator_settings_surface_message::message::{Applied, SettingsMessage, ShaderProp, Tab};
+use compositor_configurator_settings_surface_message::message::{Applied, SettingsMessage, ShaderProp, Tab, WallpaperFill};
 use iced_core::{Element, Theme};
 
 pub struct Settings {
@@ -86,6 +86,12 @@ pub struct Settings {
     pub next_placement_id: u64,
     /// Cursor-teleport CYCLIC (wrap-around) preference — the Display-tab checkbox.
     pub cyclic: bool,
+    /// The active world's wallpaper image path (pushed via `SyncWallpaperPath`).
+    pub wallpaper_path: Option<String>,
+    /// Editable buffer for the wallpaper path text input.
+    pub wallpaper_path_edit: String,
+    /// The active world's wallpaper fill mode (pushed via `SyncWallpaperFill`).
+    pub wallpaper_fill: WallpaperFill,
 }
 
 /// A new placement's default width/height in abstract layout units.
@@ -172,6 +178,9 @@ impl Settings {
             selected_placement: None,
             next_placement_id,
             cyclic,
+            wallpaper_path: None,
+            wallpaper_path_edit: String::new(),
+            wallpaper_fill: WallpaperFill::default(),
         }
     }
 
@@ -242,6 +251,16 @@ impl IcedUi for Settings {
                 ApplyResult::Provisional => {}
             },
             SettingsMessage::SetGraphics(g) => self.graphics = g,
+            SettingsMessage::SetWallpaperPath(p) => {
+                self.wallpaper_path = if p.is_empty() { None } else { Some(p.clone()) };
+                self.wallpaper_path_edit = p;
+            }
+            SettingsMessage::SetWallpaperFill(f) => self.wallpaper_fill = f,
+            SettingsMessage::SyncWallpaperPath(p) => {
+                self.wallpaper_path = p.clone();
+                self.wallpaper_path_edit = p.unwrap_or_default();
+            }
+            SettingsMessage::SyncWallpaperFill(f) => self.wallpaper_fill = f,
             SettingsMessage::Cursor(v) => self.cursor_sensitivity = v,
             SettingsMessage::NaturalScroll(b) => self.natural_scroll = b,
             SettingsMessage::SetShowFps(b) => self.show_fps = b,
@@ -476,6 +495,9 @@ impl IcedUi for Settings {
             self.invert_pan_y,
             self.srgb,
             &self.graphics,
+            self.wallpaper_path.as_deref(),
+            &self.wallpaper_path_edit,
+            self.wallpaper_fill,
         )
     }
 }

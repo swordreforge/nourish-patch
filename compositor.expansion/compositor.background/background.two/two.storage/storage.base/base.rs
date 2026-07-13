@@ -1,4 +1,4 @@
-use compositor_background_two_state_base::state::Two;
+use compositor_background_two_state_base::state::{Two, WallpaperFillRaw};
 use compositor_support_system_storage_token_base::base::{Token, TokenMut};
 
 /// The per-world 2D parallax background slot.
@@ -22,9 +22,12 @@ struct BackgroundPersisted {
     srgb: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     wallpaper_path: Option<String>,
+    #[serde(default, skip_serializing_if = "is_tile_fill")]
+    wallpaper_fill: u8,
 }
 
 fn is_false(b: &bool) -> bool { !*b }
+fn is_tile_fill(f: &u8) -> bool { *f == 0 }
 
 /// Transforms the per-world `Two` slot to/from its persisted form (a single
 /// value, so `Persist`/`y5_persist!` — not the collection `Document`).
@@ -42,6 +45,7 @@ impl compositor_support_system_persist_trait_base::base::Persist for BackgroundP
             invert_pan_y: live.invert_pan_y,
             srgb: live.srgb,
             wallpaper_path: live.wallpaper_path.clone(),
+            wallpaper_fill: live.wallpaper_fill.0,
         }
     }
     fn from_persisted(p: BackgroundPersisted) -> Two {
@@ -52,6 +56,7 @@ impl compositor_support_system_persist_trait_base::base::Persist for BackgroundP
         two.invert_pan_y = p.invert_pan_y;
         two.srgb = p.srgb;
         two.wallpaper_path = p.wallpaper_path;
+        two.wallpaper_fill = WallpaperFillRaw(p.wallpaper_fill);
         two
     }
 }
