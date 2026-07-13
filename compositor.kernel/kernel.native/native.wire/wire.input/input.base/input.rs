@@ -5,7 +5,9 @@ use compositor_kernel_input_libinput_config_base::config::{on_device_added, Devi
 use compositor_kernel_input_loop_libinput_base::libinput::LibinputSource;
 use compositor_kernel_native_context_render_base::render::NativeRenderContext;
 use smithay::backend::input::InputEvent;
-use smithay::reexports::input::DeviceCapability;
+use smithay::reexports::input::{
+    DeviceCapability, DragLockState, TapButtonMap, ThreeFingerDragState,
+};
 use smithay::reexports::calloop::EventLoop;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -34,6 +36,11 @@ pub fn register(
                         &mut cfg_device,
                         &DeviceSettings {
                             natural_scroll_enabled: Some(natural),
+                            dwt_enabled: Some(true),
+                            middle_emulation_enabled: Some(false),
+                            tap_drag_lock_enabled: Some(DragLockState::Disabled),
+                            tap_button_map: Some(TapButtonMap::LeftRightMiddle),
+                            three_finger_drag: Some(ThreeFingerDragState::Disabled),
                             ..DeviceSettings::default()
                         },
                     );
