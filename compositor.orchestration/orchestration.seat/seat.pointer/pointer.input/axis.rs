@@ -23,13 +23,8 @@ pub fn axis<I: InputBackend>(event: &<I as InputBackend>::PointerAxisEvent, _loo
         let finger = matches!(event.source(), AxisSource::Finger);
         let mut horizontal = event.amount(h).unwrap_or_else(|| event.amount_v120(h).unwrap_or(0.0));
         let mut vertical = event.amount(v).unwrap_or_else(|| event.amount_v120(v).unwrap_or(0.0));
-        // Natural scrolling: invert the finger-axis direction for canvas pan
-        // (a discrete wheel is left alone). Mirrors the inversion native_axis
-        // applies to the window-scroll path, so both agree.
-        if finger && _loop.inner.preference.input_natural_scroll {
-            horizontal = -horizontal;
-            vertical = -vertical;
-        }
+        // Natural scroll: libinput inverts at device level (wired from
+        // preference). Compositor-level inversion would double-invert.
         let ev = compositor_support_system_input_event_base::base::InputEvent::PointerAxis {
             horizontal,
             vertical,

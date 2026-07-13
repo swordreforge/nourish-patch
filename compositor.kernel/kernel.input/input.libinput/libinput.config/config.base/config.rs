@@ -31,6 +31,11 @@ pub struct DeviceSettings {
 
     /// 3/4-finger drag state. `None` → libinput default.
     pub three_finger_drag: Option<ThreeFingerDragState>,
+
+    /// Natural (inverted) scroll direction. `Some` → libinput-level invert
+    /// (compositor skips its own to avoid double-invert). `None` → leave
+    /// libinput default (compositor falls back to seat-level inversion).
+    pub natural_scroll_enabled: Option<bool>,
 }
 
 impl Default for DeviceSettings {
@@ -41,6 +46,7 @@ impl Default for DeviceSettings {
             tap_drag_enabled: Some(true),
             tap_drag_lock_enabled: None,
             three_finger_drag: None,
+            natural_scroll_enabled: None,
         }
     }
 }
@@ -90,11 +96,18 @@ pub fn on_device_added(device: &mut Device, settings: &DeviceSettings) {
                 warn!("3fg-drag not available on {name}: {e:?}");
             });
     }
+    if let Some(enabled) = settings.natural_scroll_enabled {
+        let _ = device
+            .config_scroll_set_natural_scroll_enabled(enabled)
+            .inspect_err(|e| {
+                warn!("natural-scroll not available on {name}: {e:?}");
+            });
+    }
 
     info!(
         "touchpad configured: {name} \
          (tap-to-click={}, tap-button-map={}, tap-drag={}, tap-drag-lock={}, \
-          3fg-drag={})",
+          3fg-drag={}, natural-scroll={})",
         settings.tap_to_click,
         settings.tap_button_map.map_or("default", |m| match m {
             TapButtonMap::LeftRightMiddle => "LRM",
@@ -115,5 +128,6 @@ pub fn on_device_added(device: &mut Device, settings: &DeviceSettings) {
                 ThreeFingerDragState::EnabledFourFinger => "4fg",
                 _ => "?",
             }),
+        settings.natural_scroll_enabled.map_or("default", |v| if v { "on" } else { "off" }),
     );
 }

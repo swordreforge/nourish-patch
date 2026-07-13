@@ -29,7 +29,14 @@ pub fn register(
             match &event {
                 InputEvent::DeviceAdded { device } => {
                     let mut cfg_device = device.clone();
-                    on_device_added(&mut cfg_device, &DeviceSettings::default());
+                    let natural = state.inner.preference.input_natural_scroll;
+                    on_device_added(
+                        &mut cfg_device,
+                        &DeviceSettings {
+                            natural_scroll_enabled: Some(natural),
+                            ..DeviceSettings::default()
+                        },
+                    );
 
                     if device.has_capability(DeviceCapability::Keyboard) {
                         let mut kbd_device = device.clone();
