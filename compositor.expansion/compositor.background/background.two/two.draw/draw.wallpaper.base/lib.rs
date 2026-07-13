@@ -1,27 +1,9 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::path::PathBuf;
 
-use compositor_background_two_draw_tile::{RectF64, TileIndex};
-use smithay::backend::allocator::Fourcc;
-use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
-use smithay::backend::renderer::ImportMem;
-use smithay::utils::{Buffer, Physical, Rectangle, Size};
-
-pub struct WallpaperGpuCache {
-    pub index: Arc<TileIndex>,
-    pub cache_root: PathBuf,
-    pub textures: HashMap<(u8, u32, u32), GlesTexture>,
-    pub sizes: HashMap<(u8, u32, u32), (u32, u32)>,
-    pub source: PathBuf,
-}
-
-#[derive(Clone)]
-pub struct TileBlit {
-    pub texture: GlesTexture,
-    pub dst: Rectangle<i32, Physical>,
-}
-
+use compositor_background_two_draw_tile::{cache_dir, load_or_generate, load_tile_bytes, RectF64, TileIndex};
+use compositor_background_two_draw_wallpaper_tex::{create_gles_texture, WallpaperGpuCache, TileBlit};
+use smithay::backend::renderer::gles::GlesRenderer;
 pub fn build_or_reuse_cache(
     path: Option<&str>,
     existing: Option<&mut WallpaperGpuCache>,
@@ -36,8 +18,8 @@ pub fn build_or_reuse_cache(
             return None;
         }
     }
-    let index = TileIndex::load_or_generate(&source).ok()?;
-    let cache_root = cache_dir(&source);
+    let index = load_or_generate(&source).ok()?;
+    let root = cache_dir(&source);
     let mut textures = HashMap::new();
     let mut sizes = HashMap::new();
     if let Some(lm) = index.levels.first() {
@@ -45,7 +27,7 @@ pub fn build_or_reuse_cache(
             for col in 0..lm.cols {
                 let key = (0u8, col, row);
                 let (tw, th) = index.tile_dimensions(0, col, row);
-                if let Ok(bytes) = index.load_tile_bytes(&cache_root, 0, col, row) {
+                if let Ok(bytes) = load_tile_bytes(&index, &root, 0, col, row) {
                     if let Ok(tex) = create_gles_texture(gles, &bytes, tw, th) {
                         textures.insert(key, tex);
                         sizes.insert(key, (tw, th));
@@ -54,7 +36,7 @@ pub fn build_or_reuse_cache(
             }
         }
     }
-    Some(WallpaperGpuCache { index, cache_root, textures, sizes, source })
+    Some(WallpaperGpuCache { index, cache_root: root, textures, sizes, source })
 }
 
 pub fn prepare_tiles(
@@ -89,7 +71,7 @@ pub fn prepare_tiles(
     for (lod, col, row) in &tiles {
         let key = (*lod, *col, *row);
         if !cache.textures.contains_key(&key) {
-            if let Ok(bytes) = index.load_tile_bytes(&cache.cache_root, *lod, *col, *row) {
+            if let Ok(bytes) = load_tile_bytes(index, &cache.cache_root, *lod, *col, *row) {
                 let (tw, th) = index.tile_dimensions(*lod, *col, *row);
                 if let Ok(tex) = create_gles_texture(gles, &bytes, tw, th) {
                     cache.textures.insert(key, tex);
@@ -110,46 +92,9 @@ pub fn prepare_tiles(
             let sy = ((tile_world_y - vp_top) / vp_h * screen_h) as i32;
             let sw = (tile_world_w / vp_w * screen_w).ceil() as i32;
             let sh = (tile_world_h / vp_h * screen_h).ceil() as i32;
-            let dst = Rectangle::from_loc_and_size((sx, sy), (sw.max(1), sh.max(1)));
+            let dst = smithay::utils::Rectangle::from_loc_and_size((sx, sy), (sw.max(1), sh.max(1)));
             blits.push(TileBlit { texture: tex.clone(), dst });
         }
     }
     blits
-}
-
-fn create_gles_texture(
-    gles: &mut GlesRenderer,
-    rgba: &[u8],
-    w: u32,
-    h: u32,
-) -> Result<GlesTexture, ()> {
-    ImportMem::import_memory(
-        gles,
-        rgba,
-        Fourcc::Abgr8888,
-        Size::from((w as i32, h as i32)),
-        false,
-    )
-    .map_err(|_| ())
-}
-
-fn cache_dir(source: &Path) -> PathBuf {
-    let hash = short_hash(source);
-    let config = std::env::var("XDG_CONFIG_HOME")
-        .ok()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            let home = std::env::var("HOME").unwrap_or_default();
-            PathBuf::from(home).join(".config")
-        });
-    config.join("y5/wallpaper").join(format!("{hash}.cache"))
-}
-
-fn short_hash(source: &Path) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-    let canonical = source.canonicalize().unwrap_or_else(|_| source.to_path_buf());
-    let mut hasher = DefaultHasher::new();
-    canonical.to_string_lossy().hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
 }

@@ -56,8 +56,14 @@ compositor_background_two_draw_program = { path = "background.two/two.draw/draw.
 compositor_background_two_draw_scene = { path = "background.two/two.draw/draw.scene" }
 compositor_background_two_draw_select = { path = "background.two/two.draw/draw.select" }
 compositor_background_two_draw_tile = { path = "background.two/two.draw/draw.tile" }
+compositor_background_two_draw_tile_base = { path = "background.two/two.draw/draw.tile.base" }
+compositor_background_two_draw_tile_core = { path = "background.two/two.draw/draw.tile.core" }
+compositor_background_two_draw_tile_gen = { path = "background.two/two.draw/draw.tile.gen" }
+compositor_background_two_draw_tile_io = { path = "background.two/two.draw/draw.tile.io" }
 compositor_background_two_draw_vulkan = { path = "background.two/two.draw/draw.vulkan" }
 compositor_background_two_draw_wallpaper = { path = "background.two/two.draw/draw.wallpaper" }
+compositor_background_two_draw_wallpaper_base = { path = "background.two/two.draw/draw.wallpaper.base" }
+compositor_background_two_draw_wallpaper_tex = { path = "background.two/two.draw/draw.wallpaper.tex" }
 compositor_background_two_shader_builtin = { path = "background.two/two.shader/shader.builtin" }
 compositor_background_two_shader_load = { path = "background.two/two.shader/shader.load" }
 compositor_background_two_shader_locate = { path = "background.two/two.shader/shader.locate" }

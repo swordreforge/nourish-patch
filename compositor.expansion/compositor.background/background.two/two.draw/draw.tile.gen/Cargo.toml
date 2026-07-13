@@ -1,5 +1,5 @@
 [package]
-name = "compositor_background_two_draw_tile"
+name = "compositor_background_two_draw_tile_gen"
 version = "0.0.1"
 edition = "2024"
 
@@ -7,7 +7,8 @@ edition = "2024"
 path = "lib.rs"
 
 [dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+image = { workspace = true }
 compositor_background_two_draw_tile_base = { workspace = true }
 compositor_background_two_draw_tile_core = { workspace = true }
-compositor_background_two_draw_tile_gen = { workspace = true }
-compositor_background_two_draw_tile_io = { workspace = true }

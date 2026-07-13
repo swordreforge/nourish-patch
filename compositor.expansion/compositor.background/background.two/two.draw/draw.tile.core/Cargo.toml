@@ -1,0 +1,11 @@
+[package]
+name = "compositor_background_two_draw_tile_core"
+version = "0.0.1"
+edition = "2024"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+compositor_background_two_draw_tile_base = { workspace = true }

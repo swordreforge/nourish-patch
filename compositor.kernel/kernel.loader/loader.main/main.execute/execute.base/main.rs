@@ -192,7 +192,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vec![
                     Box::new(compositor_y5_navigator_system_base::base::NavigatorSystem),
                     Box::new(compositor_y5_camera_system_base::base::CameraSystem::default()),
-                    Box::new(compositor_background_two_system_base::base::TwoSystem),
+                    Box::new(compositor_background_two_system_base::base::TwoSystem::default()),
                     Box::new(compositor_background_three_system_base::base::ThreeSystem),
                     Box::new(compositor_y5_window_system_base::base::WindowSystem),
                     Box::new(compositor_y5_surface_system_base::base::SurfaceSystem),
@@ -233,7 +233,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             vec![
                 // Own parallax background (a NEW instance, distinct from the
                 // active world's) drawn behind the sphere.
-                Box::new(compositor_background_two_system_base::base::TwoSystem),
+                Box::new(compositor_background_two_system_base::base::TwoSystem::default()),
                 // The picker world OWNS its bevy registry (prewarmed from the
                 // shared context) — the sphere scene is proprietary to it.
                 Box::new(compositor_background_three_system_base::base::ThreeSystem),
@@ -252,7 +252,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             vec![
                 Box::new(compositor_y5_navigator_system_base::base::NavigatorSystem),
                 Box::new(compositor_y5_camera_system_base::base::CameraSystem::default()),
-                Box::new(compositor_background_two_system_base::base::TwoSystem),
+                Box::new(compositor_background_two_system_base::base::TwoSystem::default()),
                 Box::new(compositor_y5_window_system_base::base::WindowSystem),
                 Box::new(compositor_y5_surface_system_base::base::SurfaceSystem),
                 Box::new(compositor_y5_canvas_system_base::base::CanvasSystem),
