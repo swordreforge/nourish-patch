@@ -1,5 +1,6 @@
 //! Tile pyramid generation: downscale source and slice into LOD tile raw RGBA.
-//! Uses libvips for streaming decode — never loads the full image into RAM.
+//! Each tile: extract source region → resize → encode → decode → write raw.
+//! Peak memory: ~3MB per tile (source region + PNG buffer + decoded RGBA).
 
 #[macro_use]
 extern crate compositor_developer_debug_instance_record;
@@ -15,9 +16,17 @@ fn vips_err(ctx: &str, e: impl std::fmt::Display) -> TileError {
     TileError::Io(std::io::Error::new(std::io::ErrorKind::Other, format!("vips {ctx}: {e}")))
 }
 
+/// Extract raw RGBA bytes from a vips image.
+fn vips_to_raw(img: &VipsImage) -> Result<Vec<u8>, TileError> {
+    let png = ops::pngsave_buffer(img).map_err(|e| vips_err("pngsave", e))?;
+    let decoded = image::load_from_memory(&png).map_err(|e| vips_err("png decode", e))?;
+    Ok(decoded.into_rgba8().into_raw())
+}
+
 /// Build the tile pyramid for `source` on disk under `cache_root`.
-/// Forces each LOD level into memory once, then extracts tiles from the
-/// in-memory copy (no per-tile PNG round-trip).
+/// Each tile is extracted+resized from the source individually — vips only
+/// decodes the PNG pixels needed for each 512x512 tile (~1MB), never
+/// materializing the full image or any LOD level.
 pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, TileError> {
     let _app = VipsApp::new("y5_tilegen", false).map_err(|e| vips_err("init", e))?;
     info!("tile.gen: opening image via vips {}", source.display());
@@ -39,20 +48,7 @@ pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, T
         let rows = lod_h.div_ceil(tile_size);
         levels.push(LevelMeta { level: lod as u8, w: lod_w, h: lod_h, cols, rows });
         info!("tile.gen: LOD {}: {}x{} ({}x{} tiles)", lod, lod_w, lod_h, cols, rows);
-
-        // Downscale source to LOD size — vips streams this.
-        let scale = (lod_w as f64 / source_w as f64).max(lod_h as f64 / source_h as f64);
-        let lod_img = ops::resize(&src, scale).map_err(|e| vips_err("resize", e))?;
-        // Force into contiguous memory — one allocation for the whole LOD.
-        let lod_mem = VipsImage::image_copy_memory(lod_img.clone()).map_err(|e| vips_err("copy_memory", e))?;
-        let lod_stride = lod_mem.get_width() * lod_mem.get_bands();
-        // Extract pixels as RGBA via png roundtrip (one per LOD, not per tile).
-        let lod_png = ops::pngsave_buffer(&lod_mem).map_err(|e| vips_err("pngsave", e))?;
-        let lod_rgba = image::load_from_memory(&lod_png)
-            .map_err(|e| vips_err("png decode", e))?
-            .into_rgba8();
-        let lod_bytes = lod_rgba.as_raw();
-        drop(lod_png); drop(lod_mem); drop(lod_img); // free vips memory
+        let (sx, sy) = (source_w as f64 / lod_w as f64, source_h as f64 / lod_h as f64);
 
         let lod_dir = cache_root.join(format!("L{lod}"));
         std::fs::create_dir_all(&lod_dir)?;
@@ -62,14 +58,15 @@ pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, T
                 let (x, y) = (col * tile_size, row * tile_size);
                 let (tw, th) = (tile_size.min(lod_w.saturating_sub(x)), tile_size.min(lod_h.saturating_sub(y)));
                 if tw == 0 || th == 0 { continue; }
-                // Extract tile from the RGBA buffer — pure pointer arithmetic, no I/O.
-                let mut tile_raw = Vec::with_capacity((tw * th * 4) as usize);
-                for ty in 0..th {
-                    let src_offset = ((y + ty) * lod_w + x) as usize * 4;
-                    let src_end = src_offset + tw as usize * 4;
-                    tile_raw.extend_from_slice(&lod_bytes[src_offset..src_end]);
-                }
-                std::fs::write(lod_dir.join(format!("{col:03}_{row:03}.raw")), &tile_raw)?;
+                let (src_x, src_y) = ((x as f64 * sx) as i32, (y as f64 * sy) as i32);
+                let (src_w, src_h) = ((tw as f64 * sx).ceil() as i32, (th as f64 * sy).ceil() as i32);
+                // Extract source region + resize to tile size — ~1MB decode.
+                let region = ops::extract_area(&src, src_x, src_y, src_w, src_h).map_err(|e| vips_err("extract", e))?;
+                let scale = (tw as f64 / src_w as f64).max(th as f64 / src_h as f64);
+                let tile = ops::resize(&region, scale).map_err(|e| vips_err("resize", e))?;
+                let raw = vips_to_raw(&tile)?;
+                // tile + region + png drop here — memory freed before next tile.
+                std::fs::write(lod_dir.join(format!("{col:03}_{row:03}.raw")), &raw)?;
             }
         }
     }
