@@ -486,6 +486,7 @@ compositor_support_library_debug_client_base = { path = "../../compositor.suppor
 compositor_support_library_ease_velocity_base = { path = "../../compositor.support/support.library/library.ease/ease.velocity/velocity.base" }
 compositor_support_library_ease_velocity_ease = { path = "../../compositor.support/support.library/library.ease/ease.velocity/velocity.ease" }
 compositor_support_library_ease_velocity_solve = { path = "../../compositor.support/support.library/library.ease/ease.velocity/velocity.solve" }
+compositor_support_library_i18n_base_core = { path = "../../compositor.support/support.library/library.i18n/i18n.base/base.core" }
 compositor_support_library_input_keyboard_action = { path = "../../compositor.support/support.library/library.input/input.keyboard/keyboard.action" }
 compositor_support_library_input_keyboard_base = { path = "../../compositor.support/support.library/library.input/input.keyboard/keyboard.base" }
 compositor_support_library_input_keyboard_combo = { path = "../../compositor.support/support.library/library.input/input.keyboard/keyboard.combo" }

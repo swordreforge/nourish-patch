@@ -2,6 +2,7 @@
 //! optional "Optimized encoding" checkbox (video only; hidden when the
 //! `background_encoder` setting makes the optimized re-encode automatic).
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Background, Border, Element, Length, Shadow, Theme};
 use iced_widget::{button, checkbox, column, container, row, text};
 use compositor_y5_graphic_capture_session::message::CaptureMessage;
@@ -47,20 +48,20 @@ impl IcedUi for SaveDialog {
             .size(20)
             .color(style::TEXT);
 
-        let hint = text("Save to the default folder, choose a location, or discard.")
+        let hint = text(t!("Save to the default folder, choose a location, or discard."))
             .size(13)
             .color(style::TEXT_DIM);
 
         let buttons = row![
-            button(text("Save").size(15).color(style::TEXT))
+            button(text(t!("Save")).size(15).color(style::TEXT))
                 .padding([8, 18])
                 .on_press(CaptureMessage::SaveDefault)
                 .style(style::button_with(style::ACCENT)),
-            button(text("Save As…").size(15).color(style::TEXT))
+            button(text(t!("Save As…")).size(15).color(style::TEXT))
                 .padding([8, 18])
                 .on_press(CaptureMessage::SaveAs)
                 .style(style::button_with(style::BUTTON_BG)),
-            button(text("Discard").size(15).color(style::TEXT))
+            button(text(t!("Discard")).size(15).color(style::TEXT))
                 .padding([8, 18])
                 .on_press(CaptureMessage::Discard)
                 .style(style::button_with(style::STOP_BG)),
@@ -74,7 +75,7 @@ impl IcedUi for SaveDialog {
             col = col.push(
                 row![
                     checkbox(self.optimized).on_toggle(CaptureMessage::ToggleOptimized),
-                    text("Optimized encoding (smaller file, encodes after saving)")
+                    text(t!("Optimized encoding (smaller file, encodes after saving)"))
                         .size(13)
                         .color(style::TEXT_DIM),
                 ]

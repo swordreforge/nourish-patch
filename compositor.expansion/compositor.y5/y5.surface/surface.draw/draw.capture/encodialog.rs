@@ -3,6 +3,7 @@
 //! by the interface via [`CaptureMessage::SetEncodeProgress`]. Own small centered
 //! screen-space instance (replaces the save dialog during encoding).
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Background, Border, Element, Length, Shadow, Theme};
 use iced_widget::{column, container, progress_bar, text};
 use compositor_y5_graphic_capture_session::message::CaptureMessage;
@@ -37,7 +38,7 @@ impl IcedUi for EncodingDialog {
     }
 
     fn view(&self) -> Element<'_, Self::Message, Theme, Renderer> {
-        let title = text("Optimizing recording…").size(20).color(style::TEXT);
+        let title = text(t!("Optimizing recording…")).size(20).color(style::TEXT);
         let sub = text(format!("Encoding a smaller file — {}%", self.percent))
             .size(14)
             .color(style::TEXT_DIM);

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 compositor_developer_debug_instance_record = { workspace = true }
 compositor_support_iced_core_engine_base = { workspace = true }
+compositor_support_library_i18n_base_core = { workspace = true }
 iced_core = { workspace = true }
 iced_widget = { workspace = true }
 

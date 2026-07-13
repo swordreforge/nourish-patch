@@ -1,3 +1,4 @@
+use compositor_support_library_i18n_base_core::t;
 use smithay::backend::input::{InputBackend, KeyState};
 use smithay::backend::session::Session;
 use smithay::input::keyboard::{Keysym, ModifiersState};
@@ -59,8 +60,8 @@ struct Bind {
 /// to the settings Keys tab.
 fn bindings() -> Vec<Bind> {
     vec![
-        Bind { id: "sleep", label: "Sleep", default: shortcut!(Super + Alt + L), action: Box::new(|s| { sleep(s); true }) },
-        Bind { id: "world_picker", label: "Open world picker", default: shortcut!(Super + K), action: Box::new(|s| { compositor_y5_picker_interface_entry::entry::toggle(s); true }) },
+        Bind { id: "sleep", label: t!("Sleep"), default: shortcut!(Super + Alt + L), action: Box::new(|s| { sleep(s); true }) },
+        Bind { id: "world_picker", label: t!("Open world picker"), default: shortcut!(Super + K), action: Box::new(|s| { compositor_y5_picker_interface_entry::entry::toggle(s); true }) },
         // (Settings has no global shortcut — reachable only via the overview Settings tab.)
         // Removed (per request): world-switch test shortcuts, Escape/cancel-picker,
         // VT switches, and all sink/media shortcuts — deactivated AND not listed.
@@ -169,21 +170,21 @@ pub fn fixed() -> Vec<KeyRow> {
         editable: false,
     };
     vec![
-        mk("Switch to VT 1", "Ctrl+Alt+F1"),
-        mk("Switch to VT 2", "Ctrl+Alt+F2"),
-        mk("Switch to VT 3", "Ctrl+Alt+F3"),
-        mk("Switch to VT 4", "Ctrl+Alt+F4"),
-        mk("Switch to VT 5", "Ctrl+Alt+F5"),
-        mk("Switch to VT 6", "Ctrl+Alt+F6"),
-        mk("Cancel picker", "Esc"),
-        mk("Volume up", "VolumeUp key"),
-        mk("Volume down", "VolumeDown key"),
-        mk("Mute", "Mute key"),
-        mk("Play / Pause", "Play key"),
-        mk("Pause media", "Pause key"),
-        mk("Stop media", "Stop key"),
-        mk("Next track", "Next key"),
-        mk("Previous track", "Prev key"),
+        mk(t!("Switch to VT 1"), "Ctrl+Alt+F1"),
+        mk(t!("Switch to VT 2"), "Ctrl+Alt+F2"),
+        mk(t!("Switch to VT 3"), "Ctrl+Alt+F3"),
+        mk(t!("Switch to VT 4"), "Ctrl+Alt+F4"),
+        mk(t!("Switch to VT 5"), "Ctrl+Alt+F5"),
+        mk(t!("Switch to VT 6"), "Ctrl+Alt+F6"),
+        mk(t!("Cancel picker"), "Esc"),
+        mk(t!("Volume up"), "VolumeUp key"),
+        mk(t!("Volume down"), "VolumeDown key"),
+        mk(t!("Mute"), "Mute key"),
+        mk(t!("Play / Pause"), "Play key"),
+        mk(t!("Pause media"), "Pause key"),
+        mk(t!("Stop media"), "Stop key"),
+        mk(t!("Next track"), "Next key"),
+        mk(t!("Previous track"), "Prev key"),
     ]
 }
 

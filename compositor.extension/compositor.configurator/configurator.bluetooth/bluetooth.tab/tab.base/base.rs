@@ -6,27 +6,28 @@ use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use iced_core::{Element, Length, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, row, scrollable, text, Column};
 
 pub fn build<'a>(b: &'a BtSnapshot) -> Element<'a, SettingsMessage, Theme, Renderer> {
     let header = row![
-        text("Bluetooth").size(18).width(Length::Fill),
-        button(text(if b.powered { "On" } else { "Off" })).on_press(SettingsMessage::BtPower(!b.powered)).style(control::action),
+        text(t!("Bluetooth")).size(18).width(Length::Fill),
+        button(text(if b.powered { t!("On") } else { t!("Off") })).on_press(SettingsMessage::BtPower(!b.powered)).style(control::action),
     ].spacing(8);
     let mut rows: Vec<Element<'a, SettingsMessage, Theme, Renderer>> = vec![header.into()];
     if !b.available {
-        rows.push(text("BlueZ unavailable.").into());
+        rows.push(text(t!("BlueZ unavailable.")).into());
     }
     if b.discovering {
-        rows.push(text("Scanning...").size(12).into());
+        rows.push(text(t!("Scanning...")).size(12).into());
     }
     for d in &b.devices {
         let name = if d.name.is_empty() { d.address.clone() } else { d.name.clone() };
-        let status = if d.connected { " - connected" } else if d.paired { " - paired" } else { "" };
+        let status = if d.connected { t!(" - connected") } else if d.paired { t!(" - paired") } else { "" };
         let (lbl, msg) = if d.paired {
-            ("Connect", SettingsMessage::BtConnect(d.path.clone()))
+            (t!("Connect"), SettingsMessage::BtConnect(d.path.clone()))
         } else {
-            ("Pair", SettingsMessage::BtPair(d.path.clone()))
+            (t!("Pair"), SettingsMessage::BtPair(d.path.clone()))
         };
         rows.push(
             row![text(format!("{name}{status}")).width(Length::Fill), button(text(lbl)).on_press(msg).style(control::action)]

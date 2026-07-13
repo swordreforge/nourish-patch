@@ -2,6 +2,7 @@
 //! a countdown; the user must click Continue within the window or the capture
 //! stops. Its own small centered screen-space instance.
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Background, Border, Element, Length, Shadow, Theme};
 use iced_widget::{button, column, container, row, text};
 use compositor_y5_graphic_capture_session::message::CaptureMessage;
@@ -30,7 +31,7 @@ impl IcedUi for ContinueDialog {
     }
 
     fn view(&self) -> Element<'_, Self::Message, Theme, Renderer> {
-        let title = text("Still capturing?").size(20).color(style::TEXT);
+        let title = text(t!("Still capturing?")).size(20).color(style::TEXT);
         let sub = text(format!(
             "Continue within {}s or the capture will stop.",
             self.seconds
@@ -39,11 +40,11 @@ impl IcedUi for ContinueDialog {
         .color(style::TEXT_DIM);
 
         let buttons = row![
-            button(text("Continue").size(15).color(style::TEXT))
+            button(text(t!("Continue")).size(15).color(style::TEXT))
                 .padding([8, 18])
                 .on_press(CaptureMessage::ContinueCapture)
                 .style(style::button_with(style::ACCENT)),
-            button(text("Stop").size(15).color(style::TEXT))
+            button(text(t!("Stop")).size(15).color(style::TEXT))
                 .padding([8, 18])
                 .on_press(CaptureMessage::StopFromDialog)
                 .style(style::button_with(style::STOP_BG)),

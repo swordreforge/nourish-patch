@@ -8,6 +8,7 @@ use compositor_configurator_settings_surface_preview::preview::ParallaxPreview;
 use compositor_configurator_settings_surface_style::style;
 use compositor_support_iced_core_engine_base::Renderer;
 use iced_core::{Alignment, Element, Length, Padding, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, column, container, row, scrollable, shader, slider, text, toggler};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -24,8 +25,8 @@ pub fn build<'a>(
     srgb: bool,
 ) -> El<'a> {
     column![
-        text("CURRENT WORLD").size(16).color(style::ACCENT),
-        text("The parallax shader rendered behind your workspace. Reacts to zoom & pan.")
+        text(t!("CURRENT WORLD")).size(16).color(style::ACCENT),
+        text(t!("The parallax shader rendered behind your workspace. Reacts to zoom & pan."))
             .size(11).color(style::MUTED),
         preview_or_error(props, preview_source, status),
         display_row(invert_pan_x, invert_pan_y, srgb),
@@ -48,10 +49,10 @@ fn display_row<'a>(invert_pan_x: bool, invert_pan_y: bool, srgb: bool) -> El<'a>
     };
     container(
         row![
-            text("DISPLAY").size(10).color(style::MUTED).width(Length::Fill),
-            toggle("Invert pan X", invert_pan_x, SettingsMessage::SetWorldInvertPanX),
-            toggle("Invert pan Y", invert_pan_y, SettingsMessage::SetWorldInvertPanY),
-            toggle("sRGB colour", srgb, SettingsMessage::SetWorldSrgb),
+            text(t!("DISPLAY")).size(10).color(style::MUTED).width(Length::Fill),
+            toggle(t!("Invert pan X"), invert_pan_x, SettingsMessage::SetWorldInvertPanX),
+            toggle(t!("Invert pan Y"), invert_pan_y, SettingsMessage::SetWorldInvertPanY),
+            toggle(t!("sRGB colour"), srgb, SettingsMessage::SetWorldSrgb),
         ].spacing(20).align_y(Alignment::Center).padding(12),
     ).style(style::card).width(Length::Fill).into()
 }
@@ -61,8 +62,8 @@ fn display_row<'a>(invert_pan_x: bool, invert_pan_y: bool, srgb: bool) -> El<'a>
 fn preview_or_error<'a>(props: &'a [ShaderProp], source: &'a str, status: Option<&'a str>) -> El<'a> {
     if let Some(err) = status {
         let body = column![
-            text("\u{26A0} SHADER FAILED TO COMPILE").size(12).color(style::ACCENT),
-            text("The built-in parallax is running. Fix the shader and re-select it.")
+            text(t!("\u{26A0} SHADER FAILED TO COMPILE")).size(12).color(style::ACCENT),
+            text(t!("The built-in parallax is running. Fix the shader and re-select it."))
                 .size(11).color(style::MUTED),
             text(err.to_string()).size(10).color(style::MUTED),
         ].spacing(8).padding(16);
@@ -80,7 +81,7 @@ fn preview_pane<'a>(props: &'a [ShaderProp], source: &'a str) -> El<'a> {
         if p.slot < 16 { params[p.slot] = p.value; }
     }
     let inner: El<'a> = if source.is_empty() {
-        container(text("Preparing preview\u{2026}").size(11).color(style::MUTED))
+        container(text(t!("Preparing preview\u{2026}")).size(11).color(style::MUTED))
             .padding(16).into()
     } else {
         shader(ParallaxPreview { source: source.to_string(), params })
@@ -97,8 +98,8 @@ fn shader_list<'a>(shaders: &'a [String], current: Option<&'a str>) -> El<'a> {
             .on_press(SettingsMessage::SetWorldShader(value))
             .style(control::sidebar_item(selected)).into()
     };
-    let mut col = column![text("SHADER").size(10).color(style::MUTED)].spacing(4);
-    col = col.push(item("Built-in parallax".into(), String::new(), current.is_none()));
+    let mut col = column![text(t!("SHADER")).size(10).color(style::MUTED)].spacing(4);
+    col = col.push(item(t!("Built-in parallax").into(), String::new(), current.is_none()));
     for s in shaders {
         col = col.push(item(shader_label(s), s.clone(), current == Some(s.as_str())));
     }
@@ -126,9 +127,9 @@ fn shader_label(value: &str) -> String {
 
 fn variables<'a>(props: &'a [ShaderProp]) -> El<'a> {
     if props.is_empty() {
-        return text("This shader exposes no variables.").size(11).color(style::MUTED).into();
+        return text(t!("This shader exposes no variables.")).size(11).color(style::MUTED).into();
     }
-    let mut col = column![text("VARIABLES").size(10).color(style::MUTED)].spacing(10);
+    let mut col = column![text(t!("VARIABLES")).size(10).color(style::MUTED)].spacing(10);
     for p in props {
         col = col.push(variable_row(p, props));
     }

@@ -2,6 +2,7 @@
 //! (e.g. no working hardware video encoder). A message + a single OK button that
 //! emits [`CaptureMessage::Discard`] (the interface tears the capture down).
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Background, Border, Element, Length, Shadow, Theme};
 use iced_widget::{button, column, container, text};
 use compositor_y5_graphic_capture_session::message::CaptureMessage;
@@ -27,9 +28,9 @@ impl IcedUi for ErrorDialog {
     fn update(&mut self, _message: Self::Message) {}
 
     fn view(&self) -> Element<'_, Self::Message, Theme, Renderer> {
-        let title = text("Capture error").size(20).color(style::STOP_BG);
+        let title = text(t!("Capture error")).size(20).color(style::STOP_BG);
         let msg = text(self.message.clone()).size(14).color(style::TEXT_DIM);
-        let ok = button(text("OK").size(15).color(style::TEXT))
+        let ok = button(text(t!("OK")).size(15).color(style::TEXT))
             .padding([8, 18])
             .on_press(CaptureMessage::Discard)
             .style(style::button_with(style::ACCENT));

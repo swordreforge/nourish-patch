@@ -5,6 +5,7 @@
 //! either the Unlock button or the Enter key) into `Attempt(pin)`
 //! carrying a cloned `ZeroString` — the clone is also zeroed on drop.
 
+use compositor_support_library_i18n_base_core::t;
 use compositor_support_library_pam_worker_base::zero_string;
 use iced_core::alignment::{Horizontal, Vertical};
 use iced_core::keyboard::key::Named;
@@ -149,7 +150,7 @@ impl IcedUi for LockSurface {
 
     fn view(&self) -> Element<'_, Self::Message, Theme, Renderer> {
         let dot_display: Element<_, _, _> = if self.pin.is_empty() {
-            text("Enter password")
+            text(t!("Enter password"))
                 .size(15)
                 .color(Color::from_rgba(1.0, 1.0, 1.0, 0.4))
                 .into()
@@ -186,14 +187,14 @@ impl IcedUi for LockSurface {
                 .size(13)
                 .color(Color::from_rgb(0.95, 0.45, 0.45))
                 .into(),
-            None => text("Press Enter to unlock")
+            None => text(t!("Press Enter to unlock"))
                 .size(12)
                 .color(Color::from_rgba(1.0, 1.0, 1.0, 0.4))
                 .into(),
         };
 
         let unlock_button = button(
-            text("Unlock")
+            text(t!("Unlock"))
                 .size(14)
                 .align_x(Horizontal::Center)
                 .width(Length::Fill),
@@ -208,7 +209,7 @@ impl IcedUi for LockSurface {
 
         let card = container(
             column![
-                text("Locked").size(28).color(Color::WHITE),
+                text(t!("Locked")).size(28).color(Color::WHITE),
                 Space::new().height(28),
                 input_box,
                 Space::new().height(10),

@@ -8,6 +8,7 @@ use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use iced_core::{Alignment, Element, Length, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, column, container, row, text, text_input, toggler};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -41,15 +42,15 @@ pub fn rows<'a>(k: &'a KeyboardLayout) -> Vec<El<'a>> {
     let manual = k.source == LayoutSource::Manual;
 
     let head = column![
-        text("KEYBOARD LAYOUT").size(14).color(style::ACCENT),
-        text("Applied live. Use the environment (XKB_DEFAULT_*) or set it explicitly.").size(11).color(style::MUTED),
+        text(t!("KEYBOARD LAYOUT")).size(14).color(style::ACCENT),
+        text(t!("Applied live. Use the environment (XKB_DEFAULT_*) or set it explicitly.")).size(11).color(style::MUTED),
     ].spacing(4);
 
     // Source toggle: on = use the environment (disables the manual controls below).
     let src = k.clone();
     let source_row = card(
         row![
-            text("Use environment (XKB_DEFAULT_*)").width(Length::Fill),
+            text(t!("Use environment (XKB_DEFAULT_*)")).width(Length::Fill),
             toggler(k.source == LayoutSource::Env)
                 .on_toggle(move |env| {
                     let mut x = src.clone();
@@ -63,7 +64,7 @@ pub fn rows<'a>(k: &'a KeyboardLayout) -> Vec<El<'a>> {
     // Layout: a selectable list (● = current, accent = selected). Clickable only in
     // Manual mode; under Env every row uses the greyed `disabled` style with no
     // `on_press`, so the whole list looks and behaves inert.
-    let mut out: Vec<El<'a>> = vec![head.into(), source_row, text("LAYOUT").size(11).color(style::MUTED).into()];
+    let mut out: Vec<El<'a>> = vec![head.into(), source_row, text(t!("LAYOUT")).size(11).color(style::MUTED).into()];
     for (code, label) in LAYOUTS {
         let selected = k.layout == *code;
         let mark = if selected { "●" } else { "○" };
@@ -91,7 +92,7 @@ pub fn rows<'a>(k: &'a KeyboardLayout) -> Vec<El<'a>> {
         }
     };
     out.push(card(
-        row![text("Variant").width(Length::Fill), variant_ctl].align_y(Alignment::Center).spacing(10).padding(12).into(),
+        row![text(t!("Variant")).width(Length::Fill), variant_ctl].align_y(Alignment::Center).spacing(10).padding(12).into(),
     ));
 
     let options_ctl = {
@@ -104,7 +105,7 @@ pub fn rows<'a>(k: &'a KeyboardLayout) -> Vec<El<'a>> {
         }
     };
     out.push(card(
-        row![text("Options").width(Length::Fill), options_ctl].align_y(Alignment::Center).spacing(10).padding(12).into(),
+        row![text(t!("Options")).width(Length::Fill), options_ctl].align_y(Alignment::Center).spacing(10).padding(12).into(),
     ));
 
     out

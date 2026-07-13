@@ -1,7 +1,9 @@
 //! Per-frame HUD pushes for the overview: the menu-bar clock (local HH:MM, pushed
 //! once a minute) and the Display-panel FPS (EMA, pushed ~every 30 frames). The
 //! throttles keep the iced surfaces from re-rendering every frame.
+use compositor_support_library_i18n_base_core::t;
 use std::cell::RefCell;
+use std::sync::LazyLock;
 use std::time::Instant;
 use smithay::utils::{Physical, Size};
 use compositor_orchestration_core_state_base::Loop;
@@ -12,8 +14,8 @@ use compositor_configurator_settings_surface_view::Settings;
 use compositor_orchestration_driver_settings_base::base::SETTINGS;
 use compositor_y5_overview_state_base::base::MENU_BAR_HEIGHT;
 
-const DOW: [&str; 7] = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-const MON: [&str; 12] = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+static DOW: LazyLock<[&str; 7]> = LazyLock::new(|| [t!("SUN"), t!("MON"), t!("TUE"), t!("WED"), t!("THU"), t!("FRI"), t!("SAT")]);
+static MON: LazyLock<[&str; 12]> = LazyLock::new(|| [t!("JAN"), t!("FEB"), t!("MAR"), t!("APR"), t!("MAY"), t!("JUN"), t!("JUL"), t!("AUG"), t!("SEP"), t!("OCT"), t!("NOV"), t!("DEC")]);
 
 thread_local! {
     static CLOCK_MIN: RefCell<i64> = const { RefCell::new(-1) };
@@ -99,7 +101,7 @@ fn battery(state: &mut Loop) {
     if !changed {
         return;
     }
-    let label = now.map(|(cap, charging)| format!("{} {cap}%", if charging { "CHG" } else { "BAT" }));
+    let label = now.map(|(cap, charging)| format!("{} {cap}%", if charging { t!("CHG") } else { t!("BAT") }));
     if let Some(reg) = state.inner.surface_mut().registry.as_mut() {
         let _ = reg.dispatch_message(IcedHandle::<OverviewMenu>::from_id(menu), OverviewMessage::Battery(label));
     }

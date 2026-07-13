@@ -1,6 +1,7 @@
 //! Bottom-right details panel: a big borderless world name (click to edit) and a
 //! small Delete with inline confirmation. No background — it floats over the
 //! scene, right-aligned.
+use compositor_support_library_i18n_base_core::t;
 use iced_core::alignment::Horizontal;
 use iced_core::{Background, Border, Color, Element, Length, Theme};
 use iced_widget::{button, column, container, row, text, text_input, Space};
@@ -73,14 +74,14 @@ impl IcedUi for PickerSurface {
             Space::new().into()
         } else if self.confirming {
             row![
-                text("Delete?").size(13).color(Color::from_rgba(1.0, 0.7, 0.7, 0.9)),
+                text(t!("Delete?")).size(13).color(Color::from_rgba(1.0, 0.7, 0.7, 0.9)),
                 Space::new().width(10),
-                tap("Yes", PickerSurfaceMessage::DeleteConfirm),
+                tap(t!("Yes"), PickerSurfaceMessage::DeleteConfirm),
                 Space::new().width(10),
-                tap("No", PickerSurfaceMessage::DeleteCancel),
+                tap(t!("No"), PickerSurfaceMessage::DeleteCancel),
             ].into()
         } else {
-            tap("Delete", PickerSurfaceMessage::DeleteRequest)
+            tap(t!("Delete"), PickerSurfaceMessage::DeleteRequest)
         };
 
         container(column![name, Space::new().height(6), action].align_x(Horizontal::Right))

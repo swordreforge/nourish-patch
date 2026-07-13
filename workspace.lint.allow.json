@@ -407,5 +407,8 @@
   ],
   "compositor.installer/installer.process/process.packages/packages.enumerate/enumerate.platform": [
     "size"
+  ],
+  "compositor.support/support.library/library.i18n/i18n.base/base.core": [
+    "size"
   ]
 }

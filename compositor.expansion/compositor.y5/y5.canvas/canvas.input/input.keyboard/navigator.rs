@@ -1,3 +1,4 @@
+use compositor_support_library_i18n_base_core::t;
 use smithay::backend::input::KeyState;
 use smithay::desktop::Window;
 use smithay::input::keyboard::{KeysymHandle, ModifiersState};
@@ -307,35 +308,35 @@ struct Bind {
 /// Single source of truth for the canvas/navigation/zone/lock shortcuts.
 fn bindings() -> Vec<Bind> {
     vec![
-        Bind { id: "launcher", label: "Open launcher", default: shortcut!(Super + N), action: Box::new(|s| { launcher_delegate(s); true }) },
-        Bind { id: "capture", label: "Screen capture", default: shortcut!(Super + S), action: Box::new(|s| { compositor_y5_graphic_capture_interface::interface::request_setup(s); true }) },
-        Bind { id: "fullscreen_exit", label: "Exit fullscreen", default: shortcut!(F11), action: Box::new(|s| fullscreen_unset_focused(s)) },
-        Bind { id: "zone_1", label: "Zone 1", default: shortcut!(Super + Num1), action: Box::new(|s| { zone_delegate(s, "f1", false); true }) },
-        Bind { id: "zone_2", label: "Zone 2", default: shortcut!(Super + Num2), action: Box::new(|s| { zone_delegate(s, "f2", false); true }) },
-        Bind { id: "zone_3", label: "Zone 3", default: shortcut!(Super + Num3), action: Box::new(|s| { zone_delegate(s, "f3", false); true }) },
-        Bind { id: "zone_4", label: "Zone 4", default: shortcut!(Super + Num4), action: Box::new(|s| { zone_delegate(s, "f4", false); true }) },
-        Bind { id: "zone_5", label: "Zone 5", default: shortcut!(Super + Num5), action: Box::new(|s| { zone_delegate(s, "f5", false); true }) },
-        Bind { id: "zone_6", label: "Zone 6", default: shortcut!(Super + Num6), action: Box::new(|s| { zone_delegate(s, "f6", false); true }) },
-        Bind { id: "zone_set_1", label: "Set zone 1", default: shortcut!(Super + Shift + Num1), action: Box::new(|s| { zone_delegate(s, "f1", true); true }) },
-        Bind { id: "zone_set_2", label: "Set zone 2", default: shortcut!(Super + Shift + Num2), action: Box::new(|s| { zone_delegate(s, "f2", true); true }) },
-        Bind { id: "zone_set_3", label: "Set zone 3", default: shortcut!(Super + Shift + Num3), action: Box::new(|s| { zone_delegate(s, "f3", true); true }) },
-        Bind { id: "zone_set_4", label: "Set zone 4", default: shortcut!(Super + Shift + Num4), action: Box::new(|s| { zone_delegate(s, "f4", true); true }) },
-        Bind { id: "zone_set_5", label: "Set zone 5", default: shortcut!(Super + Shift + Num5), action: Box::new(|s| { zone_delegate(s, "f5", true); true }) },
-        Bind { id: "zone_set_6", label: "Set zone 6", default: shortcut!(Super + Shift + Num6), action: Box::new(|s| { zone_delegate(s, "f6", true); true }) },
-        Bind { id: "group_all", label: "Group (join)", default: shortcut!(Super + Alt + G), action: Box::new(|s| { group_delegate(s, true); true }) },
-        Bind { id: "group", label: "Group", default: shortcut!(Super + G), action: Box::new(|s| { group_delegate(s, false); true }) },
-        Bind { id: "zoom_fit", label: "Zoom: fit", default: shortcut!(Super + Alt + F), action: Box::new(|s| { zoom_delegate(s, false, false); true }) },
-        Bind { id: "zoom_focus", label: "Zoom: focus", default: shortcut!(Super + F), action: Box::new(|s| { zoom_delegate(s, true, false); true }) },
-        Bind { id: "zoom_focus_max", label: "Fit to screen", default: shortcut!(Super + Shift + Alt + F), action: Box::new(|s| { zoom_delegate(s, true, true); true }) },
-        Bind { id: "nav_right", label: "Navigate right", default: shortcut!(Super + Right), action: Box::new(|s| { move_direction(s, Direction::Right, true); true }) },
-        Bind { id: "nav_left", label: "Navigate left", default: shortcut!(Super + Left), action: Box::new(|s| { move_direction(s, Direction::Left, true); true }) },
-        Bind { id: "nav_up", label: "Navigate up", default: shortcut!(Super + Up), action: Box::new(|s| { move_direction(s, Direction::Up, true); true }) },
-        Bind { id: "nav_down", label: "Navigate down", default: shortcut!(Super + Down), action: Box::new(|s| { move_direction(s, Direction::Down, true); true }) },
-        Bind { id: "move_right", label: "Navigate right and zoom", default: shortcut!(Super + Alt + Right), action: Box::new(|s| { move_direction(s, Direction::Right, false); true }) },
-        Bind { id: "move_left", label: "Navigate left and zoom", default: shortcut!(Super + Alt + Left), action: Box::new(|s| { move_direction(s, Direction::Left, false); true }) },
-        Bind { id: "move_up", label: "Navigate up and zoom", default: shortcut!(Super + Alt + Up), action: Box::new(|s| { move_direction(s, Direction::Up, false); true }) },
-        Bind { id: "move_down", label: "Navigate down and zoom", default: shortcut!(Super + Alt + Down), action: Box::new(|s| { move_direction(s, Direction::Down, false); true }) },
-        Bind { id: "lock", label: "Lock screen", default: shortcut!(Super + L), action: Box::new(|s| { lock(s); true }) },
+        Bind { id: "launcher", label: t!("Open launcher"), default: shortcut!(Super + N), action: Box::new(|s| { launcher_delegate(s); true }) },
+        Bind { id: "capture", label: t!("Screen capture"), default: shortcut!(Super + S), action: Box::new(|s| { compositor_y5_graphic_capture_interface::interface::request_setup(s); true }) },
+        Bind { id: "fullscreen_exit", label: t!("Exit fullscreen"), default: shortcut!(F11), action: Box::new(|s| fullscreen_unset_focused(s)) },
+        Bind { id: "zone_1", label: t!("Zone 1"), default: shortcut!(Super + Num1), action: Box::new(|s| { zone_delegate(s, "f1", false); true }) },
+        Bind { id: "zone_2", label: t!("Zone 2"), default: shortcut!(Super + Num2), action: Box::new(|s| { zone_delegate(s, "f2", false); true }) },
+        Bind { id: "zone_3", label: t!("Zone 3"), default: shortcut!(Super + Num3), action: Box::new(|s| { zone_delegate(s, "f3", false); true }) },
+        Bind { id: "zone_4", label: t!("Zone 4"), default: shortcut!(Super + Num4), action: Box::new(|s| { zone_delegate(s, "f4", false); true }) },
+        Bind { id: "zone_5", label: t!("Zone 5"), default: shortcut!(Super + Num5), action: Box::new(|s| { zone_delegate(s, "f5", false); true }) },
+        Bind { id: "zone_6", label: t!("Zone 6"), default: shortcut!(Super + Num6), action: Box::new(|s| { zone_delegate(s, "f6", false); true }) },
+        Bind { id: "zone_set_1", label: t!("Set zone 1"), default: shortcut!(Super + Shift + Num1), action: Box::new(|s| { zone_delegate(s, "f1", true); true }) },
+        Bind { id: "zone_set_2", label: t!("Set zone 2"), default: shortcut!(Super + Shift + Num2), action: Box::new(|s| { zone_delegate(s, "f2", true); true }) },
+        Bind { id: "zone_set_3", label: t!("Set zone 3"), default: shortcut!(Super + Shift + Num3), action: Box::new(|s| { zone_delegate(s, "f3", true); true }) },
+        Bind { id: "zone_set_4", label: t!("Set zone 4"), default: shortcut!(Super + Shift + Num4), action: Box::new(|s| { zone_delegate(s, "f4", true); true }) },
+        Bind { id: "zone_set_5", label: t!("Set zone 5"), default: shortcut!(Super + Shift + Num5), action: Box::new(|s| { zone_delegate(s, "f5", true); true }) },
+        Bind { id: "zone_set_6", label: t!("Set zone 6"), default: shortcut!(Super + Shift + Num6), action: Box::new(|s| { zone_delegate(s, "f6", true); true }) },
+        Bind { id: "group_all", label: t!("Group (join)"), default: shortcut!(Super + Alt + G), action: Box::new(|s| { group_delegate(s, true); true }) },
+        Bind { id: "group", label: t!("Group"), default: shortcut!(Super + G), action: Box::new(|s| { group_delegate(s, false); true }) },
+        Bind { id: "zoom_fit", label: t!("Zoom: fit"), default: shortcut!(Super + Alt + F), action: Box::new(|s| { zoom_delegate(s, false, false); true }) },
+        Bind { id: "zoom_focus", label: t!("Zoom: focus"), default: shortcut!(Super + F), action: Box::new(|s| { zoom_delegate(s, true, false); true }) },
+        Bind { id: "zoom_focus_max", label: t!("Fit to screen"), default: shortcut!(Super + Shift + Alt + F), action: Box::new(|s| { zoom_delegate(s, true, true); true }) },
+        Bind { id: "nav_right", label: t!("Navigate right"), default: shortcut!(Super + Right), action: Box::new(|s| { move_direction(s, Direction::Right, true); true }) },
+        Bind { id: "nav_left", label: t!("Navigate left"), default: shortcut!(Super + Left), action: Box::new(|s| { move_direction(s, Direction::Left, true); true }) },
+        Bind { id: "nav_up", label: t!("Navigate up"), default: shortcut!(Super + Up), action: Box::new(|s| { move_direction(s, Direction::Up, true); true }) },
+        Bind { id: "nav_down", label: t!("Navigate down"), default: shortcut!(Super + Down), action: Box::new(|s| { move_direction(s, Direction::Down, true); true }) },
+        Bind { id: "move_right", label: t!("Navigate right and zoom"), default: shortcut!(Super + Alt + Right), action: Box::new(|s| { move_direction(s, Direction::Right, false); true }) },
+        Bind { id: "move_left", label: t!("Navigate left and zoom"), default: shortcut!(Super + Alt + Left), action: Box::new(|s| { move_direction(s, Direction::Left, false); true }) },
+        Bind { id: "move_up", label: t!("Navigate up and zoom"), default: shortcut!(Super + Alt + Up), action: Box::new(|s| { move_direction(s, Direction::Up, false); true }) },
+        Bind { id: "move_down", label: t!("Navigate down and zoom"), default: shortcut!(Super + Alt + Down), action: Box::new(|s| { move_direction(s, Direction::Down, false); true }) },
+        Bind { id: "lock", label: t!("Lock screen"), default: shortcut!(Super + L), action: Box::new(|s| { lock(s); true }) },
     ]
 }
 
@@ -385,10 +386,10 @@ pub fn fixed() -> Vec<KeyRow> {
         KeyRow { id: String::new(), label: label.to_string(), default: s.clone(), combo: s, editable: false }
     };
     vec![
-        mk("Move / pan window (hold + drag)", true, false, false, false),
-        mk("Scale window (hold + drag)", true, false, false, true),
-        mk("Select box (hold + drag)", true, false, true, false),
-        mk("Select box, add (hold + drag)", true, false, true, true),
-        mk("Hand tool", true, true, true, false),
+        mk(t!("Move / pan window (hold + drag)"), true, false, false, false),
+        mk(t!("Scale window (hold + drag)"), true, false, false, true),
+        mk(t!("Select box (hold + drag)"), true, false, true, false),
+        mk(t!("Select box, add (hold + drag)"), true, false, true, true),
+        mk(t!("Hand tool"), true, true, true, false),
     ]
 }

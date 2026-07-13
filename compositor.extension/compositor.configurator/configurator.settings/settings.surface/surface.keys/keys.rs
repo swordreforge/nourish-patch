@@ -7,12 +7,13 @@ use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use iced_core::alignment::Horizontal;
 use iced_core::{Alignment, Element, Length, Padding, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, column, container, row, scrollable, text, text_input, toggler, Column};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
 
 pub fn build<'a>(keys: &'a [KeyRow]) -> El<'a> {
-    let mut rows: Vec<El<'a>> = vec![text("KEYBOARD BINDINGS").size(16).color(style::ACCENT).into()];
+    let mut rows: Vec<El<'a>> = vec![text(t!("KEYBOARD BINDINGS")).size(16).color(style::ACCENT).into()];
     for k in keys {
         let right: El<'a> = if k.editable {
             let id = k.id.clone();

@@ -5,6 +5,7 @@ use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use iced_core::{Alignment, Element, Length, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, column, container, row, slider, text, toggler};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -16,12 +17,12 @@ fn reset<'a>(msg: SettingsMessage) -> El<'a> {
 
 pub fn build<'a>(sensitivity: f32, natural: bool) -> El<'a> {
     let head = column![
-        text("INPUT").size(16).color(style::ACCENT),
-        text("Pointer, navigation, and movement.").size(11).color(style::MUTED),
+        text(t!("INPUT")).size(16).color(style::ACCENT),
+        text(t!("Pointer, navigation, and movement.")).size(11).color(style::MUTED),
     ].spacing(4);
     let speed = column![
         row![
-            text("POINTER SPEED").size(12).color(style::MUTED).width(Length::Fill),
+            text(t!("POINTER SPEED")).size(12).color(style::MUTED).width(Length::Fill),
             text(format!("{sensitivity:.2}×")).size(12).color(style::ACCENT),
             reset(SettingsMessage::Cursor(1.0)),
         ].spacing(10).align_y(Alignment::Center),
@@ -29,7 +30,7 @@ pub fn build<'a>(sensitivity: f32, natural: bool) -> El<'a> {
     ].spacing(8);
     let natural_row = container(
         row![
-            text("Natural scroll (touchpad)").width(Length::Fill),
+            text(t!("Natural scroll (touchpad)")).width(Length::Fill),
             toggler(natural).on_toggle(SettingsMessage::NaturalScroll).style(control::toggler),
             reset(SettingsMessage::NaturalScroll(true)),
         ].align_y(Alignment::Center).spacing(10).padding(12),

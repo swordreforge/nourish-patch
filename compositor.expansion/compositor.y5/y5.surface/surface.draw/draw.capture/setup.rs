@@ -8,6 +8,7 @@
 //! reads them off the instance on Confirm (it reads the live canvas selection
 //! itself for the Windows case).
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Background, Border, Element, Length, Shadow, Theme};
 use iced_widget::{button, column, container, mouse_area, row, text};
 use compositor_y5_graphic_capture_session::message::{
@@ -211,11 +212,11 @@ impl SetupOverlay {
         };
 
         let actions = row![
-            button(text("Confirm").size(15).color(style::TEXT))
+            button(text(t!("Confirm")).size(15).color(style::TEXT))
                 .padding([8, 18])
                 .on_press(CaptureMessage::Confirm)
                 .style(style::button_with(style::ACCENT)),
-            button(text("Cancel").size(15).color(style::TEXT))
+            button(text(t!("Cancel")).size(15).color(style::TEXT))
                 .padding([8, 18])
                 .on_press(CaptureMessage::Cancel)
                 .style(style::button_with(style::BUTTON_BG)),
@@ -223,16 +224,16 @@ impl SetupOverlay {
         .spacing(8);
 
         let hint = text(match self.kind {
-            TargetKind::Windows => "Capturing the selected windows.",
-            TargetKind::WorldRegion => "Drag to draw a region (moves with the world).",
-            TargetKind::ScreenRegion => "Drag to draw a region (fixed on screen).",
-            TargetKind::FullScreen => "Capturing the whole screen.",
+            TargetKind::Windows => t!("Capturing the selected windows."),
+            TargetKind::WorldRegion => t!("Drag to draw a region (moves with the world)."),
+            TargetKind::ScreenRegion => t!("Drag to draw a region (fixed on screen)."),
+            TargetKind::FullScreen => t!("Capturing the whole screen."),
         })
         .size(13)
         .color(style::TEXT_DIM);
 
         let panel = column![
-            text("Capture setup").size(18).color(style::TEXT),
+            text(t!("Capture setup")).size(18).color(style::TEXT),
             kinds,
             media,
             options,

@@ -5,6 +5,7 @@ edition = "2024"
 
 
 [dependencies]
+compositor_support_library_i18n_base_core = { workspace = true }
 compositor_developer_environment_keybinding_base.workspace = true
 compositor_support_library_input_keyboard_format.workspace = true
 compositor_y5_select_system_base = { workspace = true }

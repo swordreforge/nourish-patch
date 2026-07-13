@@ -26,6 +26,7 @@ use compositor_configurator_settings_surface_world::world;
 use compositor_configurator_settings_surface_graphics::graphics;
 use compositor_developer_environment_graphics_base::base::GraphicsAaConfig;
 use iced_core::{Alignment, Element, Length, Padding, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, column, container, row, scrollable, text, toggler};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -42,38 +43,38 @@ fn module<'a>(icon: &'a str, label: &'a str, t: Tab, sel: Tab) -> El<'a> {
 
 fn sidebar<'a>(sel: Tab) -> El<'a> {
     let list = column![
-        text("CONFIG MODULES").size(10).color(style::MUTED),
-        module("◑", "CURRENT WORLD", Tab::World, sel),
-        module("▦", "DISPLAY", Tab::Display, sel),
-        module("♪", "AUDIO", Tab::Audio, sel),
-        module("⌨", "INPUT", Tab::Input, sel),
-        module("≋", "NETWORK", Tab::Network, sel),
-        module("❖", "BLUETOOTH", Tab::Bluetooth, sel),
-        module("▲", "PERFORMANCE", Tab::Performance, sel),
-        module("⚙", "SYSTEM", Tab::System, sel),
-        module("◆", "GRAPHICS", Tab::Graphics, sel),
-        module("⋯", "MISC", Tab::Misc, sel),
+        text(t!("CONFIG MODULES")).size(10).color(style::MUTED),
+        module("◑", t!("CURRENT WORLD"), Tab::World, sel),
+        module("▦", t!("DISPLAY"), Tab::Display, sel),
+        module("♪", t!("AUDIO"), Tab::Audio, sel),
+        module("⌨", t!("INPUT"), Tab::Input, sel),
+        module("≋", t!("NETWORK"), Tab::Network, sel),
+        module("❖", t!("BLUETOOTH"), Tab::Bluetooth, sel),
+        module("▲", t!("PERFORMANCE"), Tab::Performance, sel),
+        module("⚙", t!("SYSTEM"), Tab::System, sel),
+        module("◆", t!("GRAPHICS"), Tab::Graphics, sel),
+        module("⋯", t!("MISC"), Tab::Misc, sel),
     ].spacing(4).padding(14);
     container(list).width(fixed(224.0)).height(Length::Fill).style(style::sidebar).into()
 }
 
 fn titlebar<'a>(dirty: bool) -> El<'a> {
-    let sub = if dirty { "y5 COMPOSITOR · REBOOT TO APPLY SOME CHANGES" } else { "y5 COMPOSITOR · RUNTIME CONFIG" };
+    let sub = if dirty { t!("y5 COMPOSITOR · REBOOT TO APPLY SOME CHANGES") } else { t!("y5 COMPOSITOR · RUNTIME CONFIG") };
     let title = column![
-        text("SYSTEM CONFIGURATION").size(20),
+        text(t!("SYSTEM CONFIGURATION")).size(20),
         text(sub).size(10).color(style::MUTED),
     ].spacing(3);
     container(title).style(style::strip).width(Length::Fill).padding(Padding::from([14, 22])).into()
 }
 
 fn performance<'a>(fps: u32, show_fps: bool, release_hidden: bool) -> El<'a> {
-    let cell = container(row![text("FRAME RATE").color(style::MUTED).width(Length::Fill), text(format!("{fps} FPS")).color(style::ACCENT)].align_y(Alignment::Center).padding(16))
+    let cell = container(row![text(t!("FRAME RATE")).color(style::MUTED).width(Length::Fill), text(format!("{fps} FPS")).color(style::ACCENT)].align_y(Alignment::Center).padding(16))
         .style(style::card).width(Length::Fill);
-    let overlay = container(row![text("FPS OVERLAY (per monitor)").color(style::MUTED).width(Length::Fill), toggler(show_fps).on_toggle(SettingsMessage::SetShowFps).style(control::toggler)].align_y(Alignment::Center).padding(16))
+    let overlay = container(row![text(t!("FPS OVERLAY (per monitor)")).color(style::MUTED).width(Length::Fill), toggler(show_fps).on_toggle(SettingsMessage::SetShowFps).style(control::toggler)].align_y(Alignment::Center).padding(16))
         .style(style::card).width(Length::Fill);
-    let release = container(row![text("RELEASE HIDDEN SURFACE MEMORY").color(style::MUTED).width(Length::Fill), toggler(release_hidden).on_toggle(SettingsMessage::SetReleaseHidden).style(control::toggler)].align_y(Alignment::Center).padding(16))
+    let release = container(row![text(t!("RELEASE HIDDEN SURFACE MEMORY")).color(style::MUTED).width(Length::Fill), toggler(release_hidden).on_toggle(SettingsMessage::SetReleaseHidden).style(control::toggler)].align_y(Alignment::Center).padding(16))
         .style(style::card).width(Length::Fill);
-    column![text("PERFORMANCE").size(16).color(style::ACCENT), text("Live runtime metrics.").size(11).color(style::MUTED), cell, overlay, release].spacing(12).into()
+    column![text(t!("PERFORMANCE")).size(16).color(style::ACCENT), text(t!("Live runtime metrics.")).size(11).color(style::MUTED), cell, overlay, release].spacing(12).into()
 }
 
 #[allow(clippy::too_many_arguments)]

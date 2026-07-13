@@ -1852,6 +1852,7 @@ dependencies = [
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "compositor_y5_audio_controller_interface",
  "iced_core",
  "iced_widget",
@@ -1873,6 +1874,7 @@ dependencies = [
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -1901,6 +1903,7 @@ dependencies = [
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -1955,6 +1958,7 @@ dependencies = [
  "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "compositor_y5_audio_controller_interface",
  "iced_core",
  "iced_widget",
@@ -1966,6 +1970,7 @@ version = "0.0.1"
 dependencies = [
  "compositor_configurator_settings_surface_style",
  "compositor_developer_debug_instance_record",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -1978,6 +1983,7 @@ dependencies = [
  "compositor_configurator_settings_surface_message",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -1992,6 +1998,7 @@ dependencies = [
  "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -2006,6 +2013,7 @@ dependencies = [
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_config_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -2020,6 +2028,7 @@ dependencies = [
  "compositor_developer_environment_graphics_base",
  "compositor_developer_stats_registry_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -2033,6 +2042,7 @@ dependencies = [
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_preference_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -2046,6 +2056,7 @@ dependencies = [
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_keybinding_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -2060,6 +2071,7 @@ dependencies = [
  "compositor_developer_environment_graphics_base",
  "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
+ "compositor_support_library_i18n_base_core",
  "compositor_y5_audio_controller_interface",
 ]
 
@@ -2073,6 +2085,7 @@ dependencies = [
  "compositor_configurator_settings_surface_style",
  "compositor_developer_environment_preference_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -2082,6 +2095,7 @@ name = "compositor_configurator_settings_surface_preview"
 version = "0.0.1"
 dependencies = [
  "compositor_configurator_settings_surface_message",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_wgpu",
  "iced_widget",
@@ -2093,6 +2107,7 @@ name = "compositor_configurator_settings_surface_style"
 version = "0.0.1"
 dependencies = [
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -2112,6 +2127,7 @@ dependencies = [
  "compositor_developer_environment_preference_base",
  "compositor_orchestration_driver_output_base",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "compositor_y5_audio_controller_interface",
  "iced_core",
 ]
@@ -2125,6 +2141,7 @@ dependencies = [
  "compositor_configurator_settings_surface_preview",
  "compositor_configurator_settings_surface_style",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -3141,6 +3158,7 @@ dependencies = [
  "compositor_orchestration_seat_pointer_state",
  "compositor_orchestration_seat_pointer_texture",
  "compositor_orchestration_seat_system_pointer",
+ "compositor_orchestration_seat_touch_state",
  "compositor_orchestration_storage_state_base",
  "compositor_orchestration_world_manager_base",
  "compositor_remote_message_server_base",
@@ -3372,6 +3390,15 @@ dependencies = [
  "compositor_orchestration_seat_pointer_state",
  "compositor_support_system_storage_token_base",
  "compositor_support_system_trait_system_base",
+ "smithay",
+]
+
+[[package]]
+name = "compositor_orchestration_seat_touch_state"
+version = "0.0.1"
+dependencies = [
+ "bitflags 2.13.0",
+ "compositor_developer_debug_instance_record",
  "smithay",
 ]
 
@@ -3784,6 +3811,10 @@ dependencies = [
  "thiserror 2.0.18",
  "wgpu",
 ]
+
+[[package]]
+name = "compositor_support_library_i18n_base_core"
+version = "0.1.0"
 
 [[package]]
 name = "compositor_support_library_input_keyboard_action"
@@ -5376,6 +5407,7 @@ name = "compositor_y5_lock_interface_surface"
 version = "0.1.0"
 dependencies = [
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "compositor_support_library_pam_worker_base",
  "iced_core",
  "iced_widget",
@@ -5478,6 +5510,7 @@ version = "0.0.1"
 dependencies = [
  "compositor_developer_debug_instance_record",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]
@@ -5563,6 +5596,7 @@ dependencies = [
  "compositor_introspection_launchplan_plan_base",
  "compositor_introspection_launchplan_plan_capture",
  "compositor_support_iced_core_engine_base",
+ "compositor_support_library_i18n_base_core",
  "iced_core",
  "iced_widget",
 ]

@@ -8,6 +8,7 @@ use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use compositor_configurator_settings_surface_keyboard::keyboard;
 use iced_core::{Alignment, Element, Length, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, column, container, row, scrollable, text, text_input, Column};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -18,31 +19,31 @@ fn card<'a>(inner: El<'a>) -> El<'a> {
 
 pub fn build<'a>(ime: &'a Ime, kbd: &'a KeyboardLayout) -> El<'a> {
     let head = column![
-        text("MISC").size(16).color(style::ACCENT),
-        text("Keyboard layout and the input method launched by the compositor.").size(11).color(style::MUTED),
+        text(t!("MISC")).size(16).color(style::ACCENT),
+        text(t!("Keyboard layout and the input method launched by the compositor.")).size(11).color(style::MUTED),
     ].spacing(4);
 
     let mut rows: Vec<El<'a>> = vec![head.into()];
     rows.extend(keyboard::rows(kbd));
 
     // Input-method section (applied on next start).
-    rows.push(text("INPUT METHOD").size(14).color(style::ACCENT).into());
-    rows.push(text("Launched by the compositor — applied on next start. Empty = none.").size(11).color(style::MUTED).into());
+    rows.push(text(t!("INPUT METHOD")).size(14).color(style::ACCENT).into());
+    rows.push(text(t!("Launched by the compositor — applied on next start. Empty = none.")).size(11).color(style::MUTED).into());
 
     // Executable (empty = no input method). The field owns a clone of the whole `Ime`
     // and re-emits it with `exec` replaced.
     let base = ime.clone();
-    let exec_field = text_input("e.g. fcitx5 (empty = no input method)", &ime.exec)
+    let exec_field = text_input(t!("e.g. fcitx5 (empty = no input method)"), &ime.exec)
         .width(Length::Fixed(280.0))
         .on_input(move |s| { let mut x = base.clone(); x.exec = s; SettingsMessage::Ime(x) });
     rows.push(card(
-        row![text("Input method exec").width(Length::Fill), exec_field]
+        row![text(t!("Input method exec")).width(Length::Fill), exec_field]
             .align_y(Alignment::Center).spacing(10).padding(12).into(),
     ));
 
     // Arguments: one editable row per arg with a remove (−), then a trailing add (+).
     // Button messages are computed at view time, so each carries the already-mutated `Ime`.
-    rows.push(text("ARGUMENTS").size(10).color(style::MUTED).into());
+    rows.push(text(t!("ARGUMENTS")).size(10).color(style::MUTED).into());
     for (idx, arg) in ime.args.iter().enumerate() {
         let base = ime.clone();
         let edit = text_input("argument", arg)
@@ -54,7 +55,7 @@ pub fn build<'a>(ime: &'a Ime, kbd: &'a KeyboardLayout) -> El<'a> {
             row![edit, remove].align_y(Alignment::Center).spacing(10).padding(12).into(),
         ));
     }
-    let add = button(text("+ add argument").size(12)).style(control::action)
+    let add = button(text(t!("+ add argument")).size(12)).style(control::action)
         .on_press({ let mut x = ime.clone(); x.args.push(String::new()); SettingsMessage::Ime(x) });
     rows.push(add.into());
 

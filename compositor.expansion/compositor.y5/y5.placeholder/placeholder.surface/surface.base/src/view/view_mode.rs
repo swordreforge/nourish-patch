@@ -9,6 +9,7 @@
 
 use std::path::PathBuf;
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{alignment, Alignment, Background, Border, Color, ContentFit, Element, Length, Padding, Shadow, Theme, Vector};
 use iced_widget::{button, column, container, image, row, svg, text, Space};
 use compositor_introspection_extraction_window_base::attributes::{DisplayName, IconPath};
@@ -56,7 +57,7 @@ pub fn render(ui: &PlaceholderUi) -> Element<'_, PlaceholderMessage, Theme, Rend
 
     let edit_btn =
         button(
-            text("Edit")
+            text(t!("Edit"))
                 .size(style::TEXT_SIZE_BODY)
                 .style(|_| iced_widget::text::Style {
                     color: Some(style::TEXT),
@@ -68,7 +69,7 @@ pub fn render(ui: &PlaceholderUi) -> Element<'_, PlaceholderMessage, Theme, Rend
     
     let dismiss_btn =
         button(
-            text("Dismiss")
+            text(t!("Dismiss"))
                 .size(style::TEXT_SIZE_BODY)
                 .style(|_| iced_widget::text::Style {
                     color: Some(style::TEXT),
@@ -80,7 +81,7 @@ pub fn render(ui: &PlaceholderUi) -> Element<'_, PlaceholderMessage, Theme, Rend
 
     let launch_btn =
         button(
-            text("Launch")
+            text(t!("Launch"))
                 .size(style::TEXT_SIZE_BODY)
                 .style(|_| iced_widget::text::Style {
                     color: Some(Color::WHITE),

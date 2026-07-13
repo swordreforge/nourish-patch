@@ -12,6 +12,7 @@ use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use crate::layout_canvas::layout_canvas;
 use iced_core::{Element, Length, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, checkbox, column, row, scrollable, text, Column};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -34,19 +35,19 @@ pub fn build<'a>(
     selected_inactive: bool,
 ) -> El<'a> {
     let head = column![
-        text("DISPLAY").size(16).color(style::ACCENT),
-        text("Preferred monitor, resolution and refresh rate.").size(11).color(style::MUTED),
+        text(t!("DISPLAY")).size(16).color(style::ACCENT),
+        text(t!("Preferred monitor, resolution and refresh rate.")).size(11).color(style::MUTED),
     ].spacing(4);
 
     if displays.is_empty() {
         return column![
             head,
-            text("No monitors detected (running nested / no DRM backend).").size(12).color(style::MUTED)
+            text(t!("No monitors detected (running nested / no DRM backend).")).size(12).color(style::MUTED)
         ].spacing(14).into();
     }
 
     // Monitor picker (● = active output, accent = selected in the picker).
-    let mut monitors: Vec<El<'a>> = vec![text("MONITOR").size(11).color(style::MUTED).into()];
+    let mut monitors: Vec<El<'a>> = vec![text(t!("MONITOR")).size(11).color(style::MUTED).into()];
     for d in displays {
         let mark = if d.edid_key == active_edid { "●" } else { "○" };
         let label = format!("{mark}  {}   ·   {}", d.name, d.edid_key);
@@ -94,7 +95,7 @@ pub fn build<'a>(
         })
     };
     let check = {
-        let b = button(text("CHECK CHANGES")).width(Length::Fill);
+        let b = button(text(t!("CHECK CHANGES"))).width(Length::Fill);
         match check_msg {
             Some(msg) => b.style(control::action).on_press(msg),
             None => b.style(control::disabled),
@@ -103,7 +104,7 @@ pub fn build<'a>(
     // APPLY commits whichever confirm flow is armed: a provisional activate/deactivate
     // is KEPT (`SetActive` disarms the auto-revert), like a resolution change (`Keep`).
     let apply = {
-        let b = button(text("APPLY")).width(Length::Fill);
+        let b = button(text(t!("APPLY"))).width(Length::Fill);
         if confirming {
             if let Some((edid, mode)) = staged_active {
                 b.style(control::accent).on_press(SettingsMessage::SetActive(edid.clone(), *mode))
@@ -117,7 +118,7 @@ pub fn build<'a>(
         }
     };
     let revert = {
-        let b = button(text("REVERT")).width(Length::Fill);
+        let b = button(text(t!("REVERT"))).width(Length::Fill);
         if confirming { b.style(control::action).on_press(SettingsMessage::Revert) } else { b.style(control::disabled) }
     };
     let actions = row![check, apply, revert].spacing(8);
@@ -125,10 +126,10 @@ pub fn build<'a>(
     // Modes for the selected monitor. The FIRST item is "Inactive". Selecting any row
     // (Inactive or a mode) is a UI-LOCAL selection; CHECK CHANGES applies it.
     let sel = displays.iter().find(|d| d.edid_key == selected_display);
-    let mut modes: Vec<El<'a>> = vec![text("RESOLUTION").size(11).color(style::MUTED).into()];
+    let mut modes: Vec<El<'a>> = vec![text(t!("RESOLUTION")).size(11).color(style::MUTED).into()];
     match sel {
         Some(d) if !d.available.is_empty() => {
-            let inactive = button(text("Inactive")).width(Length::Fill).on_press(SettingsMessage::SelectInactive);
+            let inactive = button(text(t!("Inactive"))).width(Length::Fill).on_press(SettingsMessage::SelectInactive);
             modes.push(if selected_inactive { inactive.style(control::accent) } else { inactive.style(control::action) }.into());
             for m in &d.available {
                 let on = !selected_inactive && Some(*m) == selected_mode;
@@ -136,7 +137,7 @@ pub fn build<'a>(
                 modes.push(if on { b.style(control::accent) } else { b.style(control::action) }.into());
             }
         }
-        _ => modes.push(text("No advertised modes for this monitor.").size(12).color(style::MUTED).into()),
+        _ => modes.push(text(t!("No advertised modes for this monitor.")).size(12).color(style::MUTED).into()),
     }
 
     // Cursor-teleport layout editor — only meaningful with more than one monitor.
@@ -147,7 +148,7 @@ pub fn build<'a>(
     let mut col = column![head].spacing(14);
     if displays.len() > 1 {
         let mut adds: Vec<El<'a>> =
-            vec![text("ADD TO CURSOR LAYOUT").size(11).color(style::MUTED).into()];
+            vec![text(t!("ADD TO CURSOR LAYOUT")).size(11).color(style::MUTED).into()];
         // Only ACTIVE monitors can be added to the map (inactive ones aren't driven,
         // so they aren't part of the cursor-crossing arrangement).
         for d in displays.iter().filter(|d| d.enabled) {
@@ -159,26 +160,26 @@ pub fn build<'a>(
                     .into(),
             );
         }
-        let apply_layout = button(text("APPLY LAYOUT"))
+        let apply_layout = button(text(t!("APPLY LAYOUT")))
             .width(Length::Fill)
             .style(control::accent)
             .on_press(SettingsMessage::LayoutCommit(layout.to_vec()));
         let remove: El<'a> = match selected_placement {
-            Some(id) => button(text("REMOVE"))
+            Some(id) => button(text(t!("REMOVE")))
                 .style(control::action)
                 .on_press(SettingsMessage::LayoutRemove(id))
                 .into(),
-            None => button(text("REMOVE")).style(control::disabled).into(),
+            None => button(text(t!("REMOVE"))).style(control::disabled).into(),
         };
         // Cyclic (wrap-around) toggle for the teleport map.
         let cyclic_row = row![
             checkbox(cyclic).on_toggle(SettingsMessage::SetCyclic),
-            text("Cyclic — wrap the cursor around the layout edges").size(12).color(style::MUTED),
+            text(t!("Cyclic — wrap the cursor around the layout edges")).size(12).color(style::MUTED),
         ]
         .spacing(8);
         col = col.push(
             column![
-                text("CURSOR TELEPORT LAYOUT").size(11).color(style::MUTED),
+                text(t!("CURSOR TELEPORT LAYOUT")).size(11).color(style::MUTED),
                 // Canvas (pan/zoom, fills) on the left; the add-monitor list is a
                 // vertical column on its right.
                 row![

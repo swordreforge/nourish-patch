@@ -1,0 +1,7 @@
+[package]
+name = "compositor_support_library_i18n_base_core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "lib.rs"

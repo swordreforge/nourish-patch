@@ -5,6 +5,7 @@ pub mod attribute_widget;
 pub mod handler_picker;
 pub mod sections;
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Element, Length, Theme};
 use iced_widget::{button, column, container, row, text};
 use compositor_support_iced_core_engine_base::Renderer;
@@ -15,18 +16,18 @@ use crate::ui::PlaceholderUi;
 
 pub fn render(ui: &PlaceholderUi) -> Element<'_, PlaceholderMessage, Theme, Renderer> {
     let header = row![
-        text("Settings")
+        text(t!("Settings"))
             .size(style::TEXT_SIZE_TITLE)
             .style(|_| iced_widget::text::Style { color: Some(style::TEXT) }),
-        button(text("Cancel").size(style::TEXT_SIZE_BODY))
+        button(text(t!("Cancel")).size(style::TEXT_SIZE_BODY))
             .padding(style::PAD_SMALL)
             .on_press(PlaceholderMessage::CancelSettings),
-        button(text("Save").size(style::TEXT_SIZE_BODY))
+        button(text(t!("Save")).size(style::TEXT_SIZE_BODY))
             .padding(style::PAD_SMALL)
             .on_press(PlaceholderMessage::SaveClicked {
                 updated_plan: Box::new(ui.working.clone()),
             }),
-        button(text("Restore").size(style::TEXT_SIZE_BODY))
+        button(text(t!("Restore")).size(style::TEXT_SIZE_BODY))
             .padding(style::PAD_SMALL)
             .on_press(PlaceholderMessage::RestoreClicked{}),
     ]

@@ -5,21 +5,22 @@ use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use iced_core::{Element, Length, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, row, scrollable, text, text_input, Column};
 
 pub fn build<'a>(w: &'a WifiSnapshot, selected: Option<&'a str>, password: &'a str) -> Element<'a, SettingsMessage, Theme, Renderer> {
     let header = row![
-        text("Wi-Fi").size(18).width(Length::Fill),
-        button(text(if w.enabled { "On" } else { "Off" })).on_press(SettingsMessage::WifiEnable(!w.enabled)).style(control::action),
-        button(text("Scan")).on_press(SettingsMessage::WifiScan).style(control::action),
+        text(t!("Wi-Fi")).size(18).width(Length::Fill),
+        button(text(if w.enabled { t!("On") } else { t!("Off") })).on_press(SettingsMessage::WifiEnable(!w.enabled)).style(control::action),
+        button(text(t!("Scan"))).on_press(SettingsMessage::WifiScan).style(control::action),
     ].spacing(8);
     let mut rows: Vec<Element<'a, SettingsMessage, Theme, Renderer>> = vec![header.into()];
     if !w.available {
-        rows.push(text("NetworkManager unavailable.").into());
+        rows.push(text(t!("NetworkManager unavailable.")).into());
     }
     for n in &w.networks {
         let lock = if n.secured { "[*] " } else { "" };
-        let act = if n.active { "  (connected)" } else { "" };
+        let act = if n.active { t!("  (connected)") } else { "" };
         let label = format!("{lock}{} - {}%{act}", n.ssid, n.strength);
         if selected == Some(n.ssid.as_str()) && n.secured {
             let ssid = n.ssid.clone();
@@ -27,7 +28,7 @@ pub fn build<'a>(w: &'a WifiSnapshot, selected: Option<&'a str>, password: &'a s
                 row![
                     text(label).width(Length::Fill),
                     text_input("password", password).width(Length::Fixed(140.0)).on_input(SettingsMessage::WifiPassword),
-                    button(text("Join")).on_press(SettingsMessage::WifiConnect(ssid, password.to_string())).style(control::accent),
+                    button(text(t!("Join"))).on_press(SettingsMessage::WifiConnect(ssid, password.to_string())).style(control::accent),
                 ].spacing(8).into(),
             );
         } else {

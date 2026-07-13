@@ -1,5 +1,6 @@
 //! Render one attribute's row: label + enable toggle + editor + "best inferred" line.
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Element, Length, Theme};
 use iced_widget::{checkbox, column, container, row, text};
 use compositor_introspection_extraction_window_base::AttributeDescriptor;
@@ -38,7 +39,7 @@ pub fn render<'a>(
             descriptor_key: desc_key,
             capture: v,
         }),
-        text("capture")
+        text(t!("capture"))
             .size(style::TEXT_SIZE_HINT)
             .style(|_| iced_widget::text::Style {
                 color: Some(style::TEXT_HINT),
@@ -57,7 +58,7 @@ pub fn render<'a>(
     } else {
         // Disabled: editor grayed out / not interactive. Show
         // a brief explanation.
-        text("(disabled — won't be passed to the launched process)")
+        text(t!("(disabled — won't be passed to the launched process)"))
             .size(style::TEXT_SIZE_HINT)
             .style(|_| iced_widget::text::Style {
                 color: Some(style::TEXT_HINT),

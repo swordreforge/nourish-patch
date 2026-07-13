@@ -4,6 +4,7 @@ version = "0.0.1"
 edition = "2024"
 
 [dependencies]
+compositor_support_library_i18n_base_core = { workspace = true }
 compositor_configurator_bluetooth_backend_base = { workspace = true }
 compositor_configurator_settings_surface_message = { workspace = true }
 compositor_configurator_settings_surface_style = { workspace = true }

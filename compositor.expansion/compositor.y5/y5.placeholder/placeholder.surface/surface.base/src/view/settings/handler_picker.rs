@@ -1,5 +1,6 @@
 //! Active-handler picker for Settings mode.
 
+use compositor_support_library_i18n_base_core::t;
 use iced_core::{Alignment, Element, Length, Theme};
 use iced_widget::{column, container, pick_list, row, text};
 use compositor_support_iced_core_engine_base::Renderer;
@@ -43,7 +44,7 @@ pub fn render(ui: &PlaceholderUi) -> Element<'_, PlaceholderMessage, Theme, Rend
         handler: ui.working.active_handler,
     };
 
-    let label = text("Active handler")
+    let label = text(t!("Active handler"))
         .size(style::TEXT_SIZE_SECTION)
         .style(|_| iced_widget::text::Style {
             color: Some(style::TEXT),
@@ -55,10 +56,8 @@ pub fn render(ui: &PlaceholderUi) -> Element<'_, PlaceholderMessage, Theme, Rend
     .on_select(|choice: HandlerChoice| PlaceholderMessage::ActiveHandlerChanged(choice.handler))
     .width(Length::Fill);
 
-    let hint = text(
-        "Switching the handler changes which synthesizer runs at launch. \
-         Each handler's preferences are preserved when switching.",
-    )
+    let hint = text(t!("Switching the handler changes which synthesizer runs at launch. \
+         Each handler's preferences are preserved when switching."))
     .size(style::TEXT_SIZE_HINT)
     .style(|_| iced_widget::text::Style {
         color: Some(style::TEXT_HINT),

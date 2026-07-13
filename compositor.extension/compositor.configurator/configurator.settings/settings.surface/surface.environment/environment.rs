@@ -9,6 +9,7 @@ use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
 use compositor_configurator_settings_surface_control::control;
 use iced_core::{Alignment, Element, Length, Theme};
+use compositor_support_library_i18n_base_core::t;
 use iced_widget::{button, column, container, pick_list, row, scrollable, text, text_input, toggler, Column};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
@@ -54,23 +55,23 @@ fn textfield<'a>(label: &'a str, e: &'a Environment, val: &'a str, def: String, 
 pub fn build<'a>(e: &'a Environment, devices: &'a [RenderDevice]) -> El<'a> {
     let d = default_settings();
     let head = column![
-        text("SYSTEM").size(16).color(style::ACCENT),
-        text("Build, runtime, and capture — changes require a reboot.").size(11).color(style::MUTED),
+        text(t!("SYSTEM")).size(16).color(style::ACCENT),
+        text(t!("Build, runtime, and capture — changes require a reboot.")).size(11).color(style::MUTED),
     ].spacing(4);
     let mut rows: Vec<El<'a>> = vec![head.into()];
-    rows.push(choice("Renderer", e, e.renderer.clone(), opts(&["vulkan", "gles"]), d.renderer.clone(), |x, v| x.renderer = v));
-    rows.push(boolean("Renderer GLES fallback", e, e.renderer_fallback, d.renderer_fallback, |x, v| x.renderer_fallback = v));
-    rows.push(choice("Scanout depth", e, e.depth.to_string(), opts(&["8", "10"]), d.depth.to_string(), |x, v| x.depth = v.parse().unwrap_or(8)));
-    rows.push(boolean("Variable refresh (VRR)", e, e.vrr, d.vrr, |x, v| x.vrr = v));
-    rows.push(choice("Capture encoder", e, e.capture_encoder.clone(), opts(&["nvenc", "vaapi"]), d.capture_encoder.clone(), |x, v| x.capture_encoder = v));
-    rows.push(choice("Capture codec", e, e.capture_codec.clone(), opts(&["av1", "h265", "h264"]), d.capture_codec.clone(), |x, v| x.capture_codec = v));
-    rows.push(choice("Capture quality", e, e.capture_quality.clone(), opts(&["optimized", "lossless"]), d.capture_quality.clone(), |x, v| x.capture_quality = v));
-    rows.push(choice("Capture fps max", e, e.capture_refresh_rate_max.to_string(), opts(&["30", "60", "90", "120"]), d.capture_refresh_rate_max.to_string(), |x, v| x.capture_refresh_rate_max = v.parse().unwrap_or(120)));
-    rows.push(choice("Capture re-encode", e, e.capture_background_encoder.clone(), opts(&["ffmpeg", ""]), d.capture_background_encoder.clone(), |x, v| x.capture_background_encoder = v));
-    rows.push(boolean("NVENC readback fallback", e, e.capture_nvenc_allow_readback_fallback, d.capture_nvenc_allow_readback_fallback, |x, v| x.capture_nvenc_allow_readback_fallback = v));
-    rows.push(boolean("Capture variable frame rate", e, e.capture_variable_frame_rate, d.capture_variable_frame_rate, |x, v| x.capture_variable_frame_rate = v));
-    rows.push(textfield("Desktop name", e, &e.desktop_name, d.desktop_name.clone(), |x, v| x.desktop_name = v));
-    rows.push(textfield("Log level", e, &e.log_level, d.log_level.clone(), |x, v| x.log_level = v));
+    rows.push(choice(t!("Renderer"), e, e.renderer.clone(), opts(&["vulkan", "gles"]), d.renderer.clone(), |x, v| x.renderer = v));
+    rows.push(boolean(t!("Renderer GLES fallback"), e, e.renderer_fallback, d.renderer_fallback, |x, v| x.renderer_fallback = v));
+    rows.push(choice(t!("Scanout depth"), e, e.depth.to_string(), opts(&["8", "10"]), d.depth.to_string(), |x, v| x.depth = v.parse().unwrap_or(8)));
+    rows.push(boolean(t!("Variable refresh (VRR)"), e, e.vrr, d.vrr, |x, v| x.vrr = v));
+    rows.push(choice(t!("Capture encoder"), e, e.capture_encoder.clone(), opts(&["nvenc", "vaapi"]), d.capture_encoder.clone(), |x, v| x.capture_encoder = v));
+    rows.push(choice(t!("Capture codec"), e, e.capture_codec.clone(), opts(&["av1", "h265", "h264"]), d.capture_codec.clone(), |x, v| x.capture_codec = v));
+    rows.push(choice(t!("Capture quality"), e, e.capture_quality.clone(), opts(&["optimized", "lossless"]), d.capture_quality.clone(), |x, v| x.capture_quality = v));
+    rows.push(choice(t!("Capture fps max"), e, e.capture_refresh_rate_max.to_string(), opts(&["30", "60", "90", "120"]), d.capture_refresh_rate_max.to_string(), |x, v| x.capture_refresh_rate_max = v.parse().unwrap_or(120)));
+    rows.push(choice(t!("Capture re-encode"), e, e.capture_background_encoder.clone(), opts(&["ffmpeg", ""]), d.capture_background_encoder.clone(), |x, v| x.capture_background_encoder = v));
+    rows.push(boolean(t!("NVENC readback fallback"), e, e.capture_nvenc_allow_readback_fallback, d.capture_nvenc_allow_readback_fallback, |x, v| x.capture_nvenc_allow_readback_fallback = v));
+    rows.push(boolean(t!("Capture variable frame rate"), e, e.capture_variable_frame_rate, d.capture_variable_frame_rate, |x, v| x.capture_variable_frame_rate = v));
+    rows.push(textfield(t!("Desktop name"), e, &e.desktop_name, d.desktop_name.clone(), |x, v| x.desktop_name = v));
+    rows.push(textfield(t!("Log level"), e, &e.log_level, d.log_level.clone(), |x, v| x.log_level = v));
     // Render device: dropdown of detected render nodes (estimated GPU names).
     if !devices.is_empty() {
         let cur = devices.iter().find(|r| r.node == e.render_node).map(|r| r.name.clone()).unwrap_or_else(|| e.render_node.clone());
@@ -86,7 +87,7 @@ pub fn build<'a>(e: &'a Environment, devices: &'a [RenderDevice]) -> El<'a> {
             .width(Length::Fixed(220.0)).style(control::picklist).menu_style(control::menu);
         let mut rd = e.clone();
         rd.render_node = d.render_node.clone();
-        rows.push(cell("Render device", picker.into(), SettingsMessage::Env(rd)));
+        rows.push(cell(t!("Render device"), picker.into(), SettingsMessage::Env(rd)));
     }
     scrollable(Column::with_children(rows).spacing(10)).height(Length::Fill).into()
 }
