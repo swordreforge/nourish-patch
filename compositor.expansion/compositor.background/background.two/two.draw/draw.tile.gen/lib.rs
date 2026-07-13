@@ -9,9 +9,12 @@ use compositor_background_two_draw_tile_base::TileError;
 use compositor_background_two_draw_tile_core::{LevelMeta, TileIndex};
 
 /// Build the tile pyramid for `source` on disk under `cache_root`.
+/// Decodes the full image once, then extracts tiles from each LOD level.
 pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, TileError> {
     info!("tile.gen: decoding image {}", source.display());
-    let img = image::open(source)?;
+    let mut reader = image::ImageReader::open(source)?.with_guessed_format()?;
+    reader.no_limits();
+    let img = reader.decode()?;
     let (source_w, source_h) = (img.width(), img.height());
     info!("tile.gen: image decoded: {}x{}", source_w, source_h);
     if source_w < 512 || source_h < 512 { return Err(TileError::TooSmall { min: 512 }); }
@@ -29,6 +32,7 @@ pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, T
         levels.push(LevelMeta { level: lod as u8, w: lod_w, h: lod_h, cols, rows });
         info!("tile.gen: LOD {}: {}x{} ({}x{} tiles)", lod, lod_w, lod_h, cols, rows);
 
+        // Resize once per LOD — drop previous LOD's memory.
         let lod_rgba = img.resize_exact(lod_w, lod_h, image::imageops::FilterType::Lanczos3).into_rgba8();
         let lod_bytes = lod_rgba.as_raw();
 
@@ -40,7 +44,6 @@ pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, T
                 let (x, y) = (col * tile_size, row * tile_size);
                 let (tw, th) = (tile_size.min(lod_w.saturating_sub(x)), tile_size.min(lod_h.saturating_sub(y)));
                 if tw == 0 || th == 0 { continue; }
-                // Extract tile from RGBA buffer — pure pointer arithmetic.
                 let mut raw = Vec::with_capacity((tw * th * 4) as usize);
                 for ty in 0..th {
                     let off = ((y + ty) * lod_w + x) as usize * 4;
