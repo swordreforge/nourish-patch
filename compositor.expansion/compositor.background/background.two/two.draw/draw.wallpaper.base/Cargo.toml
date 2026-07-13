@@ -7,6 +7,7 @@ edition = "2024"
 path = "lib.rs"
 
 [dependencies]
+libvips-rs = { workspace = true }
 compositor_background_two_draw_tile = { workspace = true }
 compositor_background_two_draw_wallpaper_tex = { workspace = true }
 compositor_developer_debug_instance_record = { workspace = true }

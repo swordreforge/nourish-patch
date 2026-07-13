@@ -7,5 +7,6 @@ edition = "2024"
 path = "lib.rs"
 
 [dependencies]
-compositor_background_two_draw_tile = { workspace = true }
+libvips-rs = { workspace = true }
+image = { workspace = true }
 smithay = { workspace = true }

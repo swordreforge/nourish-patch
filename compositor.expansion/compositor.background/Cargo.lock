@@ -2042,6 +2042,7 @@ dependencies = [
  "compositor_background_two_draw_tile",
  "compositor_background_two_draw_wallpaper_tex",
  "compositor_developer_debug_instance_record",
+ "libvips-rs",
  "smithay",
 ]
 
@@ -2049,7 +2050,8 @@ dependencies = [
 name = "compositor_background_two_draw_wallpaper_tex"
 version = "0.0.1"
 dependencies = [
- "compositor_background_two_draw_tile",
+ "image",
+ "libvips-rs",
  "smithay",
 ]
 
@@ -7702,6 +7704,16 @@ checksum = "3c8469b4a23b962c1396b9b451dda50ef5b283e8dd309d69033475fa9b334324"
 dependencies = [
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "libvips-rs"
+version = "8.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "008322906970149d90544a93bf7f4b8ae75d7b1a79d3f68e94f240b211f38745"
+dependencies = [
+ "num-derive",
+ "num-traits",
 ]
 
 [[package]]
