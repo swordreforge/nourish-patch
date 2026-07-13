@@ -22,28 +22,31 @@ pub fn load_or_generate(source: &Path) -> Result<Arc<TileIndex>, TileError> {
         let index: TileIndex = serde_json::from_str(&raw)?;
         return Ok(Arc::new(index));
     }
-    warn!("tile.io: generating pyramid for {} (may take a while for large images)", source.display());
+    warn!("tile.io: generating pyramid for {} (may take a while)", source.display());
     let index = generate_pyramid(source, &root)?;
     info!("tile.io: pyramid generated: {} levels, source {}x{}", index.levels.len(), index.source_w, index.source_h);
     Ok(Arc::new(index))
 }
 
 /// Load the raw RGBA bytes of a single tile from disk.
+/// Tries `.raw` first (instant, no decode), falls back to `.png` for old caches.
 pub fn load_tile_bytes(
-    index: &TileIndex,
-    cache_root: &Path,
-    lod: u8,
-    col: u32,
-    row: u32,
+    index: &TileIndex, cache_root: &Path, lod: u8, col: u32, row: u32,
 ) -> Result<Vec<u8>, TileError> {
     let lm = index.level(lod)?;
     if col >= lm.cols || row >= lm.rows {
         return Err(TileError::InvalidLod(lod));
     }
-    let tile_path = cache_root
-        .join(format!("L{lod}"))
-        .join(format!("{col:03}_{row:03}.png"));
-    let img = image::open(&tile_path)?;
+    let dir = cache_root.join(format!("L{lod}"));
+    let base = format!("{col:03}_{row:03}");
+    // Fast path: raw RGBA (no decode).
+    let raw_path = dir.join(format!("{base}.raw"));
+    if raw_path.exists() {
+        return std::fs::read(&raw_path).map_err(TileError::Io);
+    }
+    // Fallback: PNG decode (old cache format).
+    let png_path = dir.join(format!("{base}.png"));
+    let img = image::open(&png_path)?;
     Ok(img.into_rgba8().into_raw())
 }
 

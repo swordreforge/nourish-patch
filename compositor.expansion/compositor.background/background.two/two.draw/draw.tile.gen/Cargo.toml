@@ -10,6 +10,7 @@ path = "lib.rs"
 serde = { workspace = true }
 serde_json = { workspace = true }
 libvips-rs = { workspace = true }
+libc = { workspace = true }
 compositor_background_two_draw_tile_base = { workspace = true }
 compositor_background_two_draw_tile_core = { workspace = true }
 compositor_developer_debug_instance_record = { workspace = true }
