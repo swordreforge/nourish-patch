@@ -28,7 +28,11 @@ fn vips_to_raw(img: &VipsImage) -> Result<Vec<u8>, TileError> {
 /// decodes the PNG pixels needed for each 512x512 tile (~1MB), never
 /// materializing the full image or any LOD level.
 pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, TileError> {
-    let _app = VipsApp::new("y5_tilegen", false).map_err(|e| vips_err("init", e))?;
+    let app = VipsApp::new("y5_tilegen", false).map_err(|e| vips_err("init", e))?;
+    // Disable vips internal cache — we manage tiles ourselves.
+    // Without this, vips caches decompressed scanlines and OOMs on large images.
+    app.cache_set_max(0);
+    app.cache_set_max_mem(0);
     info!("tile.gen: opening image via vips {}", source.display());
     let src = VipsImage::new_from_file(source.to_str().unwrap_or_default())
         .map_err(|e| vips_err("open", e))?;
