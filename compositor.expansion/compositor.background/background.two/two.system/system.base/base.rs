@@ -1,11 +1,14 @@
 use compositor_background_two_draw_element::element::ParallaxBackground;
-use compositor_background_two_draw_wallpaper::{build_or_reuse_cache, prepare_tiles, FillMapping, WallpaperGpuCache, TileBlit};
+use compositor_background_two_draw_tile::TileIndex;
+use compositor_background_two_draw_wallpaper::{build_or_reuse_cache, build_or_reuse_cache_from_index, prepare_tiles, FillMapping, WallpaperGpuCache, TileBlit};
 use compositor_background_two_state_base::state::{Two, WallpaperFillRaw};
 use compositor_support_system_buffer_token_base::y5_buffer;
 use compositor_support_system_trait_system_base::base::{BufferCx, System, SystemCx, WorldBuilder};
 use compositor_support_system_world_frame_base::base::{self as layer, FramePlan, FrameTick};
 use smithay::backend::renderer::gles::GlesRenderer;
 use std::any::Any;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use compositor_background_two_storage_base::base::{BG_TWO, BG_TWO_MUT};
 
@@ -19,15 +22,20 @@ enum TwoCmd {
 }
 y5_buffer!(TWO_BUF: TwoCmd);
 
+/// Background generation result: the TileIndex + cache root once the pyramid is on disk.
+type GenResult = Arc<Mutex<Option<Result<(Arc<TileIndex>, PathBuf), compositor_background_two_draw_tile::TileError>>>>;
+
 /// The 2D parallax background system: `update()` (re)builds the GPU resource
 /// via the platform hatch and ticks animation; `draw()` emits the node.
 /// Wallpaper GPU cache lives here (system-local), keyed to the current path.
 pub struct TwoSystem {
     pub wallpaper_cache: Option<WallpaperGpuCache>,
+    /// Background thread generating the tile pyramid (non-blocking).
+    generating: Option<GenResult>,
 }
 
 impl Default for TwoSystem {
-    fn default() -> Self { Self { wallpaper_cache: None } }
+    fn default() -> Self { Self { wallpaper_cache: None, generating: None } }
 }
 
 impl System for TwoSystem {
@@ -88,23 +96,49 @@ impl System for TwoSystem {
         {
             let wallpaper_path = state.wallpaper_path.clone();
             let path_is_set = wallpaper_path.is_some();
-            trace!("TwoSystem::wallpaper: path={:?} cache_exists={}", wallpaper_path, self.wallpaper_cache.is_some());
 
-            // Rebuild the cache when the path changes (load_or_generate is idempotent on disk).
-            if path_is_set {
-                let cache = build_or_reuse_cache(
-                    wallpaper_path.as_deref(),
-                    self.wallpaper_cache.as_mut(),
-                    renderer,
-                );
-                if let Some(new_cache) = cache {
-                    info!("TwoSystem::wallpaper: cache built, {} levels", new_cache.index.levels.len());
-                    self.wallpaper_cache = Some(new_cache);
-                } else if self.wallpaper_cache.is_none() {
-                    warn!("TwoSystem::wallpaper: cache build FAILED for {:?}", wallpaper_path);
+            // Check if background generation completed.
+            if let Some(pending) = self.generating.take() {
+                if let Ok(result) = pending.lock().map(|mut g| g.take()) {
+                    if let Some(Ok((index, root))) = result {
+                        info!("TwoSystem::wallpaper: background generation done, building GPU cache");
+                        if let Some(cache) = build_or_reuse_cache_from_index(
+                            &wallpaper_path, &index, &root, renderer,
+                        ) {
+                            self.wallpaper_cache = Some(cache);
+                        }
+                    } else if let Some(Err(e)) = result {
+                        warn!("TwoSystem::wallpaper: background generation FAILED: {e}");
+                    }
                 }
-            } else {
-                self.wallpaper_cache = None;
+            }
+
+            // Start background generation if needed.
+            if path_is_set && self.wallpaper_cache.is_none() && self.generating.is_none() {
+                if let Some(path) = &wallpaper_path {
+                    info!("TwoSystem::wallpaper: spawning background generation for {}", path);
+                    let path = path.clone();
+                    let result: GenResult = Arc::new(Mutex::new(None));
+                    let result_clone = result.clone();
+                    self.generating = Some(result);
+                    std::thread::Builder::new()
+                        .name("wallpaper-pyramid".into())
+                        .spawn(move || {
+                            let r = compositor_background_two_draw_tile_io::load_or_generate(
+                                std::path::Path::new(&path),
+                            );
+                            let out = r.map(|idx| {
+                                let root = compositor_background_two_draw_tile::cache_dir(
+                                    std::path::Path::new(&path),
+                                );
+                                (idx, root)
+                            });
+                            if let Ok(mut slot) = result_clone.lock() {
+                                *slot = Some(out);
+                            }
+                        })
+                        .ok();
+                }
             }
 
             // Prepare per-frame tile blits when wallpaper is active.
