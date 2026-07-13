@@ -36,6 +36,12 @@ pub struct DeviceSettings {
     /// (compositor skips its own to avoid double-invert). `None` → leave
     /// libinput default (compositor falls back to seat-level inversion).
     pub natural_scroll_enabled: Option<bool>,
+
+    /// Disable touchpad while typing. `None` → leave libinput default.
+    pub dwt_enabled: Option<bool>,
+
+    /// Middle button emulation (L+R click → middle). `None` → leave libinput default.
+    pub middle_emulation_enabled: Option<bool>,
 }
 
 impl Default for DeviceSettings {
@@ -47,6 +53,8 @@ impl Default for DeviceSettings {
             tap_drag_lock_enabled: None,
             three_finger_drag: None,
             natural_scroll_enabled: None,
+            dwt_enabled: None,
+            middle_emulation_enabled: None,
         }
     }
 }
@@ -103,11 +111,25 @@ pub fn on_device_added(device: &mut Device, settings: &DeviceSettings) {
                 warn!("natural-scroll not available on {name}: {e:?}");
             });
     }
+    if let Some(enabled) = settings.dwt_enabled {
+        let _ = device
+            .config_dwt_set_enabled(enabled)
+            .inspect_err(|e| {
+                warn!("dwt not available on {name}: {e:?}");
+            });
+    }
+    if let Some(enabled) = settings.middle_emulation_enabled {
+        let _ = device
+            .config_middle_emulation_set_enabled(enabled)
+            .inspect_err(|e| {
+                warn!("middle-emulation not available on {name}: {e:?}");
+            });
+    }
 
     info!(
         "touchpad configured: {name} \
          (tap-to-click={}, tap-button-map={}, tap-drag={}, tap-drag-lock={}, \
-          3fg-drag={}, natural-scroll={})",
+          3fg-drag={}, natural-scroll={}, dwt={}, middle-emulation={})",
         settings.tap_to_click,
         settings.tap_button_map.map_or("default", |m| match m {
             TapButtonMap::LeftRightMiddle => "LRM",
@@ -129,5 +151,7 @@ pub fn on_device_added(device: &mut Device, settings: &DeviceSettings) {
                 _ => "?",
             }),
         settings.natural_scroll_enabled.map_or("default", |v| if v { "on" } else { "off" }),
+        settings.dwt_enabled.map_or("default", |v| if v { "on" } else { "off" }),
+        settings.middle_emulation_enabled.map_or("default", |v| if v { "on" } else { "off" }),
     );
 }
