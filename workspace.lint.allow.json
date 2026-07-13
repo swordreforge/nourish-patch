@@ -410,5 +410,14 @@
   ],
   "compositor.support/support.library/library.i18n/i18n.base/base.core": [
     "size"
+  ],
+  "compositor.kernel/kernel.input/input.libinput/libinput.config/config.base": [
+    "size"
+  ],
+  "compositor.orchestration/orchestration.seat/seat.touch/touch.input": [
+    "size"
+  ],
+  "compositor.support/support.smithay/smithay.state/state.seat/seat.factory": [
+    "size"
   ]
 }
