@@ -509,6 +509,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.inner.preference.ime.clone(),
     );
 
+    // Autostart: launch every app listed in preferences.json `autostart` (XDG Autostart
+    // equivalent). Each entry is `{ "exec": "program", "args": ["--flag"] }`; empty exec
+    // entries are silently skipped. Must be AFTER announce_session and IME launch so the
+    // Wayland socket is listening: autostart apps connect as ordinary clients.
+    for app in &state.inner.preference.autostart {
+        let exec = app.exec.trim();
+        if exec.is_empty() {
+            continue;
+        }
+        match std::process::Command::new(exec).args(&app.args).spawn() {
+            Ok(child) => info!("autostart: launched '{}' (pid {})", exec, child.id()),
+            Err(e) => warn!("autostart: failed to launch '{}': {e}", exec),
+        }
+    }
+
     // Sampling heartbeat — a sparing, multi-level demo of live developer logs (so the
     // viewer shows activity over time and its level filters can be exercised). Remove when
     // not demoing.

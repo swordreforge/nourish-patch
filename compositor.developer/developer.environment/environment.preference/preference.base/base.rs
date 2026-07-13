@@ -150,6 +150,14 @@ pub struct Preference {
     /// settings "Graphics" tab). Applied live and pushed to the kernel renderer.
     #[serde(default)]
     pub graphics: compositor_developer_environment_graphics_base::base::GraphicsAaConfig,
+    /// Terminal emulator launched on shortcut (e.g. Super+Return).
+    /// `{ "exec": "foot", "args": [] }`.
+    #[serde(default)]
+    pub terminal: Option<Terminal>,
+    /// Applications launched at compositor startup (XDG Autostart equivalent).
+    /// Each entry is `{ "exec": "program", "args": ["--flag"] }`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub autostart: Vec<AutostartApp>,
 }
 
 /// Where the keyboard layout comes from. `Env` (the historical default) leaves the
@@ -196,6 +204,28 @@ pub struct Ime {
     pub args: Vec<String>,
 }
 
+/// Terminal emulator the compositor launches on demand (e.g. from a keyboard
+/// shortcut). Defined in `preferences.json` under `"terminal"`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Terminal {
+    /// Executable to run (looked up on `PATH`). Empty = launch nothing.
+    pub exec: String,
+    /// Arguments passed to `exec`.
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
+/// One autostart entry: a program launched at compositor startup, mirroring the
+/// XDG Autostart concept. Defined in `preferences.json` under `"autostart"`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutostartApp {
+    /// Executable to run (looked up on `PATH`). Empty = skip.
+    pub exec: String,
+    /// Arguments passed to `exec`.
+    #[serde(default)]
+    pub args: Vec<String>,
+}
+
 impl Default for Preference {
     fn default() -> Self {
         Self {
@@ -211,6 +241,8 @@ impl Default for Preference {
             keyboard: KeyboardLayout::default(),
             background_shader: None,
             graphics: compositor_developer_environment_graphics_base::base::GraphicsAaConfig::default(),
+            terminal: None,
+            autostart: Vec::new(),
         }
     }
 }

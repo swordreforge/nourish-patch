@@ -192,6 +192,13 @@ fn zoom_delegate(state: &mut Loop, zoom_1: bool, fit_1: bool) {
     compositor_y5_navigator_interface_base::interface::fit(state, zoom_1, fit_1);
 }
 
+fn launch_terminal(state: &mut Loop) {
+    let Some(term) = &state.inner.preference.terminal else { return };
+    let exec = term.exec.trim();
+    if exec.is_empty() { return; }
+    let _ = std::process::Command::new(exec).args(&term.args).spawn();
+}
+
 fn close_focused(state: &mut Loop) {
     let window = state
         .state
@@ -359,6 +366,7 @@ fn bindings() -> Vec<Bind> {
         Bind { id: "move_down", label: t!("Navigate down and zoom"), default: shortcut!(Super + Alt + Down), action: Box::new(|s| { move_direction(s, Direction::Down, false); true }) },
         Bind { id: "lock", label: t!("Lock screen"), default: shortcut!(Super + L), action: Box::new(|s| { lock(s); true }) },
         Bind { id: "close_focused", label: t!("Close focused window"), default: shortcut!(Super + Q), action: Box::new(|s| { close_focused(s); true }) },
+        Bind { id: "launch_terminal", label: t!("Launch terminal"), default: shortcut!(Super + Return), action: Box::new(|s| { launch_terminal(s); true }) },
     ]
 }
 
