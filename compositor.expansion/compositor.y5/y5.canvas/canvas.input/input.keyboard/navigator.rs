@@ -192,6 +192,27 @@ fn zoom_delegate(state: &mut Loop, zoom_1: bool, fit_1: bool) {
     compositor_y5_navigator_interface_base::interface::fit(state, zoom_1, fit_1);
 }
 
+fn close_focused(state: &mut Loop) {
+    let window = state
+        .state
+        .seat
+        .seat
+        .get_keyboard()
+        .and_then(|kb| kb.current_focus())
+        .and_then(|focus_surface| {
+            state.inner.space_state().state.elements().find(|w| {
+                w.toplevel()
+                    .map(|t| t.wl_surface())
+                    .is_some_and(|s| s == &focus_surface)
+            })
+        });
+    if let Some(w) = window {
+        if let Some(toplevel) = w.toplevel() {
+            toplevel.send_close();
+        }
+    }
+}
+
 // // // Only locks. results in showing GDM
 // fn lock(s: &mut Loop) {
 //     // if s.is_locked() {
@@ -337,6 +358,7 @@ fn bindings() -> Vec<Bind> {
         Bind { id: "move_up", label: t!("Navigate up and zoom"), default: shortcut!(Super + Alt + Up), action: Box::new(|s| { move_direction(s, Direction::Up, false); true }) },
         Bind { id: "move_down", label: t!("Navigate down and zoom"), default: shortcut!(Super + Alt + Down), action: Box::new(|s| { move_direction(s, Direction::Down, false); true }) },
         Bind { id: "lock", label: t!("Lock screen"), default: shortcut!(Super + L), action: Box::new(|s| { lock(s); true }) },
+        Bind { id: "close_focused", label: t!("Close focused window"), default: shortcut!(Super + Q), action: Box::new(|s| { close_focused(s); true }) },
     ]
 }
 
