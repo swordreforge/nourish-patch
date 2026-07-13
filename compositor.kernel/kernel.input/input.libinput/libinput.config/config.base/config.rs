@@ -4,7 +4,7 @@
 //! as the seam requires.
 
 use smithay::reexports::input::{
-    Device, DragLockState, TapButtonMap,
+    Device, DragLockState, TapButtonMap, ThreeFingerDragState,
 };
 
 /// Per-device input settings applied on `DeviceAdded`.
@@ -28,6 +28,9 @@ pub struct DeviceSettings {
 
     /// Drag lock (tap to hold, tap again to release). `None` → libinput default.
     pub tap_drag_lock_enabled: Option<DragLockState>,
+
+    /// 3/4-finger drag state. `None` → libinput default.
+    pub three_finger_drag: Option<ThreeFingerDragState>,
 }
 
 impl Default for DeviceSettings {
@@ -37,6 +40,7 @@ impl Default for DeviceSettings {
             tap_button_map: None,
             tap_drag_enabled: Some(true),
             tap_drag_lock_enabled: None,
+            three_finger_drag: None,
         }
     }
 }
@@ -79,10 +83,18 @@ pub fn on_device_added(device: &mut Device, settings: &DeviceSettings) {
                 warn!("tap-drag-lock not available on {name}: {e:?}");
             });
     }
+    if let Some(state) = settings.three_finger_drag {
+        let _ = device
+            .config_3fg_drag_set_enabled(state)
+            .inspect_err(|e| {
+                warn!("3fg-drag not available on {name}: {e:?}");
+            });
+    }
 
     info!(
         "touchpad configured: {name} \
-         (tap-to-click={}, tap-button-map={}, tap-drag={}, tap-drag-lock={})",
+         (tap-to-click={}, tap-button-map={}, tap-drag={}, tap-drag-lock={}, \
+          3fg-drag={})",
         settings.tap_to_click,
         settings.tap_button_map.map_or("default", |m| match m {
             TapButtonMap::LeftRightMiddle => "LRM",
@@ -94,6 +106,13 @@ pub fn on_device_added(device: &mut Device, settings: &DeviceSettings) {
             .map_or("default", |s| match s {
                 DragLockState::Disabled => "off",
                 DragLockState::EnabledTimeout => "timeout",
+                _ => "?",
+            }),
+        settings.three_finger_drag
+            .map_or("default", |s| match s {
+                ThreeFingerDragState::Disabled => "off",
+                ThreeFingerDragState::EnabledThreeFinger => "3fg",
+                ThreeFingerDragState::EnabledFourFinger => "4fg",
                 _ => "?",
             }),
     );
