@@ -2000,7 +2000,7 @@ dependencies = [
  "compositor_background_two_draw_tile_base",
  "compositor_background_two_draw_tile_core",
  "compositor_developer_debug_instance_record",
- "libc",
+ "image",
  "libvips-rs",
  "serde",
  "serde_json",

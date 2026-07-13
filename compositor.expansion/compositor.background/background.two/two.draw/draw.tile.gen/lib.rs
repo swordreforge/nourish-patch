@@ -1,6 +1,5 @@
 //! Tile pyramid generation: downscale source and slice into LOD tile raw RGBA.
 //! Uses libvips for streaming decode — never loads the full image into RAM.
-//! Each tile: extract source region → resize to tile size (~1MB decode).
 
 #[macro_use]
 extern crate compositor_developer_debug_instance_record;
@@ -12,22 +11,17 @@ use compositor_background_two_draw_tile_core::{LevelMeta, TileIndex};
 use libvips_rs::ops;
 use libvips_rs::{VipsApp, VipsImage};
 
-unsafe extern "C" { fn vips_image_write_to_memory(image: *const std::ffi::c_void, size: *mut usize) -> *mut u8; }
-
-/// Get raw pixel bytes from a vips image (forces decode of this region only).
-fn vips_to_raw(img: &VipsImage) -> Result<Vec<u8>, TileError> {
-    let mut size: usize = 0;
-    let ptr = unsafe { vips_image_write_to_memory(img as *const VipsImage as _, &mut size) };
-    if ptr.is_null() || size == 0 {
-        return Err(TileError::Io(std::io::Error::new(std::io::ErrorKind::Other, "vips_image_write_to_memory failed")));
-    }
-    let bytes = unsafe { std::slice::from_raw_parts(ptr, size) }.to_vec();
-    unsafe { libc::free(ptr as *mut libc::c_void); }
-    Ok(bytes)
-}
-
 fn vips_err(ctx: &str, e: impl std::fmt::Display) -> TileError {
     TileError::Io(std::io::Error::new(std::io::ErrorKind::Other, format!("vips {ctx}: {e}")))
+}
+
+/// Extract raw RGBA bytes from a vips image via PNG buffer decode.
+/// `pngsave_buffer` forces evaluation + encode; we decode the PNG back
+/// to raw RGBA — cheap compared to full-image decode, and avoids FFI.
+fn vips_to_raw(img: &VipsImage) -> Result<Vec<u8>, TileError> {
+    let png_bytes = ops::pngsave_buffer(img).map_err(|e| vips_err("pngsave_buffer", e))?;
+    let decoded = image::load_from_memory(&png_bytes).map_err(|e| vips_err("png decode", e))?;
+    Ok(decoded.into_rgba8().into_raw())
 }
 
 /// Build the tile pyramid for `source` on disk under `cache_root`.
@@ -62,10 +56,8 @@ pub fn generate_pyramid(source: &Path, cache_root: &Path) -> Result<TileIndex, T
                 let (x, y) = (col * tile_size, row * tile_size);
                 let (tw, th) = (tile_size.min(lod_w.saturating_sub(x)), tile_size.min(lod_h.saturating_sub(y)));
                 if tw == 0 || th == 0 { continue; }
-                // Map tile region to source coords.
                 let (src_x, src_y) = ((x as f64 * sx) as i32, (y as f64 * sy) as i32);
                 let (src_w, src_h) = ((tw as f64 * sx).ceil() as i32, (th as f64 * sy).ceil() as i32);
-                // Extract source region + resize to tile size — vips decodes only these pixels.
                 let region = ops::extract_area(&src, src_x, src_y, src_w, src_h).map_err(|e| vips_err("extract", e))?;
                 let scale = (tw as f64 / src_w as f64).max(th as f64 / src_h as f64);
                 let tile = ops::resize(&region, scale).map_err(|e| vips_err("resize", e))?;
