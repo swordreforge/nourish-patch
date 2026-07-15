@@ -56,6 +56,12 @@ pub struct TwoSystem {
     /// Cached wallpaper tile-pyramid info, cleared when the path changes.
     /// `None` = no wallpaper or detection hasn't run yet.
     info: Option<WallpaperInfo>,
+    /// Last camera pan position for damage tracking.
+    last_pan: (f32, f32),
+    /// Last camera zoom level for damage tracking.
+    last_zoom: f32,
+    /// Cached visible tile list (rebuilt only when camera moves).
+    cached_tiles: Vec<WallpaperTile>,
 }
 
 impl Default for TwoSystem {
@@ -65,6 +71,9 @@ impl Default for TwoSystem {
             dmabufs: HashMap::new(),
             last_wallpaper: None,
             info: None,
+            last_pan: (0.0, 0.0),
+            last_zoom: 1.0,
+            cached_tiles: Vec::new(),
         }
     }
 }
@@ -190,6 +199,7 @@ impl TwoSystem {
     /// `SetWallpaperTiles` command. Clears the tile cache when the wallpaper
     /// path changes. Sends an empty vec when there is no wallpaper (so the
     /// background falls back to the parallax shader).
+    /// Uses damage tracking: only rebuilds tile list when camera moves.
     fn load_wallpaper_tiles(&mut self, state: &Two, cx: &mut SystemCx, size: (f32, f32)) {
         let wallpaper_path = match &state.wallpaper_path {
             Some(p) if !p.is_empty() => p.clone(),
@@ -199,6 +209,7 @@ impl TwoSystem {
                     self.last_wallpaper = None;
                     self.info = None;
                     self.tile_cache.clear();
+                    self.cached_tiles.clear();
                     cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(Vec::new()));
                 }
                 return;
@@ -210,6 +221,7 @@ impl TwoSystem {
             self.last_wallpaper = Some(wallpaper_path.clone());
             self.info = self.detect_wallpaper_info(&wallpaper_path);
             self.tile_cache.clear();
+            self.cached_tiles.clear();
         }
 
         // Get the renderer for GL texture upload.
@@ -228,11 +240,26 @@ impl TwoSystem {
             Some(i) => i,
             None => return,
         };
-        // Use dmabuf for Vulkan renderer, import_memory for GLES.
-        let use_dmabuf = compositor_developer_environment_config_base::base::get()
-            .renderer == "vulkan";
-        let tiles = self.compute_visible_tiles(renderer, &wallpaper_path, instance.pan, instance.zoom, instance.output_size, use_dmabuf);
-        cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(tiles));
+
+        // Damage tracking: only rebuild tile list when camera moves.
+        let camera_changed = (instance.pan.0 - self.last_pan.0).abs() > 0.1
+            || (instance.pan.1 - self.last_pan.1).abs() > 0.1
+            || (instance.zoom - self.last_zoom).abs() > 0.01;
+
+        if camera_changed || self.cached_tiles.is_empty() {
+            self.last_pan = instance.pan;
+            self.last_zoom = instance.zoom;
+
+            // Use dmabuf for Vulkan renderer, import_memory for GLES.
+            let use_dmabuf = compositor_developer_environment_config_base::base::get()
+                .renderer == "vulkan";
+            self.cached_tiles = self.compute_visible_tiles(
+                renderer, &wallpaper_path, instance.pan, instance.zoom,
+                instance.output_size, use_dmabuf,
+            );
+        }
+
+        cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(self.cached_tiles.clone()));
     }
 
     /// Scan the dzsave tile directory to detect image dimensions and available
