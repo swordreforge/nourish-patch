@@ -378,7 +378,6 @@ impl TwoSystem {
 
         // Phase 2: Batch-load missing tiles from disk in parallel.
         if !missing_tiles.is_empty() {
-            eprintln!("[wallpaper] loading {} missing tiles (dmabuf={})", missing_tiles.len(), use_dmabuf);
             let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &missing_tiles, use_dmabuf);
             for (key, tex, dmabuf, tex_w, tex_h) in loaded {
                 self.tile_cache.put(key, (tex, tex_w, tex_h));
@@ -392,6 +391,7 @@ impl TwoSystem {
         for ty in ty_min..=ty_max {
             for tx in tx_min..=tx_max {
                 let mut found: Option<(GlesTexture, u32, u32)> = None;
+                let mut found_key: Option<(u32, i32, i32)> = None;
 
                 for fallback_z in (0..=tile_zoom).rev() {
                     let d = tile_zoom - fallback_z;
@@ -401,6 +401,7 @@ impl TwoSystem {
 
                     if let Some(entry) = self.tile_cache.get(&key).cloned() {
                         found = Some(entry);
+                        found_key = Some(key);
                         break;
                     }
                 }
@@ -411,13 +412,11 @@ impl TwoSystem {
                 };
 
                 // Tile's world-space top-left (image centred at world origin).
-                // Use integer arithmetic to avoid floating-point gaps between tiles.
                 let tile_left = (img_w * tx as f32 / num_tiles_x as f32) - img_w / 2.0;
                 let tile_top  = (img_h * ty as f32 / num_tiles_y as f32) - img_h / 2.0;
 
                 let sx = (tile_left - pan.0) * zoom + output_size.0 / 2.0;
                 let sy = (tile_top  - pan.1) * zoom + output_size.1 / 2.0;
-                // Round to nearest integer to avoid sub-pixel gaps.
                 let sx = sx.round();
                 let sy = sy.round();
                 let sw = (tile_world_w * zoom).ceil();
@@ -429,27 +428,28 @@ impl TwoSystem {
                     continue;
                 }
 
-                // Try to export dmabuf from the GLES texture for Vulkan import.
-                let dmabuf = if let Some(images) = texture.egl_images() {
-                    if let Some(&image) = images.first() {
-                        let display = renderer.egl_context().display();
-                        let size = Size::from((tex_w as i32, tex_h as i32));
-                        match display.create_dmabuf_from_image(image, size, texture.is_y_inverted()) {
-                            Ok(dm) => {
-                                eprintln!("[wallpaper] dmabuf export OK: {}x{}", tex_w, tex_h);
-                                Some(dm)
-                            }
-                            Err(e) => {
-                                eprintln!("[wallpaper] dmabuf export FAILED: {:?}", e);
+                // Use cached dmabuf if available, otherwise export from texture.
+                let dmabuf = if use_dmabuf {
+                    if let Some(key) = found_key {
+                        // Check if dmabuf is already cached.
+                        if let Some(dm) = self.dmabufs.get(&key).cloned() {
+                            Some(dm)
+                        } else if let Some(images) = texture.egl_images() {
+                            // Export dmabuf from EGL image (expensive, do only once).
+                            if let Some(&image) = images.first() {
+                                let display = renderer.egl_context().display();
+                                let size = Size::from((tex_w as i32, tex_h as i32));
+                                display.create_dmabuf_from_image(image, size, texture.is_y_inverted()).ok()
+                            } else {
                                 None
                             }
+                        } else {
+                            None
                         }
                     } else {
-                        eprintln!("[wallpaper] egl_images empty");
                         None
                     }
                 } else {
-                    eprintln!("[wallpaper] no egl_images");
                     None
                 };
 
@@ -561,8 +561,6 @@ impl TwoSystem {
         use smithay::backend::allocator::Buffer;
         use smithay::backend::allocator::dmabuf::DmabufMappingMode;
         use smithay::backend::renderer::ImportDma;
-
-        eprintln!("[wallpaper] batch_load: {} tiles to load", missing.len());
 
         // Phase 1: Parallel CPU load (image decode only, no GPU).
         let loaded: Vec<_> = missing
