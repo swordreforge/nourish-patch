@@ -228,9 +228,9 @@ impl TwoSystem {
             Some(i) => i,
             None => return,
         };
-        // Use dmabuf only for Vulkan renderer (GLES cannot import dmabuf).
-        // TODO: Detect renderer type at runtime.
-        let use_dmabuf = false;  // Set to true for Vulkan, false for GLES
+        // Use dmabuf for Vulkan renderer, import_memory for GLES.
+        let use_dmabuf = compositor_developer_environment_config_base::base::get()
+            .renderer == "vulkan";
         let tiles = self.compute_visible_tiles(renderer, &wallpaper_path, instance.pan, instance.zoom, instance.output_size, use_dmabuf);
         cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(tiles));
     }
