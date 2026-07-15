@@ -455,27 +455,9 @@ impl TwoSystem {
                     continue;
                 }
 
-                // Use cached dmabuf if available, otherwise export from texture.
+                // Use cached dmabuf (exported during batch_load_tiles).
                 let dmabuf = if use_dmabuf {
-                    if let Some(key) = found_key {
-                        // Check if dmabuf is already cached.
-                        if let Some(dm) = self.dmabufs.get(&key).cloned() {
-                            Some(dm)
-                        } else if let Some(images) = texture.egl_images() {
-                            // Export dmabuf from EGL image (expensive, do only once).
-                            if let Some(&image) = images.first() {
-                                let display = renderer.egl_context().display();
-                                let size = Size::from((tex_w as i32, tex_h as i32));
-                                display.create_dmabuf_from_image(image, size, texture.is_y_inverted()).ok()
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
+                    found_key.and_then(|key| self.dmabufs.get(&key).cloned())
                 } else {
                     None
                 };
@@ -634,8 +616,21 @@ impl TwoSystem {
                     // Import dmabuf into GLES renderer (creates texture with egl_images).
                     let tex = renderer.import_dmabuf(&allocated.dmabuf, None).ok()?;
 
+                    // Export dmabuf for Vulkan import (done once at load time).
+                    let dmabuf = if let Some(images) = tex.egl_images() {
+                        if let Some(&image) = images.first() {
+                            let display = renderer.egl_context().display();
+                            let size = Size::from((w as i32, h as i32));
+                            display.create_dmabuf_from_image(image, size, tex.is_y_inverted()).ok()
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     // Return texture AND dmabuf to keep dmabuf alive.
-                    Some(((zoom, y, x), tex, Some(allocated.dmabuf), w, h))
+                    Some(((zoom, y, x), tex, dmabuf, w, h))
                 })
                 .collect()
         } else {
