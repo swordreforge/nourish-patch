@@ -9,8 +9,10 @@ use smithay::backend::renderer::ImportMem;
 use smithay::backend::allocator::Fourcc;
 use smithay::utils::{Buffer as BufferCoord, Size};
 use std::any::Any;
-use std::collections::HashMap;
+use std::num::NonZeroUsize;
 use std::path::Path;
+
+use lru::LruCache;
 
 // The per-world background slot tokens live in `two.storage`; the system reads
 // and writes that slot in update/draw/buffer.
@@ -40,9 +42,9 @@ struct WallpaperInfo {
 /// via the platform hatch, ticks animation, and loads wallpaper tiles when a
 /// wallpaper image is configured. `draw()` emits the node.
 pub struct TwoSystem {
-    /// Cache of loaded tile textures keyed by `(zoom, y, x)`. Cleared when the
-    /// wallpaper path changes so stale tiles are reloaded.
-    tile_cache: HashMap<(u32, i32, i32), GlesTexture>,
+    /// LRU cache of loaded tile textures keyed by `(zoom, y, x)`. Evicts
+    /// least-recently-used tiles when capacity is exceeded.
+    tile_cache: LruCache<(u32, i32, i32), GlesTexture>,
     /// The wallpaper path we last loaded tiles for. `None` = no wallpaper or
     /// first run. Compared each frame to detect path changes.
     last_wallpaper: Option<String>,
@@ -53,7 +55,11 @@ pub struct TwoSystem {
 
 impl Default for TwoSystem {
     fn default() -> Self {
-        Self { tile_cache: HashMap::new(), last_wallpaper: None, info: None }
+        Self {
+            tile_cache: LruCache::new(NonZeroUsize::new(256).unwrap()),
+            last_wallpaper: None,
+            info: None,
+        }
     }
 }
 
@@ -346,8 +352,8 @@ impl TwoSystem {
                     fallback_scale = 1.0f32 / (1u32 << d) as f32;
 
                     let key = (fallback_z, ancestor_y as i32, ancestor_x as i32);
-                    if let Some(t) = self.tile_cache.get(&key) {
-                        found_texture = Some(t.clone());
+                    if let Some(t) = self.tile_cache.get(&key).cloned() {
+                        found_texture = Some(t);
                         break;
                     }
 
@@ -359,7 +365,7 @@ impl TwoSystem {
                         .or_else(|_| Self::load_tile_texture(renderer, &base.join(format!("{ancestor_x}.jpg"))));
                     match tex {
                         Ok(t) => {
-                            self.tile_cache.insert(key, t.clone());
+                            self.tile_cache.put(key, t.clone());
                             found_texture = Some(t);
                             break;
                         }
@@ -427,7 +433,7 @@ impl TwoSystem {
             for py in py_min..=py_max {
                 for px in px_min..=px_max {
                     let key = (prefetch_zoom, py as i32, px as i32);
-                    if self.tile_cache.contains_key(&key) {
+                    if self.tile_cache.contains(&key) {
                         continue; // already cached
                     }
                     let base = tiles_dir
@@ -436,15 +442,10 @@ impl TwoSystem {
                     if let Ok(t) = Self::load_tile_texture(renderer, &base.join(format!("{px}.png")))
                         .or_else(|_| Self::load_tile_texture(renderer, &base.join(format!("{px}.jpg"))))
                     {
-                        self.tile_cache.insert(key, t);
+                        self.tile_cache.put(key, t);
                     }
                 }
             }
-        }
-
-        // Cap cache to prevent unbounded growth.
-        if self.tile_cache.len() > 500 {
-            self.tile_cache.clear();
         }
 
         result

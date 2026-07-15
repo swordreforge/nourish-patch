@@ -26,6 +26,8 @@ uuid = {version = "1.23.1", features = ["v7"]}
 # shaders (draw.vulkan build.rs + two.shader runtime loader). glsl-in lets the
 # runtime loader cross-compile desktop-450-core GLSL bundles to SPIR-V.
 naga = { path = "../../vendor/wgpu/naga", features = ["spv-out", "wgsl-in", "glsl-in", "wgsl-out"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+lru = "0.12"
 
 # --- GENERATED WORKSPACE LINKS START ---
 
@@ -606,6 +608,9 @@ compositor_support_world_kind_build_base = { path = "../../compositor.support/su
 compositor_support_world_order_track_base = { path = "../../compositor.support/support.world/world.order/order.track/track.base" }
 compositor_y5_action_canvas_layout = { path = "../compositor.y5/y5.action/action.canvas/canvas.layout" }
 compositor_y5_audio_controller_interface = { path = "../compositor.y5/y5.audio/audio.controller/controller.interface" }
+compositor_y5_bar_interface_base = { path = "../compositor.y5/y5.bar/bar.interface/interface.base" }
+compositor_y5_bar_interface_update = { path = "../compositor.y5/y5.bar/bar.interface/interface.update" }
+compositor_y5_bar_ui_base = { path = "../compositor.y5/y5.bar/bar.ui/ui.base" }
 compositor_y5_camera_draw_interface = { path = "../compositor.y5/y5.camera/camera.draw/draw.interface" }
 compositor_y5_camera_state_base = { path = "../compositor.y5/y5.camera/camera.state/state.base" }
 compositor_y5_camera_system_base = { path = "../compositor.y5/y5.camera/camera.system/system.base" }
