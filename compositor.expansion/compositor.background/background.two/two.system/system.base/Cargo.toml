@@ -20,6 +20,7 @@ bitflags = { workspace = true }
 smithay = { workspace = true }
 image = { workspace = true }
 lru = { workspace = true }
+rayon = { workspace = true }
 # Developer logging — provides error!/warn!/info!/trace!/abort! (see lib.rs).
 compositor_developer_debug_instance_record = { workspace = true }
 

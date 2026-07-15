@@ -28,6 +28,7 @@ uuid = {version = "1.23.1", features = ["v7"]}
 naga = { path = "../../vendor/wgpu/naga", features = ["spv-out", "wgsl-in", "glsl-in", "wgsl-out"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 lru = "0.12"
+rayon = "1.10"
 
 # --- GENERATED WORKSPACE LINKS START ---
 

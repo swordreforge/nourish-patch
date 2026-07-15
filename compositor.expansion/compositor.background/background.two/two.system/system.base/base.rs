@@ -335,47 +335,62 @@ impl TwoSystem {
         // --- Load visible tiles ------------------------------------------------
         let tiles_dir = Path::new(wallpaper_path).join("tiles");
         let mut result = Vec::new();
+        let mut missing_tiles: Vec<(u32, u32, u32, u32)> = Vec::new();
 
+        // Phase 1: Determine which tiles are needed (check cache first).
         for ty in ty_min..=ty_max {
             for tx in tx_min..=tx_max {
-                // Try to load the ideal tile, with ancestor fallback.
-                // Walk from ideal_z down to 0; use the first cached/loaded ancestor.
-                let mut found_texture: Option<GlesTexture> = None;
-                let mut fallback_scale = 1.0f32; // how much to scale the ancestor up
+                // Find the best ancestor tile (cached or to-be-loaded).
+                let mut best_key: Option<(u32, i32, i32)> = None;
 
                 for fallback_z in (0..=tile_zoom).rev() {
                     let d = tile_zoom - fallback_z;
                     let ancestor_x = tx >> d;
                     let ancestor_y = ty >> d;
-
-                    // Scale factor: ancestor tile covers 2^d × 2^d ideal tiles
-                    fallback_scale = 1.0f32 / (1u32 << d) as f32;
-
                     let key = (fallback_z, ancestor_y as i32, ancestor_x as i32);
+
+                    if self.tile_cache.contains(&key) {
+                        best_key = Some(key);
+                        break;
+                    }
+                    // Record the first missing tile for batch loading.
+                    if best_key.is_none() {
+                        best_key = Some(key);
+                        missing_tiles.push((fallback_z, ancestor_x, ancestor_y, d));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Phase 2: Batch-load missing tiles from disk in parallel.
+        if !missing_tiles.is_empty() {
+            let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &missing_tiles);
+            for (key, tex) in loaded {
+                self.tile_cache.put(key, tex);
+            }
+        }
+
+        // Phase 3: Build the visible tile list from cache.
+        for ty in ty_min..=ty_max {
+            for tx in tx_min..=tx_max {
+                let mut found_texture: Option<GlesTexture> = None;
+
+                for fallback_z in (0..=tile_zoom).rev() {
+                    let d = tile_zoom - fallback_z;
+                    let ancestor_x = tx >> d;
+                    let ancestor_y = ty >> d;
+                    let key = (fallback_z, ancestor_y as i32, ancestor_x as i32);
+
                     if let Some(t) = self.tile_cache.get(&key).cloned() {
                         found_texture = Some(t);
                         break;
-                    }
-
-                    // Not in cache — try disk load.
-                    let base = tiles_dir
-                        .join(fallback_z.to_string())
-                        .join(ancestor_y.to_string());
-                    let tex = Self::load_tile_texture(renderer, &base.join(format!("{ancestor_x}.png")))
-                        .or_else(|_| Self::load_tile_texture(renderer, &base.join(format!("{ancestor_x}.jpg"))));
-                    match tex {
-                        Ok(t) => {
-                            self.tile_cache.put(key, t.clone());
-                            found_texture = Some(t);
-                            break;
-                        }
-                        Err(_) => continue, // try next ancestor
                     }
                 }
 
                 let texture = match found_texture {
                     Some(t) => t,
-                    None => continue, // no ancestor found at all
+                    None => continue,
                 };
 
                 // Tile's world-space top-left (image centred at world origin).
@@ -430,20 +445,22 @@ impl TwoSystem {
             let py_max = ((vp_bottom_img / prefetch_cell_world).ceil() as u32)
                 .saturating_sub(1).min(prefetch_num_tiles_y - 1);
 
+            // Collect missing prefetch tiles for parallel loading.
+            let mut prefetch_missing: Vec<(u32, u32, u32, u32)> = Vec::new();
             for py in py_min..=py_max {
                 for px in px_min..=px_max {
                     let key = (prefetch_zoom, py as i32, px as i32);
-                    if self.tile_cache.contains(&key) {
-                        continue; // already cached
+                    if !self.tile_cache.contains(&key) {
+                        prefetch_missing.push((prefetch_zoom, px, py, 0));
                     }
-                    let base = tiles_dir
-                        .join(prefetch_zoom.to_string())
-                        .join(py.to_string());
-                    if let Ok(t) = Self::load_tile_texture(renderer, &base.join(format!("{px}.png")))
-                        .or_else(|_| Self::load_tile_texture(renderer, &base.join(format!("{px}.jpg"))))
-                    {
-                        self.tile_cache.put(key, t);
-                    }
+                }
+            }
+
+            // Batch-load prefetch tiles in parallel.
+            if !prefetch_missing.is_empty() {
+                let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &prefetch_missing);
+                for (key, tex) in loaded {
+                    self.tile_cache.put(key, tex);
                 }
             }
         }
@@ -467,5 +484,46 @@ impl TwoSystem {
             false,
         )?;
         Ok(tex)
+    }
+
+    /// Load tile image data from disk without uploading to GPU.
+    /// This can be called from parallel threads safely.
+    fn load_tile_image(path: &Path) -> Option<(Vec<u8>, u32, u32)> {
+        let img = image::open(path).ok()?.into_rgba8();
+        let (w, h) = img.dimensions();
+        Some((img.into_raw(), w, h))
+    }
+
+    /// Batch-load missing tiles from disk in parallel, then upload to GPU.
+    fn batch_load_tiles(
+        renderer: &mut GlesRenderer,
+        tiles_dir: &Path,
+        missing: &[(u32, u32, u32, u32)], // (zoom, x, y, ancestor_offset)
+    ) -> Vec<((u32, i32, i32), GlesTexture)> {
+        use rayon::prelude::*;
+
+        // Phase 1: Parallel CPU load (image decode only, no GPU).
+        let loaded: Vec<_> = missing
+            .par_iter()
+            .filter_map(|&(zoom, x, y, _)| {
+                let base = tiles_dir.join(zoom.to_string()).join(y.to_string());
+                let path_png = base.join(format!("{x}.png"));
+                let path_jpg = base.join(format!("{x}.jpg"));
+                let (data, w, h) = Self::load_tile_image(&path_png)
+                    .or_else(|| Self::load_tile_image(&path_jpg))?;
+                Some((zoom, y as i32, x as i32, data, w, h))
+            })
+            .collect();
+
+        // Phase 2: Sequential GPU upload (renderer is !Send).
+        loaded
+            .into_iter()
+            .filter_map(|(zoom, y, x, data, w, h)| {
+                let tex = renderer
+                    .import_memory(&data, Fourcc::Abgr8888, Size::from((w as i32, h as i32)), false)
+                    .ok()?;
+                Some(((zoom, y, x), tex))
+            })
+            .collect()
     }
 }
