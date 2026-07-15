@@ -62,6 +62,8 @@ pub struct TwoSystem {
     last_zoom: f32,
     /// Cached visible tile list (rebuilt only when camera moves).
     cached_tiles: Vec<WallpaperTile>,
+    /// Receiver for async tile loading results.
+    async_rx: Option<std::sync::mpsc::Receiver<Vec<((u32, i32, i32), Vec<u8>, u32, u32)>>>,
 }
 
 impl Default for TwoSystem {
@@ -74,6 +76,7 @@ impl Default for TwoSystem {
             last_pan: (0.0, 0.0),
             last_zoom: 1.0,
             cached_tiles: Vec::new(),
+            async_rx: None,
         }
     }
 }
@@ -393,7 +396,7 @@ impl TwoSystem {
                         best_key = Some(key);
                         break;
                     }
-                    // Record the first missing tile for batch loading.
+                    // Record the first missing tile for async loading.
                     if best_key.is_none() {
                         best_key = Some(key);
                         missing_tiles.push((fallback_z, ancestor_x, ancestor_y, d));
@@ -403,15 +406,53 @@ impl TwoSystem {
             }
         }
 
-        // Phase 2: Batch-load missing tiles from disk in parallel.
-        if !missing_tiles.is_empty() {
-            let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &missing_tiles, use_dmabuf);
-            for (key, tex, dmabuf, tex_w, tex_h) in loaded {
-                self.tile_cache.put(key, (tex, tex_w, tex_h));
-                if let Some(dm) = dmabuf {
-                    self.dmabufs.insert(key, dm);
+        // Phase 2: Check for completed async loads, then start new async load if needed.
+        if let Some(rx) = self.async_rx.take() {
+            // Non-blocking check for completed loads.
+            if let Ok(loaded) = rx.try_recv() {
+                for (key, data, w, h) in loaded {
+                    // Upload to GPU (must be on main thread).
+                    if use_dmabuf {
+                        if let Some(dm) = Self::upload_dmabuf_tile(renderer, &data, w, h) {
+                            let tex = renderer.import_dmabuf(&dm, None).ok();
+                            if let Some(t) = tex {
+                                self.tile_cache.put(key, (t, w, h));
+                                self.dmabufs.insert(key, dm);
+                            }
+                        }
+                    } else if let Some(tex) = renderer.import_memory(&data, Fourcc::Abgr8888, Size::from((w as i32, h as i32)), false).ok() {
+                        self.tile_cache.put(key, (tex, w, h));
+                    }
                 }
+            } else {
+                // Still loading — put receiver back.
+                self.async_rx = Some(rx);
             }
+        }
+
+        // Start new async load if there are missing tiles and no load in progress.
+        if !missing_tiles.is_empty() && self.async_rx.is_none() {
+            let tiles_dir_clone = tiles_dir.clone();
+            let missing_clone = missing_tiles.clone();
+            let (tx, rx) = std::sync::mpsc::channel();
+            self.async_rx = Some(rx);
+
+            // Spawn background thread for image decoding (CPU-only, no GPU).
+            std::thread::spawn(move || {
+                use rayon::prelude::*;
+                let loaded: Vec<_> = missing_clone
+                    .par_iter()
+                    .filter_map(|&(zoom, x, y, _)| {
+                        let base = tiles_dir_clone.join(zoom.to_string()).join(y.to_string());
+                        let path_png = base.join(format!("{x}.png"));
+                        let path_jpg = base.join(format!("{x}.jpg"));
+                        let (data, w, h) = Self::load_tile_image(&path_png)
+                            .or_else(|| Self::load_tile_image(&path_jpg))?;
+                        Some(((zoom, y as i32, x as i32), data, w, h))
+                    })
+                    .collect();
+                let _ = tx.send(loaded);
+            });
         }
 
         // Phase 3: Build the visible tile list from cache.
@@ -553,6 +594,55 @@ impl TwoSystem {
         let img = image::open(path).ok()?.into_rgba8();
         let (w, h) = img.dimensions();
         Some((img.into_raw(), w, h))
+    }
+
+    /// Upload image data to a GBM dmabuf (must be called on main thread).
+    fn upload_dmabuf_tile(
+        renderer: &mut GlesRenderer,
+        data: &[u8],
+        w: u32,
+        h: u32,
+    ) -> Option<Dmabuf> {
+        use compositor_support_bevy_core_alloc_base::allocate_dmabuf;
+        use smithay::backend::allocator::Buffer;
+        use smithay::backend::allocator::dmabuf::DmabufMappingMode;
+        use smithay::backend::renderer::ImportDma;
+
+        let allocated = allocate_dmabuf("/dev/dri/renderD128", w, h).ok()?;
+
+        // Copy image data into dmabuf, swapping R and B channels.
+        let mapping = allocated.dmabuf.map_plane(0, DmabufMappingMode::READ | DmabufMappingMode::WRITE).ok()?;
+        let ptr = mapping.ptr() as *mut u8;
+        let len = mapping.length();
+        let pixel_count = (w * h) as usize;
+        let copy_len = (pixel_count * 4).min(len);
+        for i in (0..copy_len).step_by(4) {
+            unsafe {
+                let r = *data.as_ptr().add(i);
+                let b = *data.as_ptr().add(i + 2);
+                *ptr.add(i) = b;
+                *ptr.add(i + 1) = *data.as_ptr().add(i + 1);
+                *ptr.add(i + 2) = r;
+                *ptr.add(i + 3) = *data.as_ptr().add(i + 3);
+            }
+        }
+        drop(mapping);
+
+        // Import dmabuf into GLES renderer.
+        let _tex = renderer.import_dmabuf(&allocated.dmabuf, None).ok()?;
+
+        // Export dmabuf for Vulkan import.
+        if let Some(images) = _tex.egl_images() {
+            if let Some(&image) = images.first() {
+                let display = renderer.egl_context().display();
+                let size = Size::from((w as i32, h as i32));
+                display.create_dmabuf_from_image(image, size, _tex.is_y_inverted()).ok()
+            } else {
+                Some(allocated.dmabuf)
+            }
+        } else {
+            Some(allocated.dmabuf)
+        }
     }
 
     /// Batch-load missing tiles from disk in parallel, then upload to GPU.
