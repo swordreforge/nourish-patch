@@ -9,7 +9,7 @@ use compositor_configurator_settings_surface_style::style;
 use compositor_support_iced_core_engine_base::Renderer;
 use iced_core::{Alignment, Element, Length, Padding, Theme};
 use compositor_support_library_i18n_base_core::t;
-use iced_widget::{button, column, container, row, scrollable, shader, slider, text, toggler};
+use iced_widget::{button, column, container, row, scrollable, shader, slider, text, text_input, toggler};
 
 type El<'a> = Element<'a, SettingsMessage, Theme, Renderer>;
 
@@ -23,6 +23,7 @@ pub fn build<'a>(
     invert_pan_x: bool,
     invert_pan_y: bool,
     srgb: bool,
+    wallpaper_path: Option<&'a str>,
 ) -> El<'a> {
     column![
         text(t!("CURRENT WORLD")).size(16).color(style::ACCENT),
@@ -30,11 +31,56 @@ pub fn build<'a>(
             .size(11).color(style::MUTED),
         preview_or_error(props, preview_source, status),
         display_row(invert_pan_x, invert_pan_y, srgb),
+        wallpaper_section(wallpaper_path),
         row![
             container(shader_list(shaders, current)).width(Length::FillPortion(1)).height(Length::Fill),
             container(variables(props)).width(Length::FillPortion(1)).height(Length::Fill),
         ].spacing(24).height(Length::Fill),
     ].spacing(14).height(Length::Fill).into()
+}
+
+/// Wallpaper selection card: shows a text input for the tile directory path
+/// and a clear button. Tiles are pre-generated via vips dzsave --layout google
+/// and rendered in place of the parallax shader.
+fn wallpaper_section<'a>(wallpaper_path: Option<&'a str>) -> El<'a> {
+    let current_path = wallpaper_path.unwrap_or("");
+    let active = !current_path.is_empty();
+
+    // Text input for the wallpaper tile directory path.
+    let path_input: El<'_> = text_input(
+        &t!("Enter tile directory path..."),
+        current_path,
+    )
+    .on_input(SettingsMessage::SetWorldWallpaper)
+    .padding(8)
+    .width(Length::Fill)
+    .into();
+
+    // Status line showing current state.
+    let status: El<'_> = if active {
+        text(t!("Active \u{2014} tiles loaded from path above"))
+            .size(10).color(style::ACCENT).into()
+    } else {
+        text(t!("No wallpaper \u{2014} parallax shader active"))
+            .size(10).color(style::MUTED).into()
+    };
+
+    // Clear button (only shown when a wallpaper is active).
+    let clear_btn: El<'_> = button(text(t!("Clear Wallpaper")).size(12))
+        .on_press(SettingsMessage::SetWorldWallpaper(String::new()))
+        .padding(8)
+        .style(control::sidebar_item(false)).into();
+
+    container(
+        column![
+            text(t!("WALLPAPER")).size(10).color(style::MUTED).width(Length::Fill),
+            text(t!("Tile directory (vips dzsave --layout google output):"))
+                .size(10).color(style::MUTED),
+            path_input,
+            status,
+            if active { clear_btn } else { container(text("")).into() },
+        ].spacing(8).padding(12),
+    ).style(style::card).width(Length::Fill).into()
 }
 
 /// Per-world display toggles (persisted per world): flip the background parallax on
