@@ -411,13 +411,17 @@ impl TwoSystem {
                 };
 
                 // Tile's world-space top-left (image centred at world origin).
+                // Use integer arithmetic to avoid floating-point gaps between tiles.
                 let tile_left = (img_w * tx as f32 / num_tiles_x as f32) - img_w / 2.0;
                 let tile_top  = (img_h * ty as f32 / num_tiles_y as f32) - img_h / 2.0;
 
                 let sx = (tile_left - pan.0) * zoom + output_size.0 / 2.0;
                 let sy = (tile_top  - pan.1) * zoom + output_size.1 / 2.0;
-                let sw = tile_world_w * zoom;
-                let sh = tile_world_h * zoom;
+                // Round to nearest integer to avoid sub-pixel gaps.
+                let sx = sx.round();
+                let sy = sy.round();
+                let sw = (tile_world_w * zoom).ceil();
+                let sh = (tile_world_h * zoom).ceil();
 
                 if sx + sw <= 0.0 || sx >= output_size.0
                     || sy + sh <= 0.0 || sy >= output_size.1
