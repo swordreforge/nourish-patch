@@ -42,9 +42,9 @@ struct WallpaperInfo {
 /// via the platform hatch, ticks animation, and loads wallpaper tiles when a
 /// wallpaper image is configured. `draw()` emits the node.
 pub struct TwoSystem {
-    /// LRU cache of loaded tile textures keyed by `(zoom, y, x)`. Evicts
-    /// least-recently-used tiles when capacity is exceeded.
-    tile_cache: LruCache<(u32, i32, i32), GlesTexture>,
+    /// LRU cache of loaded tile textures keyed by `(zoom, y, x)`.
+    /// Value is (texture, tex_w, tex_h) — actual texture dimensions.
+    tile_cache: LruCache<(u32, i32, i32), (GlesTexture, u32, u32)>,
     /// The wallpaper path we last loaded tiles for. `None` = no wallpaper or
     /// first run. Compared each frame to detect path changes.
     last_wallpaper: Option<String>,
@@ -366,15 +366,15 @@ impl TwoSystem {
         // Phase 2: Batch-load missing tiles from disk in parallel.
         if !missing_tiles.is_empty() {
             let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &missing_tiles);
-            for (key, tex) in loaded {
-                self.tile_cache.put(key, tex);
+            for (key, tex, tex_w, tex_h) in loaded {
+                self.tile_cache.put(key, (tex, tex_w, tex_h));
             }
         }
 
         // Phase 3: Build the visible tile list from cache.
         for ty in ty_min..=ty_max {
             for tx in tx_min..=tx_max {
-                let mut found_texture: Option<GlesTexture> = None;
+                let mut found: Option<(GlesTexture, u32, u32)> = None;
 
                 for fallback_z in (0..=tile_zoom).rev() {
                     let d = tile_zoom - fallback_z;
@@ -382,14 +382,14 @@ impl TwoSystem {
                     let ancestor_y = ty >> d;
                     let key = (fallback_z, ancestor_y as i32, ancestor_x as i32);
 
-                    if let Some(t) = self.tile_cache.get(&key).cloned() {
-                        found_texture = Some(t);
+                    if let Some(entry) = self.tile_cache.get(&key).cloned() {
+                        found = Some(entry);
                         break;
                     }
                 }
 
-                let texture = match found_texture {
-                    Some(t) => t,
+                let (texture, tex_w, tex_h) = match found {
+                    Some(entry) => entry,
                     None => continue,
                 };
 
@@ -411,6 +411,8 @@ impl TwoSystem {
                 result.push(WallpaperTile {
                     x: sx as i32, y: sy as i32,
                     w: sw as i32, h: sh as i32,
+                    tex_w,
+                    tex_h,
                     texture,
                 });
             }
@@ -459,8 +461,8 @@ impl TwoSystem {
             // Batch-load prefetch tiles in parallel.
             if !prefetch_missing.is_empty() {
                 let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &prefetch_missing);
-                for (key, tex) in loaded {
-                    self.tile_cache.put(key, tex);
+                for (key, tex, tex_w, tex_h) in loaded {
+                    self.tile_cache.put(key, (tex, tex_w, tex_h));
                 }
             }
         }
@@ -477,6 +479,7 @@ impl TwoSystem {
         let img = image::open(path)?.into_rgba8();
         let (w, h) = img.dimensions();
         let data = img.into_raw();
+        // image crate produces RGBA (R at byte 0) → Fourcc::Abgr8888 maps to GL_RGBA8.
         let tex = renderer.import_memory(
             &data,
             Fourcc::Abgr8888,
@@ -495,11 +498,12 @@ impl TwoSystem {
     }
 
     /// Batch-load missing tiles from disk in parallel, then upload to GPU.
+    /// Returns (key, texture, tex_w, tex_h) for each loaded tile.
     fn batch_load_tiles(
         renderer: &mut GlesRenderer,
         tiles_dir: &Path,
         missing: &[(u32, u32, u32, u32)], // (zoom, x, y, ancestor_offset)
-    ) -> Vec<((u32, i32, i32), GlesTexture)> {
+    ) -> Vec<((u32, i32, i32), GlesTexture, u32, u32)> {
         use rayon::prelude::*;
 
         // Phase 1: Parallel CPU load (image decode only, no GPU).
@@ -516,13 +520,12 @@ impl TwoSystem {
             .collect();
 
         // Phase 2: Sequential GPU upload (renderer is !Send).
+        // image crate produces RGBA (R at byte 0) → Fourcc::Abgr8888 maps to GL_RGBA8.
         loaded
             .into_iter()
             .filter_map(|(zoom, y, x, data, w, h)| {
-                let tex = renderer
-                    .import_memory(&data, Fourcc::Abgr8888, Size::from((w as i32, h as i32)), false)
-                    .ok()?;
-                Some(((zoom, y, x), tex))
+                let tex = renderer.import_memory(&data, Fourcc::Abgr8888, Size::from((w as i32, h as i32)), false).ok()?;
+                Some(((zoom, y, x), tex, w, h))
             })
             .collect()
     }

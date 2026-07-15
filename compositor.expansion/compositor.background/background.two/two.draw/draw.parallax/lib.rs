@@ -1,15 +1,36 @@
 //! `ParallaxBackground`: the infinite-canvas background render element.
+//! When wallpaper tiles are present, renders them via `draw_prerendered_texture`
+//! instead of the parallax shader — zero OOM risk because tiles are pre-generated
+//! and only visible tiles are loaded each frame.
 use compositor_background_two_draw_motion::Motion;
 use compositor_background_two_shader_spirv::VulkanModule;
 use compositor_orchestration_draw_dispatch_frame::SceneDispatch;
 use smithay::backend::renderer::RendererSuper;
 use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement};
-use smithay::backend::renderer::gles::{GlesPixelProgram, GlesRenderer};
+use smithay::backend::renderer::gles::{GlesPixelProgram, GlesRenderer, GlesTexture};
 use smithay::backend::renderer::utils::{CommitCounter, DamageSet, OpaqueRegions};
 use smithay::utils::user_data::UserDataMap;
 use smithay::utils::{Buffer, Physical, Point, Rectangle, Scale, Size, Transform};
 use std::sync::Arc;
 use std::time::Instant;
+
+/// One rendered wallpaper tile: the screen-space destination rect and the
+/// pre-loaded GLES texture. Created in `TwoSystem::update()` (where we have
+/// the renderer) and consumed in `ParallaxBackground::draw()`.
+#[derive(Clone)]
+pub struct WallpaperTile {
+    /// Screen-space position and size in physical pixels.
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    /// Texture dimensions (original tile size, e.g. 256x256).
+    pub tex_w: u32,
+    pub tex_h: u32,
+    /// The loaded GLES texture for this tile.
+    pub texture: GlesTexture,
+}
+
 #[derive(Clone)]
 pub struct ParallaxBackground {
     id: Id,
@@ -41,6 +62,9 @@ pub struct ParallaxBackground {
     /// the shader gamma-encodes its final colour so the non-sRGB scanout buffer
     /// shows the brighter, preview-matching look. Carried to the shader in the push.
     pub srgb: bool,
+    /// Wallpaper tiles to render instead of the parallax shader. Empty = use shader.
+    /// Set each frame by `TwoSystem::update()` with only viewport-visible tiles.
+    pub wallpaper_tiles: Vec<WallpaperTile>,
     motion: Motion,
 }
 impl ParallaxBackground {
@@ -65,7 +89,8 @@ impl ParallaxBackground {
             lock_time: None,
             start_time: Instant::now(),
             pan: (0.0, 0.0), zoom: 1.0, params, shader_error,
-            invert_pan_x: false, invert_pan_y: false, srgb: false, motion: Motion::new(),
+            invert_pan_x: false, invert_pan_y: false, srgb: false,
+            wallpaper_tiles: Vec::new(), motion: Motion::new(),
         }
     }
     /// Call right before draw to splice the previous pan and bump damage.
@@ -76,6 +101,12 @@ impl ParallaxBackground {
     /// Rebind a clone to a viewport pane (render rect + pane camera + distinct id).
     pub fn bind_pane(&mut self, offset: (i32, i32), size: (f32, f32), pan: (f32, f32), zoom: f32, id: Id) {
         self.offset = offset; self.output_size = size; self.pan = pan; self.zoom = zoom; self.id = id;
+    }
+    /// Replace the wallpaper tile list (loaded each frame by the system).
+    /// Empty vector = fall back to the parallax shader.
+    pub fn set_wallpaper_tiles(&mut self, tiles: Vec<WallpaperTile>) {
+        self.wallpaper_tiles = tiles;
+        self.commit.increment();
     }
 }
 impl Element for ParallaxBackground {
@@ -107,6 +138,24 @@ impl<R: SceneDispatch> RenderElement<R> for ParallaxBackground {
         damage: &[Rectangle<i32, Physical>],
         _opaque_regions: &[Rectangle<i32, Physical>], _cache: Option<&UserDataMap>,
     ) -> Result<(), <R as RendererSuper>::Error> {
+        // Wallpaper tiles override the shader: render each visible tile as a
+        // prerendered texture. Empty list = fall back to the parallax shader.
+        if !self.wallpaper_tiles.is_empty() {
+            for tile in &self.wallpaper_tiles {
+                // src = full texture rect (0,0 → tex_w,tex_h)
+                let tile_src = Rectangle::from_loc_and_size(
+                    (0.0, 0.0), (tile.tex_w as f64, tile.tex_h as f64),
+                );
+                let tile_dst = Rectangle::from_loc_and_size(
+                    (self.offset.0 + tile.x, self.offset.1 + tile.y),
+                    (tile.w, tile.h),
+                );
+                R::draw_prerendered_texture(
+                    frame, &tile.texture, tile_src, tile_dst, damage, 1.0,
+                )?;
+            }
+            return Ok(());
+        }
         let time = self.start_time.elapsed().as_secs_f32();
         // Per-world pan inversion: flip the pan feeding the shader on each axis.
         let pan = (
