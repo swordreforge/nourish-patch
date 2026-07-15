@@ -95,6 +95,8 @@ pub(crate) enum DrawOp {
     Solid { quad: PushQuad },
     Textured {
         view: vk::ImageView,
+        /// Keep the texture alive until submit_frame completes.
+        _texture: VulkanTexture,
         quad: PushQuad,
         /// Per-surface HDR composite flag `[transfer, is_hdr, 0, 0]` (M5).
         surf: [f32; 4],
@@ -196,6 +198,7 @@ impl Frame for VulkanFrame<'_, '_> {
         // (settings/picker) and the bevy background are never eligible.
         self.ops.push(DrawOp::Textured {
             view: texture.view(),
+            _texture: texture.clone(),  // Keep texture alive until submit_frame
             quad,
             surf: texture.surf(),
             tex_w: texture.width().max(1),

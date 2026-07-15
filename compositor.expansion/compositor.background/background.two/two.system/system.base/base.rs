@@ -10,6 +10,7 @@ use smithay::backend::renderer::{ImportDma, ImportMem, Texture};
 use smithay::backend::allocator::Fourcc;
 use smithay::utils::{Buffer as BufferCoord, Size};
 use std::any::Any;
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::path::Path;
 
@@ -46,6 +47,9 @@ pub struct TwoSystem {
     /// LRU cache of loaded tile textures keyed by `(zoom, y, x)`.
     /// Value is (texture, tex_w, tex_h) — actual texture dimensions.
     tile_cache: LruCache<(u32, i32, i32), (GlesTexture, u32, u32)>,
+    /// Dmabufs for each tile, keyed by `(zoom, y, x)`. Must be kept alive
+    /// as long as the texture is used for Vulkan import.
+    dmabufs: HashMap<(u32, i32, i32), Dmabuf>,
     /// The wallpaper path we last loaded tiles for. `None` = no wallpaper or
     /// first run. Compared each frame to detect path changes.
     last_wallpaper: Option<String>,
@@ -58,6 +62,7 @@ impl Default for TwoSystem {
     fn default() -> Self {
         Self {
             tile_cache: LruCache::new(NonZeroUsize::new(256).unwrap()),
+            dmabufs: HashMap::new(),
             last_wallpaper: None,
             info: None,
         }
@@ -223,7 +228,10 @@ impl TwoSystem {
             Some(i) => i,
             None => return,
         };
-        let tiles = self.compute_visible_tiles(renderer, &wallpaper_path, instance.pan, instance.zoom, instance.output_size);
+        // Use dmabuf only for Vulkan renderer (GLES cannot import dmabuf).
+        // TODO: Detect renderer type at runtime.
+        let use_dmabuf = false;  // Set to true for Vulkan, false for GLES
+        let tiles = self.compute_visible_tiles(renderer, &wallpaper_path, instance.pan, instance.zoom, instance.output_size, use_dmabuf);
         cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(tiles));
     }
 
@@ -275,6 +283,9 @@ impl TwoSystem {
     ///
     /// The tile-zoom level is chosen so that each tile's screen size stays
     /// near 256 px at the current camera zoom.
+    ///
+    /// When `use_dmabuf` is true, tiles are loaded via GBM dmabuf for
+    /// Vulkan zero-copy rendering. When false, tiles use import_memory.
     fn compute_visible_tiles(
         &mut self,
         renderer: &mut GlesRenderer,
@@ -282,6 +293,7 @@ impl TwoSystem {
         pan: (f32, f32),
         zoom: f32,
         output_size: (f32, f32),
+        use_dmabuf: bool,
     ) -> Vec<WallpaperTile> {
         const TILE_PX: f32 = 256.0;
         let info = match &self.info {
@@ -366,9 +378,13 @@ impl TwoSystem {
 
         // Phase 2: Batch-load missing tiles from disk in parallel.
         if !missing_tiles.is_empty() {
-            let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &missing_tiles);
-            for (key, tex, tex_w, tex_h) in loaded {
+            eprintln!("[wallpaper] loading {} missing tiles (dmabuf={})", missing_tiles.len(), use_dmabuf);
+            let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &missing_tiles, use_dmabuf);
+            for (key, tex, dmabuf, tex_w, tex_h) in loaded {
                 self.tile_cache.put(key, (tex, tex_w, tex_h));
+                if let Some(dm) = dmabuf {
+                    self.dmabufs.insert(key, dm);
+                }
             }
         }
 
@@ -486,9 +502,12 @@ impl TwoSystem {
 
             // Batch-load prefetch tiles in parallel.
             if !prefetch_missing.is_empty() {
-                let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &prefetch_missing);
-                for (key, tex, tex_w, tex_h) in loaded {
+                let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &prefetch_missing, use_dmabuf);
+                for (key, tex, dmabuf, tex_w, tex_h) in loaded {
                     self.tile_cache.put(key, (tex, tex_w, tex_h));
+                    if let Some(dm) = dmabuf {
+                        self.dmabufs.insert(key, dm);
+                    }
                 }
             }
         }
@@ -524,18 +543,22 @@ impl TwoSystem {
     }
 
     /// Batch-load missing tiles from disk in parallel, then upload to GPU.
-    /// Returns (key, texture, tex_w, tex_h) for each loaded tile.
-    /// Uses GBM dmabuf allocation for Vulkan compatibility.
+    /// Returns (key, texture, optional_dmabuf, tex_w, tex_h) for each loaded tile.
+    /// When `use_dmabuf` is true, uses GBM dmabuf for Vulkan compatibility.
+    /// When false, uses import_memory for GLES.
     fn batch_load_tiles(
         renderer: &mut GlesRenderer,
         tiles_dir: &Path,
         missing: &[(u32, u32, u32, u32)], // (zoom, x, y, ancestor_offset)
-    ) -> Vec<((u32, i32, i32), GlesTexture, u32, u32)> {
+        use_dmabuf: bool,
+    ) -> Vec<((u32, i32, i32), GlesTexture, Option<Dmabuf>, u32, u32)> {
         use rayon::prelude::*;
         use compositor_support_bevy_core_alloc_base::allocate_dmabuf;
         use smithay::backend::allocator::Buffer;
         use smithay::backend::allocator::dmabuf::DmabufMappingMode;
         use smithay::backend::renderer::ImportDma;
+
+        eprintln!("[wallpaper] batch_load: {} tiles to load", missing.len());
 
         // Phase 1: Parallel CPU load (image decode only, no GPU).
         let loaded: Vec<_> = missing
@@ -551,29 +574,50 @@ impl TwoSystem {
             .collect();
 
         // Phase 2: Sequential GPU upload (renderer is !Send).
-        // Use GBM dmabuf allocation for Vulkan-compatible textures.
-        loaded
-            .into_iter()
-            .filter_map(|(zoom, y, x, data, w, h)| {
-                // Allocate dmabuf via GBM.
-                let allocated = allocate_dmabuf("/dev/dri/renderD128", w, h).ok()?;
+        if use_dmabuf {
+            // Use GBM dmabuf allocation for Vulkan-compatible textures.
+            loaded
+                .into_iter()
+                .filter_map(|(zoom, y, x, data, w, h)| {
+                    // Allocate dmabuf via GBM.
+                    let allocated = allocate_dmabuf("/dev/dri/renderD128", w, h).ok()?;
 
-                // Copy image data into dmabuf.
-                let mapping = allocated.dmabuf.map_plane(0, DmabufMappingMode::READ | DmabufMappingMode::WRITE).ok()?;
-                let ptr = mapping.ptr();
-                let len = mapping.length();
-                let copy_len = data.len().min(len);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, copy_len);
-                }
-                drop(mapping);
+                    // Copy image data into dmabuf, swapping R and B channels.
+                    // PNG is RGBA (R at byte 0), but GBM Argb8888 is BGRA (B at byte 0).
+                    let mapping = allocated.dmabuf.map_plane(0, DmabufMappingMode::READ | DmabufMappingMode::WRITE).ok()?;
+                    let ptr = mapping.ptr() as *mut u8;
+                    let len = mapping.length();
+                    let pixel_count = (w * h) as usize;
+                    let copy_len = (pixel_count * 4).min(len);
+                    // Swap R (byte 0) and B (byte 2) for each pixel.
+                    for i in (0..copy_len).step_by(4) {
+                        unsafe {
+                            let r = *data.as_ptr().add(i);
+                            let b = *data.as_ptr().add(i + 2);
+                            *ptr.add(i) = b;      // B -> byte 0
+                            *ptr.add(i + 1) = *data.as_ptr().add(i + 1); // G
+                            *ptr.add(i + 2) = r;  // R -> byte 2
+                            *ptr.add(i + 3) = *data.as_ptr().add(i + 3); // A
+                        }
+                    }
+                    drop(mapping);
 
-                // Import dmabuf into GLES renderer (creates texture with egl_images).
-                let tex = renderer.import_dmabuf(&allocated.dmabuf, None).ok()?;
+                    // Import dmabuf into GLES renderer (creates texture with egl_images).
+                    let tex = renderer.import_dmabuf(&allocated.dmabuf, None).ok()?;
 
-                // Note: The dmabuf is now owned by the texture.
-                Some(((zoom, y, x), tex, w, h))
-            })
-            .collect()
+                    // Return texture AND dmabuf to keep dmabuf alive.
+                    Some(((zoom, y, x), tex, Some(allocated.dmabuf), w, h))
+                })
+                .collect()
+        } else {
+            // Use import_memory for GLES-only rendering.
+            loaded
+                .into_iter()
+                .filter_map(|(zoom, y, x, data, w, h)| {
+                    let tex = renderer.import_memory(&data, Fourcc::Abgr8888, Size::from((w as i32, h as i32)), false).ok()?;
+                    Some(((zoom, y, x), tex, None, w, h))
+                })
+                .collect()
+        }
     }
 }

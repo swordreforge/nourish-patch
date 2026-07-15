@@ -1,5 +1,5 @@
 use smithay::backend::renderer::gles::{GlesFrame, GlesPixelProgram, GlesRenderer, GlesTexture, Uniform};
-use smithay::backend::renderer::{Renderer, RendererSuper};
+use smithay::backend::renderer::{FrameContext, Renderer, RendererSuper};
 use smithay::utils::{Buffer as BufferCoord, Physical, Rectangle, Size};
 
 pub use compositor_orchestration_draw_dispatch_uniforms::uniforms::{
@@ -109,6 +109,19 @@ impl SceneDispatch for GlesRenderer {
         alpha: f32,
     ) -> Result<(), <Self as RendererSuper>::Error> {
         gles::draw_prerendered_texture(frame, texture, src, dst, damage, alpha)
+    }
+
+    fn draw_prerendered_dmabuf(
+        _frame: &mut GlesFrame<'_, '_>,
+        _dmabuf: &smithay::backend::allocator::dmabuf::Dmabuf,
+        _src: Rectangle<f64, BufferCoord>,
+        _dst: Rectangle<i32, Physical>,
+        _damage: &[Rectangle<i32, Physical>],
+        _alpha: f32,
+    ) -> Result<(), <Self as RendererSuper>::Error> {
+        // GLES renderer cannot directly import dmabuf for rendering.
+        // The dmabuf path is only supported by Vulkan renderer.
+        Ok(())
     }
 
     fn draw_pixel_program(
