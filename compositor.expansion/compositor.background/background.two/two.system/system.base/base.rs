@@ -410,13 +410,28 @@ impl TwoSystem {
                 }
 
                 // Try to export dmabuf from the GLES texture for Vulkan import.
-                let dmabuf = texture.egl_images()
-                    .and_then(|images| images.first())
-                    .and_then(|&image| {
+                let dmabuf = if let Some(images) = texture.egl_images() {
+                    if let Some(&image) = images.first() {
                         let display = renderer.egl_context().display();
                         let size = Size::from((tex_w as i32, tex_h as i32));
-                        display.create_dmabuf_from_image(image, size, texture.is_y_inverted()).ok()
-                    });
+                        match display.create_dmabuf_from_image(image, size, texture.is_y_inverted()) {
+                            Ok(dm) => {
+                                eprintln!("[wallpaper] dmabuf export OK: {}x{}", tex_w, tex_h);
+                                Some(dm)
+                            }
+                            Err(e) => {
+                                eprintln!("[wallpaper] dmabuf export FAILED: {:?}", e);
+                                None
+                            }
+                        }
+                    } else {
+                        eprintln!("[wallpaper] egl_images empty");
+                        None
+                    }
+                } else {
+                    eprintln!("[wallpaper] no egl_images");
+                    None
+                };
 
                 result.push(WallpaperTile {
                     x: sx as i32, y: sy as i32,
@@ -510,12 +525,17 @@ impl TwoSystem {
 
     /// Batch-load missing tiles from disk in parallel, then upload to GPU.
     /// Returns (key, texture, tex_w, tex_h) for each loaded tile.
+    /// Uses GBM dmabuf allocation for Vulkan compatibility.
     fn batch_load_tiles(
         renderer: &mut GlesRenderer,
         tiles_dir: &Path,
         missing: &[(u32, u32, u32, u32)], // (zoom, x, y, ancestor_offset)
     ) -> Vec<((u32, i32, i32), GlesTexture, u32, u32)> {
         use rayon::prelude::*;
+        use compositor_support_bevy_core_alloc_base::allocate_dmabuf;
+        use smithay::backend::allocator::Buffer;
+        use smithay::backend::allocator::dmabuf::DmabufMappingMode;
+        use smithay::backend::renderer::ImportDma;
 
         // Phase 1: Parallel CPU load (image decode only, no GPU).
         let loaded: Vec<_> = missing
@@ -531,11 +551,27 @@ impl TwoSystem {
             .collect();
 
         // Phase 2: Sequential GPU upload (renderer is !Send).
-        // image crate produces RGBA (R at byte 0) → Fourcc::Abgr8888 maps to GL_RGBA8.
+        // Use GBM dmabuf allocation for Vulkan-compatible textures.
         loaded
             .into_iter()
             .filter_map(|(zoom, y, x, data, w, h)| {
-                let tex = renderer.import_memory(&data, Fourcc::Abgr8888, Size::from((w as i32, h as i32)), false).ok()?;
+                // Allocate dmabuf via GBM.
+                let allocated = allocate_dmabuf("/dev/dri/renderD128", w, h).ok()?;
+
+                // Copy image data into dmabuf.
+                let mapping = allocated.dmabuf.map_plane(0, DmabufMappingMode::READ | DmabufMappingMode::WRITE).ok()?;
+                let ptr = mapping.ptr();
+                let len = mapping.length();
+                let copy_len = data.len().min(len);
+                unsafe {
+                    std::ptr::copy_nonoverlapping(data.as_ptr(), ptr as *mut u8, copy_len);
+                }
+                drop(mapping);
+
+                // Import dmabuf into GLES renderer (creates texture with egl_images).
+                let tex = renderer.import_dmabuf(&allocated.dmabuf, None).ok()?;
+
+                // Note: The dmabuf is now owned by the texture.
                 Some(((zoom, y, x), tex, w, h))
             })
             .collect()
