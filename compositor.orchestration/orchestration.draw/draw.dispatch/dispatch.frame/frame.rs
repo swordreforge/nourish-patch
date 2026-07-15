@@ -67,6 +67,20 @@ pub trait SceneDispatch: Renderer {
         alpha: f32,
     ) -> Result<(), <Self as RendererSuper>::Error>;
 
+    /// Draw a dmabuf-backed texture into `frame`. Used for zero-copy sharing
+    /// between GLES and Vulkan renderers. Blank for renderers that cannot import
+    /// dmabufs directly.
+    fn draw_prerendered_dmabuf(
+        _frame: &mut <Self as RendererSuper>::Frame<'_, '_>,
+        _dmabuf: &smithay::backend::allocator::dmabuf::Dmabuf,
+        _src: Rectangle<f64, BufferCoord>,
+        _dst: Rectangle<i32, Physical>,
+        _damage: &[Rectangle<i32, Physical>],
+        _alpha: f32,
+    ) -> Result<(), <Self as RendererSuper>::Error> {
+        Ok(())
+    }
+
     /// Run a GLES pixel-shader program over a region. Blank for renderers
     /// without a pixel-shader path; `program` is `None` for those. `pass`
     /// carries a renderer-native fullscreen-shader draw (SPIR-V + push bytes)

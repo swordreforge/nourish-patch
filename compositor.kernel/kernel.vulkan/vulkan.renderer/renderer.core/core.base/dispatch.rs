@@ -1,12 +1,12 @@
 //! `VulkanRenderer`'s implementation of the scene-dispatch seam.
 //!
-//! Blank for now: the GLES-resource elements (iced UI, bevy 3D, parallax pixel
-//! shader) carry `GlesTexture`/`GlesPixelProgram` that the Vulkan path cannot
-//! consume directly. Per the integration plan, these no-op on Vulkan until each
-//! element grows a renderer-native (dmabuf-import / vulkan composite) path. This
-//! is the sanctioned "blank draw for non-GLES renderers" hook.
+//! When a GLES texture is provided, we attempt to re-use its underlying dmabuf
+//! (if it was created via dmabuf import) and import it into Vulkan. This enables
+//! zero-copy sharing between GLES and Vulkan renderers.
 
+use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::renderer::gles::{GlesPixelProgram, GlesTexture, Uniform};
+use smithay::backend::renderer::{Frame, ImportDma, Texture};
 use smithay::utils::{Buffer as BufferCoord, Physical, Rectangle, Size};
 use compositor_orchestration_draw_dispatch_frame::{ElementMeta, NativeShaderPass, SceneDispatch};
 use compositor_orchestration_draw_dispatch_frame::ShaderVariant as SeamVariant;
@@ -49,8 +49,22 @@ impl SceneDispatch for VulkanRenderer {
         _damage: &[Rectangle<i32, Physical>],
         _alpha: f32,
     ) -> Result<(), VulkanError> {
-        // Blank until a dmabuf-imported vulkan texture path lands for these elements.
+        // GLES textures cannot be directly rendered by Vulkan.
+        // Use draw_prerendered_dmabuf for zero-copy path.
         Ok(())
+    }
+
+    fn draw_prerendered_dmabuf(
+        frame: &mut VulkanFrame<'_, '_>,
+        dmabuf: &smithay::backend::allocator::dmabuf::Dmabuf,
+        src: Rectangle<f64, BufferCoord>,
+        dst: Rectangle<i32, Physical>,
+        damage: &[Rectangle<i32, Physical>],
+        alpha: f32,
+    ) -> Result<(), VulkanError> {
+        // Import the dmabuf into Vulkan for zero-copy rendering.
+        let vk_texture = frame.renderer.import_dmabuf(dmabuf, None)?;
+        frame.render_texture_from_to(&vk_texture, src, dst, damage, &[], smithay::utils::Transform::Normal, alpha)
     }
 
     fn draw_pixel_program(

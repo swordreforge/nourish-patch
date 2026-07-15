@@ -3,9 +3,10 @@ use compositor_background_two_state_base::state::Two;
 use compositor_support_system_buffer_token_base::y5_buffer;
 use compositor_support_system_trait_system_base::base::{BufferCx, System, SystemCx, WorldBuilder};
 use compositor_support_system_world_frame_base::base::{self as layer, FramePlan, FrameTick};
+use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::gles::GlesTexture;
-use smithay::backend::renderer::ImportMem;
+use smithay::backend::renderer::{ImportDma, ImportMem, Texture};
 use smithay::backend::allocator::Fourcc;
 use smithay::utils::{Buffer as BufferCoord, Size};
 use std::any::Any;
@@ -408,12 +409,22 @@ impl TwoSystem {
                     continue;
                 }
 
+                // Try to export dmabuf from the GLES texture for Vulkan import.
+                let dmabuf = texture.egl_images()
+                    .and_then(|images| images.first())
+                    .and_then(|&image| {
+                        let display = renderer.egl_context().display();
+                        let size = Size::from((tex_w as i32, tex_h as i32));
+                        display.create_dmabuf_from_image(image, size, texture.is_y_inverted()).ok()
+                    });
+
                 result.push(WallpaperTile {
                     x: sx as i32, y: sy as i32,
                     w: sw as i32, h: sh as i32,
                     tex_w,
                     tex_h,
                     texture,
+                    dmabuf,
                 });
             }
         }

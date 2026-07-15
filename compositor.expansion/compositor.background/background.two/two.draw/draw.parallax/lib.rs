@@ -5,6 +5,7 @@
 use compositor_background_two_draw_motion::Motion;
 use compositor_background_two_shader_spirv::VulkanModule;
 use compositor_orchestration_draw_dispatch_frame::SceneDispatch;
+use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::renderer::RendererSuper;
 use smithay::backend::renderer::element::{Element, Id, Kind, RenderElement};
 use smithay::backend::renderer::gles::{GlesPixelProgram, GlesRenderer, GlesTexture};
@@ -24,11 +25,13 @@ pub struct WallpaperTile {
     pub y: i32,
     pub w: i32,
     pub h: i32,
-    /// Texture dimensions (original tile size, e.g. 256x256).
+    /// Texture dimensions (original tile size, e.g. 1600x1600).
     pub tex_w: u32,
     pub tex_h: u32,
     /// The loaded GLES texture for this tile.
     pub texture: GlesTexture,
+    /// Optional dmabuf for Vulkan import (zero-copy path).
+    pub dmabuf: Option<Dmabuf>,
 }
 
 #[derive(Clone)]
@@ -150,9 +153,17 @@ impl<R: SceneDispatch> RenderElement<R> for ParallaxBackground {
                     (self.offset.0 + tile.x, self.offset.1 + tile.y),
                     (tile.w, tile.h),
                 );
-                R::draw_prerendered_texture(
-                    frame, &tile.texture, tile_src, tile_dst, damage, 1.0,
-                )?;
+                // Prefer dmabuf path for zero-copy Vulkan import; fall back to
+                // GLES texture path if dmabuf is not available.
+                if let Some(dmabuf) = &tile.dmabuf {
+                    R::draw_prerendered_dmabuf(
+                        frame, dmabuf, tile_src, tile_dst, damage, 1.0,
+                    )?;
+                } else {
+                    R::draw_prerendered_texture(
+                        frame, &tile.texture, tile_src, tile_dst, damage, 1.0,
+                    )?;
+                }
             }
             return Ok(());
         }

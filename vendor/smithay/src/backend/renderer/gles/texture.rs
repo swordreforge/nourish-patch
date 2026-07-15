@@ -60,6 +60,14 @@ impl GlesTexture {
     pub fn is_unique_reference(&mut self) -> bool {
         Arc::get_mut(&mut self.0).is_some()
     }
+
+    /// Access the underlying EGL images used to create this texture.
+    ///
+    /// Returns `Some(&[EGLImage])` if the texture was created from dmabuf import,
+    /// which can be used for dmabuf export via `EGLDisplay::create_dmabuf_from_image`.
+    pub fn egl_images(&self) -> Option<&[EGLImage]> {
+        self.0.egl_images.as_deref()
+    }
 }
 
 #[derive(Debug, Default)]
