@@ -73,6 +73,7 @@ impl VulkanRenderer {
             last_fence_warn: None,
             capture_targets: Vec::new(),
             capture_cache: CaptureCache::new(),
+            dmabuf_cache: HashMap::new(),
             shm_staging: StagingBuffer::new(),
             frame_counter: 0,
             debug_flags: DebugFlags::empty(),

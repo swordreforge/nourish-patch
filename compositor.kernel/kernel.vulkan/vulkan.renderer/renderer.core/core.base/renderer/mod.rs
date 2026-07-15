@@ -95,6 +95,9 @@ pub struct VulkanRenderer {
     /// Capture-target dmabufs imported as TRANSFER_DST images, re-imported only
     /// when the target set changes (the leak fix lives in `capture.blit`).
     pub(super) capture_cache: CaptureCache,
+    /// Cache of imported dmabuf textures, keyed by weak Dmabuf reference.
+    /// Avoids re-importing the same dmabuf every frame.
+    pub(super) dmabuf_cache: HashMap<smithay::backend::allocator::dmabuf::WeakDmabuf, VulkanTexture>,
     /// Reusable host-visible staging buffer for SHM uploads (grows on demand),
     /// so steady-state SHM updates allocate no new host memory.
     pub(super) shm_staging: StagingBuffer,

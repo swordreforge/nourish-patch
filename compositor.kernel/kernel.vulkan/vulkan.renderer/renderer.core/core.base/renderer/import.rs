@@ -80,11 +80,18 @@ impl ImportDma for VulkanRenderer {
         dmabuf: &Dmabuf,
         _damage: Option<&[Rectangle<i32, BufferCoord>]>,
     ) -> Result<VulkanTexture, VulkanError> {
+        // Check if this dmabuf is already imported (cache hit).
+        if let Some(cached) = self.dmabuf_cache.get(&dmabuf.weak()) {
+            return Ok(cached.clone());
+        }
+
+        // Import the dmabuf into Vulkan (cache miss).
         let imported =
             compositor_kernel_vulkan_memory_import_base::import::import(&self.dev, &self.phd, dmabuf)
                 .map_err(|e| VulkanError::Import(e.to_string()))?;
         self.transition_to_sampled(imported.image)?;
-        Ok(VulkanTexture {
+
+        let tex = VulkanTexture {
             inner: Arc::new(TextureInner {
                 device: self.dev.device.clone(),
                 image: imported.image,
@@ -98,7 +105,12 @@ impl ImportDma for VulkanRenderer {
                 owns_memory: true,
             }),
             surf: [0.0; 4],
-        })
+        };
+
+        // Cache the imported texture for future frames.
+        self.dmabuf_cache.insert(dmabuf.weak(), tex.clone());
+
+        Ok(tex)
     }
 }
 
