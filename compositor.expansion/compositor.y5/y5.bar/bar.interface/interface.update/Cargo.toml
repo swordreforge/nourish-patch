@@ -1,0 +1,15 @@
+[package]
+name = "compositor_y5_bar_interface_update"
+version = "0.0.1"
+edition = "2024"
+
+
+[dependencies]
+smithay = { workspace = true }
+compositor_orchestration_core_state_base = { workspace = true }
+compositor_monitor_compositor_iced_base = { workspace = true }
+compositor_y5_bar_ui_base = { workspace = true }
+compositor_y5_bar_interface_base = { workspace = true }
+
+[lib]
+path = "lib.rs"
