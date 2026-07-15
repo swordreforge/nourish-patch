@@ -77,6 +77,8 @@ pub struct Settings {
     pub invert_pan_y: bool,
     /// The active world's sRGB-output toggle (pushed via `SyncWorldSrgb`).
     pub srgb: bool,
+    /// The active world's wallpaper image path (pushed via `SyncWorldWallpaper`).
+    pub wallpaper_path: Option<String>,
     /// The cursor-teleport layout squares (Display tab canvas, multi-monitor). Each
     /// is a monitor (`identity`) placed at an abstract `(x,y)` with side `size`.
     pub layout: Vec<LayoutPlacement>,
@@ -168,6 +170,7 @@ impl Settings {
             invert_pan_x: false,
             invert_pan_y: false,
             srgb: false,
+            wallpaper_path: None,
             layout,
             selected_placement: None,
             next_placement_id,
@@ -343,6 +346,10 @@ impl IcedUi for Settings {
             SettingsMessage::SetWorldInvertPanY(v) => self.invert_pan_y = v,
             SettingsMessage::SyncWorldSrgb(v) => self.srgb = v,
             SettingsMessage::SetWorldSrgb(v) => self.srgb = v,
+            SettingsMessage::SetWorldWallpaper(s) => {
+                self.wallpaper_path = if s.is_empty() { None } else { Some(s) };
+            }
+            SettingsMessage::SyncWorldWallpaper(p) => self.wallpaper_path = p,
             // UI mirror of an edit; also forwarded to persist + drive the shader.
             SettingsMessage::SetWorldShaderParams(values) => {
                 for p in &mut self.shader_props {
@@ -475,6 +482,7 @@ impl IcedUi for Settings {
             self.invert_pan_x,
             self.invert_pan_y,
             self.srgb,
+            self.wallpaper_path.as_deref(),
             &self.graphics,
         )
     }

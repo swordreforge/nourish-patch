@@ -22,6 +22,9 @@ pub struct Two {
     /// colour so the non-sRGB scanout buffer shows the brighter, preview-matching
     /// look (default off = raw values). Persisted per world.
     pub srgb: bool,
+    /// Per-world wallpaper image path: when set, loads tiles from this directory
+    /// and renders them instead of the parallax shader. `None` = use shader.
+    pub wallpaper_path: Option<String>,
 }
 
 impl Two {
@@ -34,6 +37,7 @@ impl Two {
             invert_pan_x: false,
             invert_pan_y: false,
             srgb: false,
+            wallpaper_path: None,
         }
     }
 }

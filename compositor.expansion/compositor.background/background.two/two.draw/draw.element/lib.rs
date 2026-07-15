@@ -5,4 +5,5 @@
 
 pub mod element {
     pub use compositor_background_two_draw_parallax::ParallaxBackground;
+    pub use compositor_background_two_draw_parallax::WallpaperTile;
 }

@@ -268,6 +268,20 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         SettingsMessage::SetWorldInvertPanX(v) => set_world_invert(state, Some(v), None),
         SettingsMessage::SetWorldInvertPanY(v) => set_world_invert(state, None, Some(v)),
         SettingsMessage::SetWorldSrgb(v) => set_world_srgb(state, v),
+        SettingsMessage::SetWorldWallpaper(path) => {
+            let world = state.inner.worlds.active_id();
+            if let Some(two) = state
+                .inner
+                .worlds
+                .active_mut()
+                .storage_mut()
+                .try_get_mut(&compositor_background_two_storage_base::base::BG_TWO_MUT)
+            {
+                two.wallpaper_path = if path.is_empty() { None } else { Some(path) };
+                two.instance = None;
+                compositor_support_system_persist_mark_base::base::mark_world(world, true);
+            }
+        }
         SettingsMessage::Close => {
             state.inner.kernel.get_mut(&SETTINGS_MUT).open = false;
         }
@@ -382,6 +396,7 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
         | SettingsMessage::LayoutSelect(_)
         | SettingsMessage::LayoutRemove(_)
         | SettingsMessage::WifiSelect(_)
-        | SettingsMessage::WifiPassword(_) => {}
+        | SettingsMessage::WifiPassword(_)
+        | SettingsMessage::SyncWorldWallpaper(_) => {}
     }
 }

@@ -155,6 +155,13 @@ pub enum SettingsMessage {
     /// Gamma-encode the current world's background to sRGB (forwarded: persists +
     /// flips the live background, no rebuild). On = brighter, preview-matching output.
     SetWorldSrgb(bool),
+    /// Set the current world's wallpaper image path (forwarded: persists + triggers
+    /// tile pyramid generation + switches to tile rendering). Empty string = clear
+    /// wallpaper and revert to the parallax shader.
+    SetWorldWallpaper(String),
+    /// The current world's wallpaper path, pushed by the embed (NOT forwarded).
+    /// Mirrored here so the UI reflects the current state.
+    SyncWorldWallpaper(Option<String>),
     /// The current world's pan-inversion state (invert X, invert Y), pushed by the
     /// embed (NOT forwarded): sets the toggles when the panel opens / the world switches.
     SyncWorldInvert(bool, bool),

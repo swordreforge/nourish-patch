@@ -90,6 +90,7 @@ pub fn render<'a>(
     shaders: &'a [String], shader_current: Option<&'a str>, shader_props: &'a [ShaderProp],
     preview_source: &'a str, shader_status: Option<&'a str>,
     invert_pan_x: bool, invert_pan_y: bool, srgb: bool,
+    wallpaper_path: Option<&'a str>,
     graphics: &'a GraphicsAaConfig,
 ) -> El<'a> {
     let body: El<'a> = match tab {
@@ -104,7 +105,7 @@ pub fn render<'a>(
         Tab::Performance => performance(fps, show_fps, release_hidden),
         Tab::System => environment::build(env, devices),
         Tab::Misc => misc::build(ime, keyboard),
-        Tab::World => world::build(shaders, shader_current, shader_props, preview_source, shader_status, invert_pan_x, invert_pan_y, srgb),
+        Tab::World => world::build(shaders, shader_current, shader_props, preview_source, shader_status, invert_pan_x, invert_pan_y, srgb, wallpaper_path),
         Tab::Graphics => graphics::build(graphics),
     };
     // Each section still scrolls its own lists vertically. The content area holds a

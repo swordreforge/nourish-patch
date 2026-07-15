@@ -16,7 +16,7 @@ pub fn create_world_with_id(state: &mut Loop, id: uuid::Uuid) -> uuid::Uuid {
     let systems: Vec<Box<dyn System>> = vec![
         Box::new(compositor_y5_navigator_system_base::base::NavigatorSystem),
         Box::new(compositor_y5_camera_system_base::base::CameraSystem::default()),
-        Box::new(compositor_background_two_system_base::base::TwoSystem),
+        Box::new(compositor_background_two_system_base::base::TwoSystem::default()),
         Box::new(compositor_y5_window_system_base::base::WindowSystem),
         Box::new(compositor_y5_surface_system_base::base::SurfaceSystem),
         Box::new(compositor_y5_canvas_system_base::base::CanvasSystem),
