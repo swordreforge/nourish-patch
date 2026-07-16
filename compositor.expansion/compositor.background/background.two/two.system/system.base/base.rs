@@ -384,9 +384,9 @@ impl TwoSystem {
                 let tile_world_x = tile_img_x - img_w / 2.0;
                 let tile_world_y = tile_img_y - img_h / 2.0;
 
-                // Convert to screen coordinates.
-                let sx = ((tile_world_x - pan.0) * zoom + output_size.0 / 2.0).floor();
-                let sy = ((tile_world_y - pan.1) * zoom + output_size.1 / 2.0).floor();
+                // Convert to screen coordinates (no rounding — GPU handles sub-pixel).
+                let sx = (tile_world_x - pan.0) * zoom + output_size.0 / 2.0;
+                let sy = (tile_world_y - pan.1) * zoom + output_size.1 / 2.0;
                 let sw = (world_w * zoom).ceil();
                 let sh = (world_h * zoom).ceil();
 
