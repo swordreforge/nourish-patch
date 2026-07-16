@@ -480,10 +480,58 @@ impl TwoSystem {
         result
     }
 
+    /// Load tile image with 1px edge padding to prevent texture bleeding.
+    /// The padding replicates edge pixels, providing a safety margin for
+    /// GPU sampling when tiles are scaled up.
     fn load_tile_image(path: &Path) -> Option<(Vec<u8>, u32, u32)> {
         let img = image::open(path).ok()?.into_rgba8();
         let (w, h) = img.dimensions();
-        Some((img.into_raw(), w, h))
+        let raw = img.into_raw();
+        let pw = w + 2;
+        let ph = h + 2;
+        let mut padded = vec![0u8; (pw * ph * 4) as usize];
+        // Copy original to center (1,1).
+        for y in 0..h {
+            let src_row = (y * w * 4) as usize;
+            let dst_row = ((y + 1) * pw * 4) as usize;
+            padded[dst_row..dst_row + (w * 4) as usize]
+                .copy_from_slice(&raw[src_row..src_row + (w * 4) as usize]);
+        }
+        // Extrude edges: fill border with nearest edge pixel.
+        let get_px = |x: u32, y: u32| -> [u8; 4] {
+            let x = x.min(w - 1);
+            let y = y.min(h - 1);
+            let i = ((y * w + x) * 4) as usize;
+            [raw[i], raw[i + 1], raw[i + 2], raw[i + 3]]
+        };
+        // Top/bottom rows.
+        for x in 0..w {
+            let c = get_px(x, 0);
+            let i = ((x + 1) * 4) as usize;
+            padded[i..i + 4].copy_from_slice(&c);
+            let c = get_px(x, h - 1);
+            let i = (((ph - 1) * pw + x + 1) * 4) as usize;
+            padded[i..i + 4].copy_from_slice(&c);
+        }
+        // Left/right columns.
+        for y in 0..h {
+            let c = get_px(0, y);
+            let i = (((y + 1) * pw) * 4) as usize;
+            padded[i..i + 4].copy_from_slice(&c);
+            let c = get_px(w - 1, y);
+            let i = (((y + 1) * pw + pw - 1) * 4) as usize;
+            padded[i..i + 4].copy_from_slice(&c);
+        }
+        // Corners.
+        let tl = get_px(0, 0);
+        padded[0..4].copy_from_slice(&tl);
+        let tr = get_px(w - 1, 0);
+        padded[((pw - 1) * 4) as usize..(pw * 4) as usize].copy_from_slice(&tr);
+        let bl = get_px(0, h - 1);
+        padded[(((ph - 1) * pw) * 4) as usize..(((ph - 1) * pw + 1) * 4) as usize].copy_from_slice(&bl);
+        let br = get_px(w - 1, h - 1);
+        padded[(((ph - 1) * pw + pw - 1) * 4) as usize..(((ph - 1) * pw + pw) * 4) as usize].copy_from_slice(&br);
+        Some((padded, pw, ph))
     }
 
     fn upload_dmabuf_tile(renderer: &mut GlesRenderer, data: &[u8], w: u32, h: u32) -> Option<Dmabuf> {

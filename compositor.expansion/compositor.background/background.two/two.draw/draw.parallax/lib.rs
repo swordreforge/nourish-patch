@@ -145,9 +145,9 @@ impl<R: SceneDispatch> RenderElement<R> for ParallaxBackground {
         // prerendered texture. Empty list = fall back to the parallax shader.
         if !self.wallpaper_tiles.is_empty() {
             for tile in &self.wallpaper_tiles {
-                // src = full texture rect (0,0 → tex_w,tex_h)
+                // src = inner area (skip 1px padding on each side for texture extrusion).
                 let tile_src = Rectangle::from_loc_and_size(
-                    (0.0, 0.0), (tile.tex_w as f64, tile.tex_h as f64),
+                    (1.0, 1.0), ((tile.tex_w - 2) as f64, (tile.tex_h - 2) as f64),
                 );
                 let tile_dst = Rectangle::from_loc_and_size(
                     (self.offset.0 + tile.x, self.offset.1 + tile.y),
