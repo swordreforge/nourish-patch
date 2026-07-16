@@ -216,7 +216,9 @@ impl TwoSystem {
                 renderer, &wallpaper_path, instance.pan, instance.zoom,
                 instance.output_size, use_dmabuf,
             );
-            if !new_tiles.is_empty() {
+            // Only update if: non-empty AND no async loading in progress.
+            // Async loading means some tiles are missing from the list.
+            if !new_tiles.is_empty() && self.async_rx.is_none() {
                 self.cached_tiles = new_tiles;
             }
         }
