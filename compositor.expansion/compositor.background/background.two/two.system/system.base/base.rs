@@ -377,15 +377,34 @@ impl TwoSystem {
 
                 // Position and size in world coordinates.
                 let tile_sf = info.tile_scale_factor(found_z);
+                let (actual_w, actual_h) = info.tile_pixel_size(found_z, (key.2) as u32, key.1 as u32);
 
                 // Tile center in image coordinates.
-                // Both position AND size use standard grid — ensures seamless tiling.
-                // GPU stretches edge tile texture to fill the cell.
+                // Position uses cumulative actual sizes for seamless tiling.
+                // Size uses actual tile dimensions — no stretching.
                 let d = tile_z - found_z;
                 let render_tx = if d > 0 { tx >> d } else { tx };
                 let render_ty = if d > 0 { ty >> d } else { ty };
-                let tile_img_x = render_tx as f32 * info.tile_w * tile_sf;
-                let tile_img_y = render_ty as f32 * info.tile_h * tile_sf;
+
+                // Calculate cumulative position from actual tile sizes.
+                // For standard tiles: position = index * tile_w.
+                // For the last column/row: position = (count-1) * tile_w, size = actual.
+                let level = &info.levels[found_z as usize];
+                let tile_img_x = if render_tx >= 0 && (render_tx as u32) < level.cols {
+                    // Standard or edge tile: cumulative position.
+                    let base = render_tx as u32 * info.tile_w as u32;
+                    // If this is the last column, the previous tiles used standard size.
+                    base as f32 * tile_sf
+                } else {
+                    // Negative or beyond: use standard grid for tiling.
+                    render_tx as f32 * info.tile_w * tile_sf
+                };
+                let tile_img_y = if render_ty >= 0 && (render_ty as u32) < level.rows {
+                    let base = render_ty as u32 * info.tile_h as u32;
+                    base as f32 * tile_sf
+                } else {
+                    render_ty as f32 * info.tile_h * tile_sf
+                };
 
                 // Convert to world coordinates (origin at image center).
                 let tile_world_x = tile_img_x - img_w / 2.0;
@@ -394,9 +413,9 @@ impl TwoSystem {
                 // Convert to screen coordinates.
                 let sx = (tile_world_x - pan.0) * zoom + output_size.0 / 2.0;
                 let sy = (tile_world_y - pan.1) * zoom + output_size.1 / 2.0;
-                // Standard grid size — tiles fill the cell completely.
-                let sw = (info.tile_w * tile_sf * zoom).ceil();
-                let sh = (info.tile_h * tile_sf * zoom).ceil();
+                // Size uses actual tile dimensions — no stretching.
+                let sw = (actual_w * tile_sf * zoom).ceil();
+                let sh = (actual_h * tile_sf * zoom).ceil();
 
                 if sx + sw <= 0.0 || sx >= output_size.0 || sy + sh <= 0.0 || sy >= output_size.1 {
                     continue;
