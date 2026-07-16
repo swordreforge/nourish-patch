@@ -4,6 +4,15 @@ members = [
     "loader.main/*/*",
 ]
 
+# Release profile: optimize for binary size and runtime performance.
+# LTO + single codegen unit = best optimization, slower link but worth it for a compositor.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = 3
+panic = "abort"
+
 [workspace.dependencies]
 tracing = { version = "0.1.37", features = ["max_level_trace", "release_max_level_debug"] }
 tracing-subscriber = { version = "0.3.16", features = ["env-filter"] }
