@@ -377,9 +377,6 @@ impl TwoSystem {
 
                 // Position and size in world coordinates.
                 let tile_sf = info.tile_scale_factor(found_z);
-                let (actual_w, actual_h) = info.tile_pixel_size(found_z, (key.2) as u32, key.1 as u32);
-                let world_w = actual_w * tile_sf;
-                let world_h = actual_h * tile_sf;
 
                 // Tile center in image coordinates.
                 let d = tile_z - found_z;
@@ -392,11 +389,13 @@ impl TwoSystem {
                 let tile_world_x = tile_img_x - img_w / 2.0;
                 let tile_world_y = tile_img_y - img_h / 2.0;
 
-                // Convert to screen coordinates (no rounding — GPU handles sub-pixel).
+                // Convert to screen coordinates.
                 let sx = (tile_world_x - pan.0) * zoom + output_size.0 / 2.0;
                 let sy = (tile_world_y - pan.1) * zoom + output_size.1 / 2.0;
-                let sw = (world_w * zoom).ceil();
-                let sh = (world_h * zoom).ceil();
+                // Use standard grid size for screen dimensions — ensures tiles
+                // fill the cell without gaps. GPU stretches texture to fit.
+                let sw = (info.tile_w * tile_sf * zoom).ceil();
+                let sh = (info.tile_h * tile_sf * zoom).ceil();
 
                 if sx + sw <= 0.0 || sx >= output_size.0 || sy + sh <= 0.0 || sy >= output_size.1 {
                     continue;
