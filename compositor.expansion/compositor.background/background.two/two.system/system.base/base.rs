@@ -259,10 +259,17 @@ impl TwoSystem {
                 max_cols = max_cols.max(cols);
             }
             if rows == 0 || max_cols == 0 { return None; }
-            // Use padded dimensions (cols * tile_w, rows * tile_h).
-            // Edge tile sizes are calculated on-the-fly in tile_pixel_size.
-            let pixel_w = max_cols as f32 * tile_w;
-            let pixel_h = rows as f32 * tile_h;
+            // Find actual extension
+            let actual_ext = if z_dir.join("0").join("0.png").exists() { "png" }
+                else if z_dir.join("0").join("0.webp").exists() { "webp" }
+                else { "jpg" };
+            // Read edge tiles to get actual image dimensions.
+            let last_col_w = image::open(z_dir.join("0").join(format!("0.{actual_ext}"))).ok()
+                .map(|img| img.width() as f32).unwrap_or(tile_w);
+            let last_row_h = image::open(z_dir.join((rows - 1).to_string()).join(format!("0.{actual_ext}"))).ok()
+                .map(|img| img.height() as f32).unwrap_or(tile_h);
+            let pixel_w = (max_cols - 1) as f32 * tile_w + last_col_w;
+            let pixel_h = (rows - 1) as f32 * tile_h + last_row_h;
             levels.push(LevelInfo { cols: max_cols, rows, pixel_w, pixel_h });
         }
         Some(WallpaperInfo { tile_w, tile_h, max_zoom, levels })
