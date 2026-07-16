@@ -1059,6 +1059,9 @@ impl ImportMem for GlesRenderer {
                     .TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_WRAP_S, ffi::CLAMP_TO_EDGE as i32);
                 self.gl
                     .TexParameteri(ffi::TEXTURE_2D, ffi::TEXTURE_WRAP_T, ffi::CLAMP_TO_EDGE as i32);
+                // Ensure tight row packing — prevents misaligned rows when
+                // tile width * bpp is not a multiple of the default alignment (4).
+                self.gl.PixelStorei(ffi::UNPACK_ALIGNMENT, 1);
                 self.gl.TexImage2D(
                     ffi::TEXTURE_2D,
                     0,
