@@ -212,10 +212,13 @@ impl TwoSystem {
             self.last_zoom = instance.zoom;
             self.needs_rebuild = false;
             let use_dmabuf = compositor_developer_environment_config_base::base::get().renderer == "vulkan";
-            self.cached_tiles = self.compute_visible_tiles(
+            let new_tiles = self.compute_visible_tiles(
                 renderer, &wallpaper_path, instance.pan, instance.zoom,
                 instance.output_size, use_dmabuf,
             );
+            if !new_tiles.is_empty() {
+                self.cached_tiles = new_tiles;
+            }
         }
         cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(self.cached_tiles.clone()));
     }
