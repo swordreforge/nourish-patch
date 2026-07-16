@@ -306,16 +306,19 @@ impl TwoSystem {
         let vis_bottom = img_cy + output_size.1 / (2.0 * zoom);
 
         let level = &info.levels[tile_z as usize];
-        let x_start = ((vis_left / tile_world).floor() as i32).max(0) as u32;
-        let y_start = ((vis_top / tile_world).floor() as i32).max(0) as u32;
-        let x_end = ((vis_right / tile_world).ceil() as u32).min(level.cols);
-        let y_end = ((vis_bottom / tile_world).ceil() as u32).min(level.rows);
-
-        if x_start >= x_end || y_start >= y_end { return Vec::new(); }
+        // No clamping — allow tiles beyond image bounds for tiling/repeating.
+        let x_start = (vis_left / tile_world).floor() as i32;
+        let y_start = (vis_top / tile_world).floor() as i32;
+        let x_end = (vis_right / tile_world).ceil() as i32;
+        let y_end = (vis_bottom / tile_world).ceil() as i32;
 
         let tiles_dir = Path::new(wallpaper_path).join("tiles");
         let mut result = Vec::new();
         let mut missing_tiles: Vec<(u32, u32, u32)> = Vec::new();
+
+        // Wrap tile coordinate to valid range using modulo (for repeating/tiled wallpaper).
+        let wrap_x = |tx: i32, cols: u32| -> u32 { ((tx % cols as i32 + cols as i32) % cols as i32) as u32 };
+        let wrap_y = |ty: i32, rows: u32| -> u32 { ((ty % rows as i32 + rows as i32) % rows as i32) as u32 };
 
         // Phase 1: find tiles in cache, record missing ones.
         for ty in y_start..y_end {
@@ -326,7 +329,10 @@ impl TwoSystem {
                     let d = tile_z - fallback_z;
                     let px = tx >> d;
                     let py = ty >> d;
-                    let key = (fallback_z, py as i32, px as i32);
+                    // Wrap to valid tile range for cache key.
+                    let wx = wrap_x(px, level.cols);
+                    let wy = wrap_y(py, level.rows);
+                    let key = (fallback_z, wy as i32, wx as i32);
                     if self.tile_cache.contains(&key)
                         && (!use_dmabuf || self.dmabufs.contains_key(&key))
                     {
@@ -334,19 +340,21 @@ impl TwoSystem {
                         break;
                     }
                     // Record ALL missing tiles in the fallback chain.
-                    if !missing_tiles.iter().any(|&(z, x, y)| z == fallback_z && x == px && y == py) {
-                        missing_tiles.push((fallback_z, px, py));
+                    if !missing_tiles.iter().any(|&(z, x, y)| z == fallback_z && x == wx && y == wy) {
+                        missing_tiles.push((fallback_z, wx, wy));
                     }
                 }
                 // UP search: check higher zoom levels for child tiles.
                 if found.is_none() {
                     'up: for higher_z in (tile_z + 1)..=max_z {
                         let d = higher_z - tile_z;
-                        let base_x = tx << d;
-                        let base_y = ty << d;
-                        for dy in 0..(1u32 << d) {
-                            for dx in 0..(1u32 << d) {
-                                let key = (higher_z, (base_y + dy) as i32, (base_x + dx) as i32);
+                        let base_x = (tx << d) as i32;
+                        let base_y = (ty << d) as i32;
+                        for dy in 0..(1i32 << d) {
+                            for dx in 0..(1i32 << d) {
+                                let cx = wrap_x(base_x + dx, level.cols);
+                                let cy = wrap_y(base_y + dy, level.rows);
+                                let key = (higher_z, cy as i32, cx as i32);
                                 if self.tile_cache.contains(&key)
                                     && (!use_dmabuf || self.dmabufs.contains_key(&key))
                                 {
@@ -455,16 +463,18 @@ impl TwoSystem {
             let margin = 0.25;
             let half_w = output_size.0 / (2.0 * zoom) * margin;
             let half_h = output_size.1 / (2.0 * zoom) * margin;
-            let px_start = ((img_cx - half_w) / ptw).floor().max(0.0) as u32;
-            let py_start = ((img_cy - half_h) / ptw).floor().max(0.0) as u32;
-            let px_end = ((img_cx + half_w) / ptw).ceil() as u32;
-            let py_end = ((img_cy + half_h) / ptw).ceil() as u32;
+            let px_start = ((img_cx - half_w) / ptw).floor() as i32;
+            let py_start = ((img_cy - half_h) / ptw).floor() as i32;
+            let px_end = ((img_cx + half_w) / ptw).ceil() as i32;
+            let py_end = ((img_cy + half_h) / ptw).ceil() as i32;
             let mut prefetch_missing = Vec::new();
-            for py in py_start..py_end.min(plevel.rows) {
-                for px in px_start..px_end.min(plevel.cols) {
-                    let key = (pz, py as i32, px as i32);
+            for py in py_start..py_end {
+                for px in px_start..px_end {
+                    let wx = wrap_x(px, plevel.cols);
+                    let wy = wrap_y(py, plevel.rows);
+                    let key = (pz, wy as i32, wx as i32);
                     if !self.tile_cache.contains(&key) {
-                        prefetch_missing.push((pz, px, py));
+                        prefetch_missing.push((pz, wx, wy));
                     }
                 }
             }
