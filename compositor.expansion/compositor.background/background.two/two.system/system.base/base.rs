@@ -256,10 +256,16 @@ impl TwoSystem {
             // Use dmabuf for Vulkan renderer, import_memory for GLES.
             let use_dmabuf = compositor_developer_environment_config_base::base::get()
                 .renderer == "vulkan";
-            self.cached_tiles = self.compute_visible_tiles(
+            let new_tiles = self.compute_visible_tiles(
                 renderer, &wallpaper_path, instance.pan, instance.zoom,
                 instance.output_size, use_dmabuf,
             );
+            // Only update cached_tiles if we got new tiles.
+            // This preserves the previous frame's tiles while async loading is in progress,
+            // preventing black gaps during tile transitions.
+            if !new_tiles.is_empty() {
+                self.cached_tiles = new_tiles;
+            }
         }
 
         cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(self.cached_tiles.clone()));
@@ -381,9 +387,12 @@ impl TwoSystem {
         let mut missing_tiles: Vec<(u32, u32, u32, u32)> = Vec::new();
 
         // Phase 1: Determine which tiles are needed (check cache first).
+        // When zoomed beyond max_z, we need ancestor tiles at lower zoom levels.
+        // The fallback search goes from tile_zoom down to 0.
         for ty in ty_min..=ty_max {
             for tx in tx_min..=tx_max {
                 // Find the best ancestor tile (cached or to-be-loaded).
+                // Search from tile_zoom DOWN to 0 — ancestors are at lower zoom levels.
                 let mut best_key: Option<(u32, i32, i32)> = None;
 
                 for fallback_z in (0..=tile_zoom).rev() {
@@ -396,11 +405,11 @@ impl TwoSystem {
                         best_key = Some(key);
                         break;
                     }
-                    // Record the first missing tile for async loading.
+                    // Record missing tiles at ALL fallback levels for async loading.
+                    // This ensures ancestor tiles are always available when needed.
                     if best_key.is_none() {
                         best_key = Some(key);
                         missing_tiles.push((fallback_z, ancestor_x, ancestor_y, d));
-                        break;
                     }
                 }
             }
@@ -460,6 +469,7 @@ impl TwoSystem {
             for tx in tx_min..=tx_max {
                 let mut found: Option<(GlesTexture, u32, u32)> = None;
                 let mut found_key: Option<(u32, i32, i32)> = None;
+                let mut found_z: u32 = tile_zoom;
 
                 for fallback_z in (0..=tile_zoom).rev() {
                     let d = tile_zoom - fallback_z;
@@ -470,6 +480,7 @@ impl TwoSystem {
                     if let Some(entry) = self.tile_cache.get(&key).cloned() {
                         found = Some(entry);
                         found_key = Some(key);
+                        found_z = fallback_z;
                         break;
                     }
                 }
@@ -479,16 +490,32 @@ impl TwoSystem {
                     None => continue,
                 };
 
+                // Calculate tile position based on the FOUND tile's zoom level.
+                // If we found an ancestor tile, use its grid coordinates.
+                let d = tile_zoom - found_z;
+                let render_tx = if d > 0 { tx >> d } else { tx };
+                let render_ty = if d > 0 { ty >> d } else { ty };
+
+                // Calculate the ancestor tile's world-space dimensions.
+                let ancestor_step = 1u32 << (max_z - found_z);
+                let ancestor_cell_world = TILE_PX * ancestor_step as f32;
+                let ancestor_num_tiles_x = ((img_w + ancestor_cell_world - 1.0) / ancestor_cell_world) as u32;
+                let ancestor_num_tiles_y = ((img_h + ancestor_cell_world - 1.0) / ancestor_cell_world) as u32;
+
                 // Tile's world-space top-left (image centred at world origin).
-                let tile_left = (img_w * tx as f32 / num_tiles_x as f32) - img_w / 2.0;
-                let tile_top  = (img_h * ty as f32 / num_tiles_y as f32) - img_h / 2.0;
+                let tile_left = (img_w * render_tx as f32 / ancestor_num_tiles_x as f32) - img_w / 2.0;
+                let tile_top  = (img_h * render_ty as f32 / ancestor_num_tiles_y as f32) - img_h / 2.0;
+
+                // Tile world-space dimensions at the found zoom level.
+                let tile_world_w_found = img_w / ancestor_num_tiles_x as f32;
+                let tile_world_h_found = img_h / ancestor_num_tiles_y as f32;
 
                 let sx = (tile_left - pan.0) * zoom + output_size.0 / 2.0;
                 let sy = (tile_top  - pan.1) * zoom + output_size.1 / 2.0;
                 let sx = sx.round();
                 let sy = sy.round();
-                let sw = (tile_world_w * zoom).ceil();
-                let sh = (tile_world_h * zoom).ceil();
+                let sw = (tile_world_w_found * zoom).ceil();
+                let sh = (tile_world_h_found * zoom).ceil();
 
                 if sx + sw <= 0.0 || sx >= output_size.0
                     || sy + sh <= 0.0 || sy >= output_size.1
