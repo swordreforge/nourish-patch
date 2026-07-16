@@ -512,8 +512,8 @@ impl TwoSystem {
 
                 let sx = (tile_left - pan.0) * zoom + output_size.0 / 2.0;
                 let sy = (tile_top  - pan.1) * zoom + output_size.1 / 2.0;
-                let sx = sx.round();
-                let sy = sy.round();
+                let sx = sx.floor();
+                let sy = sy.floor();
                 let sw = (tile_world_w_found * zoom).ceil();
                 let sh = (tile_world_h_found * zoom).ceil();
 
