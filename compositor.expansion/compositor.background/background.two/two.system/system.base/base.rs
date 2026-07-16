@@ -390,20 +390,28 @@ impl TwoSystem {
                 // For standard tiles: position = index * tile_w.
                 // For the last column/row: position = (count-1) * tile_w, size = actual.
                 let level = &info.levels[found_z as usize];
+                // X position: cumulative width of all tiles before this one.
                 let tile_img_x = if render_tx >= 0 && (render_tx as u32) < level.cols {
-                    // Standard or edge tile: cumulative position.
                     let base = render_tx as u32 * info.tile_w as u32;
-                    // If this is the last column, the previous tiles used standard size.
                     base as f32 * tile_sf
                 } else {
-                    // Negative or beyond: use standard grid for tiling.
-                    render_tx as f32 * info.tile_w * tile_sf
+                    // For tiling: calculate based on cumulative image width.
+                    let img_cumulative_w = (level.cols - 1) as f32 * info.tile_w
+                        + info.tile_pixel_size(found_z, level.cols - 1, 0).0;
+                    let cycles = render_tx.div_euclid(level.cols as i32);
+                    let remainder = render_tx.rem_euclid(level.cols as i32);
+                    (cycles as f32 * img_cumulative_w + remainder as f32 * info.tile_w) * tile_sf
                 };
+                // Y position: cumulative height of all tiles before this one.
                 let tile_img_y = if render_ty >= 0 && (render_ty as u32) < level.rows {
                     let base = render_ty as u32 * info.tile_h as u32;
                     base as f32 * tile_sf
                 } else {
-                    render_ty as f32 * info.tile_h * tile_sf
+                    let img_cumulative_h = (level.rows - 1) as f32 * info.tile_h
+                        + info.tile_pixel_size(found_z, 0, level.rows - 1).1;
+                    let cycles = render_ty.div_euclid(level.rows as i32);
+                    let remainder = render_ty.rem_euclid(level.rows as i32);
+                    (cycles as f32 * img_cumulative_h + remainder as f32 * info.tile_h) * tile_sf
                 };
 
                 // Convert to world coordinates (origin at image center).
