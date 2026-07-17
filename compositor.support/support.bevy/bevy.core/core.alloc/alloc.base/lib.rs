@@ -1,7 +1,12 @@
 //! DRM render node → gbm BO → Dmabuf.
+//!
+//! A process-wide shared GBM device (keyed on render node path) is used for
+//! all allocations, avoiding the per-allocation GbmDevice open+init overhead
+//! that inflated ShmemHugePages on Intel i915.
 
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::path::Path;
+use std::sync::{Arc, OnceLock};
 
 use compositor_support_bevy_core_fault_base::AllocError;
 use compositor_developer_debug_instance_record::{info, warn};
@@ -9,13 +14,12 @@ use gbm::{BufferObjectFlags, Device as GbmDevice, Format as GbmFormat};
 use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
 use smithay::backend::allocator::{Buffer, Fourcc, Modifier};
 
-/// Opaque holder for an allocated buffer. Keeps gbm alive while the dmabuf
-/// is in use. Drop order inside this struct: `dmabuf` first (releases fds
-/// and any imports), then `_bo`, then `_gbm`.
+/// Opaque holder for an allocated buffer. Drop order: `dmabuf` (releases fds
+/// and any imports), then `_bo` (releases the buffer object). The underlying
+/// GBM device is shared process-wide and outlives all allocations.
 pub struct AllocatedDmabuf {
     pub dmabuf: Dmabuf,
     _bo: gbm::BufferObject<()>,
-    _gbm: GbmDevice<OwnedFd>,
 }
 
 impl std::fmt::Debug for AllocatedDmabuf {
@@ -26,6 +30,27 @@ impl std::fmt::Debug for AllocatedDmabuf {
             .field("num_planes", &self.dmabuf.num_planes())
             .finish()
     }
+}
+
+/// Process-wide shared GBM device, created once on first use.
+/// Lives for the process lifetime, shared by all buffer allocations.
+fn shared_gbm(render_node: &Path) -> &'static Arc<GbmDevice<OwnedFd>> {
+    static DEVICE: OnceLock<Arc<GbmDevice<OwnedFd>>> = OnceLock::new();
+    DEVICE.get_or_init(|| {
+        let drm_file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(render_node)
+            .expect("shared_gbm: failed to open render node");
+        let drm_fd: OwnedFd = drm_file.into();
+        info!(
+            "Shared GBM: opened render node {} (fd={})",
+            render_node.display(),
+            drm_fd.as_raw_fd()
+        );
+        let gbm = GbmDevice::new(drm_fd).expect("shared_gbm: GbmDevice::new failed");
+        Arc::new(gbm)
+    })
 }
 
 /// Allocate a single ARGB8888 LINEAR dmabuf at the given size from the
@@ -48,16 +73,7 @@ pub fn allocate_dmabuf_on(
         return Err(AllocError::InvalidDimensions { width, height });
     }
 
-    let drm_file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(render_node)
-        .map_err(AllocError::OpenDrm)?;
-    let drm_fd: OwnedFd = drm_file.into();
-
-    info!("Opened DRM render node {} (fd={})", render_node.display(), drm_fd.as_raw_fd());
-
-    let gbm = GbmDevice::new(drm_fd).map_err(AllocError::GbmInit)?;
+    let gbm = shared_gbm(render_node);
 
     let bo = gbm
         .create_buffer_object::<()>(
@@ -94,7 +110,7 @@ pub fn allocate_dmabuf_on(
 
     info!("Built Dmabuf: size={:?}, format={:?}, num_planes={}, modifier={:?}", dmabuf.size(), dmabuf.format(), dmabuf.num_planes(), modifier);
 
-    Ok(AllocatedDmabuf { dmabuf, _bo: bo, _gbm: gbm })
+    Ok(AllocatedDmabuf { dmabuf, _bo: bo })
 }
 
 /// Map a bridge fourcc to its gbm format (the fourccs the bridge negotiates).
@@ -145,13 +161,8 @@ fn allocate_with_modifiers(
     if width == 0 || height == 0 {
         return Err(AllocError::InvalidDimensions { width, height });
     }
-    let drm_file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(render_node)
-        .map_err(AllocError::OpenDrm)?;
-    let drm_fd: OwnedFd = drm_file.into();
-    let gbm = GbmDevice::new(drm_fd).map_err(AllocError::GbmInit)?;
+
+    let gbm = shared_gbm(render_node);
 
     let gbm_mods = modifiers.iter().map(|m| gbm::Modifier::from(Into::<u64>::into(*m)));
     let bo = gbm
@@ -173,7 +184,7 @@ fn allocate_with_modifiers(
     }
     let dmabuf = builder.build().ok_or(AllocError::BuildDmabuf)?;
     publish_stats("gbm-bevy", fourcc, modifier, plane_count);
-    Ok(AllocatedDmabuf { dmabuf, _bo: bo, _gbm: gbm })
+    Ok(AllocatedDmabuf { dmabuf, _bo: bo })
 }
 
 /// Record the post-determined format for the developer "GPU formats" panel.

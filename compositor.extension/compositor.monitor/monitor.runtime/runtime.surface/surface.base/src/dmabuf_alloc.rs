@@ -1,32 +1,34 @@
 //! DRM render node → gbm BO → Dmabuf.
 //!
 //! This is the bottom of the import stack. `allocate_dmabuf` returns an
-//! `AllocatedDmabuf` that owns the gbm device + buffer object. Dropping it
-//! releases the underlying GPU memory; keep it alive for as long as either
-//! WGPU or GLES holds an imported view.
+//! `AllocatedDmabuf` that owns the buffer object. Dropping it releases the
+//! underlying GPU memory; keep it alive for as long as either WGPU or GLES
+//! holds an imported view.
+//!
+//! A process-wide shared GBM device (keyed on render node path) is used for
+//! all allocations, avoiding the per-allocation GbmDevice open+init overhead
+//! that inflated ShmemHugePages on Intel i915.
 //!
 //! The returned `Dmabuf` is cheap to clone (it's just plane fds + metadata),
 //! and the `AllocatedDmabuf` wrapper holds the lifetime-critical pieces.
 
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::path::Path;
+use std::sync::{Arc, OnceLock};
 
 use crate::error::AllocError;
 use gbm::{BufferObjectFlags, Device as GbmDevice, Format as GbmFormat};
 use smithay::backend::allocator::dmabuf::{Dmabuf, DmabufFlags};
 use smithay::backend::allocator::{Buffer, Fourcc, Modifier};
 
-/// Opaque holder for an allocated buffer. Keeps gbm alive while the dmabuf
-/// is in use. Drop order inside this struct: `dmabuf` first (releases fds
-/// and any imports), then `_bo`, then `_gbm`. Rust drops struct fields in
-/// declaration order, so the ordering below is load-bearing — don't reorder.
+/// Opaque holder for an allocated buffer. Drop order: `dmabuf` (releases fds
+/// and any imports), then `_bo` (releases the buffer object). The underlying
+/// GBM device is shared process-wide and outlives all allocations.
 pub struct AllocatedDmabuf {
     pub dmabuf: Dmabuf,
     // The buffer object holds the GPU allocation; dropping it before the
     // dmabuf would close handles the dmabuf still references.
     _bo: gbm::BufferObject<()>,
-    // The gbm device must outlive any BO created from it.
-    _gbm: GbmDevice<OwnedFd>,
 }
 
 impl std::fmt::Debug for AllocatedDmabuf {
@@ -39,19 +41,32 @@ impl std::fmt::Debug for AllocatedDmabuf {
     }
 }
 
-/// Path to the DRM render node we use for allocations.
-///
-/// Exposed as a constant so callers can verify or override. `/dev/dri/renderD129`
-/// is the second render node on systems with multiple GPUs (NVIDIA + iGPU);
-/// adjust for single-GPU systems if you find this wrong.
-// pub const DEFAULT_RENDER_NODE: &str = GPU_DEVICE;
+/// Process-wide shared GBM device, created once on first use.
+/// Lives for the process lifetime, shared by all buffer allocations.
+fn shared_gbm(render_node: &Path) -> &'static Arc<GbmDevice<OwnedFd>> {
+    static DEVICE: OnceLock<Arc<GbmDevice<OwnedFd>>> = OnceLock::new();
+    DEVICE.get_or_init(|| {
+        let drm_file = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(render_node)
+            .expect("shared_gbm: failed to open render node");
+        let drm_fd: OwnedFd = drm_file.into();
+        info!(
+            "Shared GBM (iced): opened render node {} (fd={})",
+            render_node.display(),
+            drm_fd.as_raw_fd()
+        );
+        let gbm = GbmDevice::new(drm_fd).expect("shared_gbm: GbmDevice::new failed");
+        Arc::new(gbm)
+    })
+}
 
 /// Allocate a single ARGB8888 LINEAR dmabuf at the given size.
 ///
 /// LINEAR is the safest modifier for cross-API sharing (Mesa/NVIDIA/GLES/Vulkan
-/// all handle it). Returns an `AllocatedDmabuf` that owns the gbm device and
-/// buffer object; the inner `Dmabuf` can be cloned cheaply and imported by
-/// wgpu or GLES.
+/// all handle it). Returns an `AllocatedDmabuf` that owns the buffer object;
+/// the inner `Dmabuf` can be cloned cheaply and imported by wgpu or GLES.
 pub fn allocate_dmabuf(
     render_node: &str,
     width: u32,
@@ -70,24 +85,9 @@ pub fn allocate_dmabuf_on(
         return Err(AllocError::InvalidDimensions { width, height });
     }
 
-    // 1. Open the render node.
-    let drm_file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(render_node)
-        .map_err(AllocError::OpenDrm)?;
-    let drm_fd: OwnedFd = drm_file.into();
+    let gbm = shared_gbm(render_node);
 
-    info!(
-        "Opened DRM render node {} (fd={})",
-        render_node.display(),
-        drm_fd.as_raw_fd()
-    );
-
-    // 2. Wrap in a gbm device.
-    let gbm = GbmDevice::new(drm_fd).map_err(AllocError::GbmInit)?;
-
-    // 3. Allocate the buffer object. RENDERING usage = usable as render target.
+    // Allocate the buffer object. RENDERING usage = usable as render target.
     let bo = gbm
         .create_buffer_object::<()>(
             width,
@@ -104,7 +104,7 @@ pub fn allocate_dmabuf_on(
         bo.modifier(),
     );
 
-    // 4. Export plane(s) as a Smithay Dmabuf.
+    // Export plane(s) as a Smithay Dmabuf.
     let plane_count = bo.plane_count();
     let modifier = bo.modifier();
 
@@ -138,7 +138,6 @@ pub fn allocate_dmabuf_on(
     Ok(AllocatedDmabuf {
         dmabuf,
         _bo: bo,
-        _gbm: gbm,
     })
 }
 
@@ -190,13 +189,8 @@ fn allocate_with_modifiers(
     if width == 0 || height == 0 {
         return Err(AllocError::InvalidDimensions { width, height });
     }
-    let drm_file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(render_node)
-        .map_err(AllocError::OpenDrm)?;
-    let drm_fd: OwnedFd = drm_file.into();
-    let gbm = GbmDevice::new(drm_fd).map_err(AllocError::GbmInit)?;
+
+    let gbm = shared_gbm(render_node);
 
     let gbm_mods = modifiers.iter().map(|m| gbm::Modifier::from(Into::<u64>::into(*m)));
     let bo = gbm
@@ -221,7 +215,6 @@ fn allocate_with_modifiers(
     Ok(AllocatedDmabuf {
         dmabuf,
         _bo: bo,
-        _gbm: gbm,
     })
 }
 
