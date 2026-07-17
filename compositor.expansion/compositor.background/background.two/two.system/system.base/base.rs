@@ -39,6 +39,7 @@ struct LevelInfo {
 }
 
 /// Detected info from a vips dzsave --layout google tile pyramid.
+#[derive(Clone)]
 struct WallpaperInfo {
     tile_w: f32,
     tile_h: f32,
@@ -67,9 +68,17 @@ impl WallpaperInfo {
     }
 }
 
+/// Maximum bytes the tile cache may hold (~1.5 GB). Each tile is roughly
+/// (tile_w+2)*(tile_h+2)*4 bytes; for 1600×1600 tiles that is ~10 MB, so
+/// 128 tiles ≈ 1.3 GB. We use a generous cap to allow prefetching across
+/// zoom levels while still preventing unbounded growth.
+const MAX_CACHE_BYTES: usize = 1_500 * 1024 * 1024; // 1.5 GB
+
 pub struct TwoSystem {
     tile_cache: LruCache<(u32, i32, i32), (GlesTexture, u32, u32)>,
     dmabufs: HashMap<(u32, i32, i32), Dmabuf>,
+    /// Running total of bytes held by tile_cache + dmabufs.
+    cache_bytes: usize,
     last_wallpaper: Option<String>,
     info: Option<WallpaperInfo>,
     last_pan: (f32, f32),
@@ -82,8 +91,9 @@ pub struct TwoSystem {
 impl Default for TwoSystem {
     fn default() -> Self {
         Self {
-            tile_cache: LruCache::new(NonZeroUsize::new(512).unwrap()),
+            tile_cache: LruCache::new(NonZeroUsize::new(128).unwrap()),
             dmabufs: HashMap::new(),
+            cache_bytes: 0,
             last_wallpaper: None,
             info: None,
             last_pan: (0.0, 0.0),
@@ -92,6 +102,68 @@ impl Default for TwoSystem {
             async_rx: None,
             needs_rebuild: false,
         }
+    }
+}
+
+impl TwoSystem {
+    /// Bytes consumed by one tile texture + optional dmabuf.
+    fn tile_bytes(w: u32, h: u32, has_dmabuf: bool) -> usize {
+        let tex = (w as usize + 2) * (h as usize + 2) * 4; // +2 for edge padding
+        if has_dmabuf { tex * 2 } else { tex } // dmabuf mirrors the texture
+    }
+
+    /// Evict the least-recently-used entry, cleaning up both the texture and
+    /// its dmabuf (if any). Returns the freed byte count.
+    fn evict_lru(&mut self) -> usize {
+        if let Some((key, (_tex, w, h))) = self.tile_cache.pop_lru() {
+            let had_dmabuf = self.dmabufs.remove(&key).is_some();
+            let freed = Self::tile_bytes(w, h, had_dmabuf);
+            self.cache_bytes = self.cache_bytes.saturating_sub(freed);
+            return freed;
+        }
+        0
+    }
+
+    /// Evict until cache_bytes is below the limit.
+    fn evict_to_budget(&mut self) {
+        while self.cache_bytes > MAX_CACHE_BYTES && self.tile_cache.len() > 0 {
+            self.evict_lru();
+        }
+    }
+
+    /// Insert a tile into the cache, evicting LRU entries as needed.
+    fn cache_insert(&mut self, key: (u32, i32, i32), tex: GlesTexture, w: u32, h: u32, dmabuf: Option<Dmabuf>) {
+        let has_dmabuf = dmabuf.is_some();
+        let bytes = Self::tile_bytes(w, h, has_dmabuf);
+
+        // If key already exists, subtract old size first.
+        if let Some((_tex, ow, oh)) = self.tile_cache.peek(&key) {
+            let old_had_dmabuf = self.dmabufs.contains_key(&key);
+            self.cache_bytes = self.cache_bytes.saturating_sub(Self::tile_bytes(*ow, *oh, old_had_dmabuf));
+        }
+
+        // Evict until we have room for the new tile.
+        while self.cache_bytes + bytes > MAX_CACHE_BYTES && self.tile_cache.len() > 0 {
+            self.evict_lru();
+        }
+
+        // push() returns the evicted entry if the count cap is exceeded.
+        if let Some((evicted_key, (_, ew, eh))) = self.tile_cache.push(key, (tex, w, h)) {
+            let had_dmabuf = self.dmabufs.remove(&evicted_key).is_some();
+            self.cache_bytes = self.cache_bytes.saturating_sub(Self::tile_bytes(ew, eh, had_dmabuf));
+        }
+
+        if let Some(dm) = dmabuf {
+            self.dmabufs.insert(key, dm);
+        }
+        self.cache_bytes += bytes;
+    }
+
+    /// Clear the entire cache (wallpaper change).
+    fn cache_clear(&mut self) {
+        self.tile_cache.clear();
+        self.dmabufs.clear();
+        self.cache_bytes = 0;
     }
 }
 
@@ -181,7 +253,7 @@ impl TwoSystem {
                 if self.last_wallpaper.is_some() {
                     self.last_wallpaper = None;
                     self.info = None;
-                    self.tile_cache.clear();
+                    self.cache_clear();
                     self.cached_tiles.clear();
                     cx.write(&TWO_BUF, TwoCmd::SetWallpaperTiles(Vec::new()));
                 }
@@ -191,7 +263,7 @@ impl TwoSystem {
         if self.last_wallpaper.as_ref() != Some(&wallpaper_path) {
             self.last_wallpaper = Some(wallpaper_path.clone());
             self.info = self.detect_wallpaper_info(&wallpaper_path);
-            self.tile_cache.clear();
+            self.cache_clear();
             self.cached_tiles.clear();
             self.needs_rebuild = true;
         }
@@ -286,7 +358,7 @@ impl TwoSystem {
         output_size: (f32, f32),
         use_dmabuf: bool,
     ) -> Vec<WallpaperTile> {
-        let info = match &self.info { Some(i) => i, None => return Vec::new() };
+        let info = match self.info.clone() { Some(i) => i, None => return Vec::new() };
         let max_z = info.max_zoom;
         let img_w = info.levels[0].pixel_w;
         let img_h = info.levels[0].pixel_h;
@@ -448,12 +520,11 @@ impl TwoSystem {
                     if use_dmabuf {
                         if let Some(dm) = Self::upload_dmabuf_tile(renderer, &data, w, h) {
                             if let Some(tex) = renderer.import_dmabuf(&dm, None).ok() {
-                                self.tile_cache.put(key, (tex, w, h));
-                                self.dmabufs.insert(key, dm);
+                                self.cache_insert(key, tex, w, h, Some(dm));
                             }
                         }
                     } else if let Some(tex) = renderer.import_memory(&data, Fourcc::Abgr8888, Size::from((w as i32, h as i32)), false).ok() {
-                        self.tile_cache.put(key, (tex, w, h));
+                        self.cache_insert(key, tex, w, h, None);
                     }
                 }
                 self.needs_rebuild = true;
@@ -508,8 +579,7 @@ impl TwoSystem {
             if !prefetch_missing.is_empty() {
                 let loaded = Self::batch_load_tiles(renderer, &tiles_dir, &prefetch_missing, use_dmabuf);
                 for (key, tex, dmabuf, tw, th) in loaded {
-                    self.tile_cache.put(key, (tex, tw, th));
-                    if let Some(dm) = dmabuf { self.dmabufs.insert(key, dm); }
+                    self.cache_insert(key, tex, tw, th, dmabuf);
                 }
             }
         }
