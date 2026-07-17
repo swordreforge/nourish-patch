@@ -2,6 +2,7 @@
 //! the input method the compositor launches (preferences.json `ime`, applied on the
 //! next start). Each IME edit emits the whole `Ime`, persisted live by the handler.
 use compositor_developer_environment_preference_base::base::{Ime, KeyboardLayout};
+use std::collections::HashMap;
 use compositor_support_iced_core_engine_base::Renderer;
 use compositor_configurator_settings_surface_message::message::SettingsMessage;
 use compositor_configurator_settings_surface_style::style;
@@ -17,10 +18,10 @@ fn card<'a>(inner: El<'a>) -> El<'a> {
     container(inner).style(style::card).width(Length::Fill).into()
 }
 
-pub fn build<'a>(ime: &'a Ime, kbd: &'a KeyboardLayout) -> El<'a> {
+pub fn build<'a>(ime: &'a Ime, kbd: &'a KeyboardLayout, env: &'a HashMap<String, String>) -> El<'a> {
     let head = column![
         text(t!("MISC")).size(16).color(style::ACCENT),
-        text(t!("Keyboard layout and the input method launched by the compositor.")).size(11).color(style::MUTED),
+        text(t!("Keyboard layout, input method, and environment variables.")).size(11).color(style::MUTED),
     ].spacing(4);
 
     let mut rows: Vec<El<'a>> = vec![head.into()];
@@ -58,6 +59,32 @@ pub fn build<'a>(ime: &'a Ime, kbd: &'a KeyboardLayout) -> El<'a> {
     let add = button(text(t!("+ add argument")).size(12)).style(control::action)
         .on_press({ let mut x = ime.clone(); x.args.push(String::new()); SettingsMessage::Ime(x) });
     rows.push(add.into());
+
+    // Environment variables section.
+    rows.push(text(t!("ENVIRONMENT VARIABLES")).size(14).color(style::ACCENT).into());
+    rows.push(text(t!("Extra env vars pushed to the session. Applied on next start.")).size(11).color(style::MUTED).into());
+
+    for (key, val) in env.iter() {
+        let base = env.clone();
+        let k = key.clone();
+        let key_field = text_input("KEY", key)
+            .width(Length::Fixed(160.0));
+        let val_field = text_input("VALUE", val)
+            .width(Length::Fill)
+            .on_input({
+                let base = base.clone();
+                let k = k.clone();
+                move |s| { let mut x = base.clone(); x.insert(k.clone(), s); SettingsMessage::EnvVars(x) }
+            });
+        let remove = button(text("−").size(14)).style(control::action)
+            .on_press({ let mut x = env.clone(); x.remove(&k); SettingsMessage::EnvVars(x) });
+        rows.push(card(
+            row![key_field, val_field, remove].align_y(Alignment::Center).spacing(10).padding(12).into(),
+        ));
+    }
+    let env_add = button(text(t!("+ add variable")).size(12)).style(control::action)
+        .on_press({ let mut x = env.clone(); x.insert(String::new(), String::new()); SettingsMessage::EnvVars(x) });
+    rows.push(env_add.into());
 
     scrollable(Column::with_children(rows).spacing(10)).height(Length::Fill).into()
 }

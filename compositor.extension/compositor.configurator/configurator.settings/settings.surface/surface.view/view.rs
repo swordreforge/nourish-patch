@@ -3,6 +3,7 @@
 //! display selection, and the optimistic confirm state are handled locally.
 use compositor_developer_environment_config_base::base::Environment;
 use compositor_developer_environment_preference_base::base::{Ime, KeyboardLayout};
+use std::collections::HashMap;
 use compositor_developer_environment_keybinding_base::base::KeyRow;
 use compositor_developer_environment_preference_base::base::LayoutPlacement;
 use compositor_orchestration_driver_output_base::base::{ApplyResult, DisplayInfo, ModeInfo, OutputsSnapshot};
@@ -26,6 +27,8 @@ pub struct Settings {
     pub ime: Ime,
     /// Keyboard layout (Misc tab), persisted + applied live.
     pub keyboard: KeyboardLayout,
+    /// Extra environment variables (Misc tab), persisted to preferences.json.
+    pub env_vars: std::collections::HashMap<String, String>,
     /// Graphics / anti-aliasing config (Graphics tab), persisted + applied live.
     pub graphics: compositor_developer_environment_graphics_base::base::GraphicsAaConfig,
     pub dirty: bool,
@@ -129,7 +132,7 @@ fn default_mode(d: &DisplayInfo) -> Option<ModeInfo> {
 }
 
 impl Settings {
-    pub fn new(env: Environment, cursor: f32, natural: bool, show_fps: bool, release_hidden: bool, snap: OutputsSnapshot, keys: Vec<KeyRow>, tab: Tab, layout: Vec<LayoutPlacement>, cyclic: bool, ime: Ime, keyboard: KeyboardLayout) -> Self {
+    pub fn new(env: Environment, cursor: f32, natural: bool, show_fps: bool, release_hidden: bool, snap: OutputsSnapshot, keys: Vec<KeyRow>, tab: Tab, layout: Vec<LayoutPlacement>, cyclic: bool, ime: Ime, keyboard: KeyboardLayout, env_vars: HashMap<String, String>) -> Self {
         let active = snap.displays.iter().find(|d| d.active).cloned();
         let active_edid = active.as_ref().map(|d| d.edid_key.clone()).unwrap_or_default();
         let selected_mode = active.as_ref().and_then(default_mode);
@@ -143,6 +146,7 @@ impl Settings {
             env,
             ime,
             keyboard,
+            env_vars,
             // Seeded from the process-global (mirrors the persisted preference).
             graphics: compositor_developer_environment_graphics_base::base::get(),
             dirty: false,
@@ -254,6 +258,7 @@ impl IcedUi for Settings {
                 self.dirty = true;
             }
             SettingsMessage::Ime(i) => self.ime = i,
+            SettingsMessage::EnvVars(e) => self.env_vars = e,
             SettingsMessage::Keyboard(k) => self.keyboard = k,
             SettingsMessage::SelectDisplay(key) => {
                 self.selected_display = key.clone();
@@ -474,6 +479,7 @@ impl IcedUi for Settings {
             self.selected_inactive,
             &self.ime,
             &self.keyboard,
+            &self.env_vars,
             &self.shader_options,
             self.shader_current.as_deref(),
             &self.shader_props,

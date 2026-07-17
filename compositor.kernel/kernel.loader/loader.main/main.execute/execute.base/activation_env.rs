@@ -52,8 +52,9 @@ pub fn push_session_env(pairs: &[(&str, &str)]) -> io::Result<()> {
 /// `std::env::set_var("WAYLAND_DISPLAY", …)`.
 ///
 /// - `WAYLAND_DISPLAY` → the socket name your compositor created.
-/// - `DISPLAY=` (empty) → forces apps off X11 fallback. Set this to
-///   `":1"` or whatever later if you run XWayland under y5.
+/// - `DISPLAY=` (empty) → forces apps off X11 fallback.  Set via
+///   `preferences.json` `env` (e.g. `"DISPLAY": ":12"`) when
+///   xwayland-satellite is running.
 /// - `XDG_SESSION_TYPE=wayland` → declares we're a Wayland session;
 ///   some apps check this directly.
 /// - `XDG_CURRENT_DESKTOP=y5` → identifies the desktop for apps that

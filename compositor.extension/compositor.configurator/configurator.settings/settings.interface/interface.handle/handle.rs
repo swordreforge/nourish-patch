@@ -133,6 +133,12 @@ pub fn handle(state: &mut Loop, _renderer: &mut GlesRenderer, m: SettingsMessage
             state.inner.preference.ime = Some(ime);
             let _ = pref::save(&state.inner.preference);
         }
+        SettingsMessage::EnvVars(env) => {
+            // Persist environment variables to preferences.json. Applied on the next
+            // compositor start (pushed to dbus/systemd + set in process env).
+            state.inner.preference.env = env;
+            let _ = pref::save(&state.inner.preference);
+        }
         SettingsMessage::Keyboard(kl) => {
             // Persist AND apply the keyboard layout live: mutate the preference, save,
             // then recompile the keymap on the seat's keyboard. `get_keyboard()` hands

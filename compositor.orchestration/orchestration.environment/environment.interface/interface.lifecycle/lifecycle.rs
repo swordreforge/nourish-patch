@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::process::Command;
 
 /// Name advertised to portals — must match `DesktopNames=` in the .desktop
@@ -11,18 +12,31 @@ use std::process::Command;
 /// `wayland_socket` is the name Smithay gave you, e.g. from
 /// `ListeningSocketSource::socket_name()` — typically "wayland-1".
 ///
+/// `extra_env` comes from `preferences.json` `env` and is merged on top of
+/// the built-in session vars (WAYLAND_DISPLAY, XDG_SESSION_TYPE, etc.).
+///
 /// Only call this when running as the actual session compositor. Do NOT call
 /// it when running nested/embedded for development: it mutates the user-wide
 /// systemd and D-Bus environment and would clobber the host session's vars.
-pub fn announce_session(wayland_socket: &str, desktop_name: &str) {
-    // WAYLAND_DISPLAY is passed as NAME=VALUE so we don't depend on it being
-    // present in our own process env. The desktop name and session type are
-    // passed explicitly too, so this works regardless of what the wrapper set.
+pub fn announce_session(
+    wayland_socket: &str,
+    desktop_name: &str,
+    extra_env: &HashMap<String, String>,
+) {
+    // Build the argument list: built-in session vars first, then user overrides.
+    let mut args: Vec<String> = vec![
+        "--systemd".into(),
+        format!("WAYLAND_DISPLAY={wayland_socket}"),
+        format!("XDG_CURRENT_DESKTOP={desktop_name}"),
+        "XDG_SESSION_TYPE=wayland".into(),
+    ];
+    // User-configured env vars (e.g. DISPLAY=:12, GTK_IM_MODULE=fcitx).
+    for (k, v) in extra_env {
+        args.push(format!("{k}={v}"));
+    }
+
     let result = Command::new("dbus-update-activation-environment")
-        .arg("--systemd")
-        .arg(format!("WAYLAND_DISPLAY={wayland_socket}"))
-        .arg(format!("XDG_CURRENT_DESKTOP={desktop_name}"))
-        .arg("XDG_SESSION_TYPE=wayland")
+        .args(&args)
         .status();
 
     match result {

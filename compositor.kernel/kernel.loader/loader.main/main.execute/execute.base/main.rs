@@ -471,10 +471,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     unsafe { std::env::set_var("WAYLAND_DISPLAY", &wayland_socket_name_for_children) };
     info!("WAYLAND_DISPLAY set to {:?} for child processes", wayland_socket_name_for_children);
 
+    // Push user-configured env vars (preferences.json `env`) into our own
+    // process so child processes inherit them.  These are also pushed to
+    // dbus/systemd in announce_session below.
+    for (k, v) in &state.inner.preference.env {
+        unsafe { std::env::set_var(k.as_str(), v.as_str()) };
+        info!("env: {}={}", k, v);
+    }
+
     // After WlrLayerShellState::new and event loop is running:
     compositor_orchestration_environment_interface_lifecycle::lifecycle::announce_session(
         wayland_socket_name_default_subprocess_2.to_str().unwrap(),
         &environment.DesktopName,
+        &state.inner.preference.env,
     );
 
     // move to loop factory ( it can spawn. )

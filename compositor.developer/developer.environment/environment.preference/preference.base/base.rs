@@ -6,6 +6,7 @@
 //! with [`save`]; applied live, no reboot.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// A per-output mode preference keyed by EDID identity. `Advertised` is the only
@@ -158,6 +159,12 @@ pub struct Preference {
     /// Each entry is `{ "exec": "program", "args": ["--flag"] }`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub autostart: Vec<AutostartApp>,
+    /// Extra environment variables pushed to the session (dbus/systemd) and
+    /// inherited by child processes.  Key=value pairs — e.g.
+    /// `{ "DISPLAY": ":12", "GTK_IM_MODULE": "fcitx" }`.  Applied at startup
+    /// AFTER the backend is wired and the Wayland socket is listening.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub env: HashMap<String, String>,
 }
 
 /// Where the keyboard layout comes from. `Env` (the historical default) leaves the
@@ -243,6 +250,7 @@ impl Default for Preference {
             graphics: compositor_developer_environment_graphics_base::base::GraphicsAaConfig::default(),
             terminal: None,
             autostart: Vec::new(),
+            env: HashMap::new(),
         }
     }
 }

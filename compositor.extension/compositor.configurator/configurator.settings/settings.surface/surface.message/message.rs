@@ -1,5 +1,6 @@
 //! The settings-window message type, shared by the view + tab builders + the
 //! surface protocol/handler. iced-free so the protocol crate can name it.
+use std::collections::HashMap;
 use compositor_developer_environment_config_base::base::Environment;
 use compositor_developer_environment_preference_base::base::{Ime, KeyboardLayout};
 use compositor_orchestration_driver_output_base::base::{ApplyResult, DisplayInfo, ModeInfo};
@@ -103,6 +104,10 @@ pub enum SettingsMessage {
     /// (forwarded). Carries the whole `Ime` like `Env`, so exec + args edits share one
     /// variant. Applied on the next compositor start.
     Ime(Ime),
+    /// Environment variables (Misc tab) to persist to preferences.json and push
+    /// to dbus/systemd on next start. Carries the whole map so key/value edits
+    /// share one variant.
+    EnvVars(HashMap<String, String>),
     /// A full edited keyboard-layout preference (Misc tab) to persist to
     /// preferences.json AND apply live (forwarded). Carries the whole
     /// `KeyboardLayout` like `Ime`/`Env`, so the source toggle + layout/variant/
