@@ -641,11 +641,16 @@ pub fn surface_under_filtered_cx(
     // iced interleave here by raise, no kind-branching in the driver. Any window
     // not in the order (defensive) is hit-tested at the bottom.
     let order = hcx.drawable_order();
-    let by_uuid: std::collections::HashMap<uuid::Uuid, Window> = hcx.space_state().state
-        .elements().filter_map(|w| compositor_y5_window_interface_record::window::LoopWindow::uuid(w).map(|u| (u, w.clone()))).collect();
     let in_order: std::collections::HashSet<uuid::Uuid> = order.iter().copied().collect();
     for id in &order {
-        let drawable = match by_uuid.get(id) {
+        // Look up the window directly from space elements by UUID — avoids
+        // cloning all elements into a HashMap. Window is Arc-backed so the
+        // clone here is a cheap reference-count bump.
+        let drawable = match hcx.space_state().state.elements().find(|w| {
+            w.user_data()
+                .get::<compositor_y5_window_interface_record::data::WindowData>()
+                .map_or(false, |d| &d.UUID == id)
+        }) {
             Some(w) => Drawable::Window(w.clone()),
             None => Drawable::IcedWorld(HandleId(id.as_u128() as u64)),
         };
@@ -653,10 +658,13 @@ pub fn surface_under_filtered_cx(
             return Some(hit);
         }
     }
-    for (u, w) in &by_uuid {
-        if !in_order.contains(u) {
-            if let Some(hit) = Drawable::Window(w.clone()).hit(&hcx, position_world, cursor_phys_world, &iced_transform, iced_output_size, filter) {
-                return Some(hit);
+    // Defensive: any placed window not in the draw order hits at the bottom.
+    for w in hcx.space_state().state.elements() {
+        if let Some(data) = w.user_data().get::<compositor_y5_window_interface_record::data::WindowData>() {
+            if !in_order.contains(&data.UUID) {
+                if let Some(hit) = Drawable::Window(w.clone()).hit(&hcx, position_world, cursor_phys_world, &iced_transform, iced_output_size, filter) {
+                    return Some(hit);
+                }
             }
         }
     }

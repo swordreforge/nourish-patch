@@ -597,6 +597,17 @@ pub fn execute(
                 warn!("native vulkan: GLES cleanup_texture_cache failed: {e:?}");
             }
         }
+        // Prune stale Vulkan dmabuf cache entries (analogous to the GLES
+        // cleanup above). Without this, imported VkImages + DeviceMemory leak
+        // for the renderer's entire lifetime.
+        if ctx_ref.vulkan_mode {
+            if let Some(vk) = ctx_ref.vulkan.as_mut() {
+                use smithay::backend::renderer::Renderer;
+                if let Err(e) = vk.cleanup_texture_cache() {
+                    warn!("native vulkan: Vulkan cleanup_texture_cache failed: {e:?}");
+                }
+            }
+        }
 
         let scene_outputs: Vec<VkOutput> = scene_els
             .into_iter()

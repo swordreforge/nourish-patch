@@ -184,24 +184,26 @@ pub struct PreparedGles {
     pub background_three: Vec<compositor_support_bevy_core_compositor_base::BevyRenderElement>,
     /// The embedded picker globe for the overview's World tab (empty otherwise).
     pub overview_world: Vec<compositor_support_bevy_core_compositor_base::BevyRenderElement>,
+    /// Cached layout computed in `prepare()` and reused by `scene()` to avoid
+    /// a redundant `layout::compute()` call with identical arguments.
+    pub layout: compositor_y5_viewport_layout_base::layout::Computed,
 }
 
 /// Per-pane cameras + sub-rects for the current output, matching how the content
-/// band composites World iced (each leaf viewport through its own camera). This
-/// recomputes the same `layout::compute` the content band uses; the duplication
-/// is deliberate — backing (de)allocation needs the GLES renderer and must run in
-/// `prepare()`, before the renderer-agnostic `scene()` builds the content band.
+/// band composites World iced (each leaf viewport through its own camera).
+/// Returns both the pane views (for backing lifecycle) and the `Computed` layout
+/// (to be cached and reused by `scene()` to avoid a redundant `layout::compute`).
 fn iced_panes(
     state: &Loop,
     size: Size<i32, Physical>,
-) -> Vec<compositor_monitor_compositor_iced_base::PaneView> {
+) -> (Vec<compositor_monitor_compositor_iced_base::PaneView>, compositor_y5_viewport_layout_base::layout::Computed) {
     let scale = state.viewport_context().scale;
     let vps = state.inner.viewports();
     let computed = compositor_y5_viewport_layout_base::layout::compute(
         vps,
         smithay::utils::Rectangle::from_loc_and_size(Point::from((0, 0)), size),
     );
-    computed
+    let panes = computed
         .regions
         .iter()
         .map(|r| {
@@ -218,7 +220,8 @@ fn iced_panes(
                 rect: r.rect,
             }
         })
-        .collect()
+        .collect();
+    (panes, computed)
 }
 
 /// GLES-only preparation phase: runs the per-frame hooks and builds the iced /
@@ -245,13 +248,16 @@ pub fn prepare(
     let (surfaces, surfaces_screen, surfaces_dim) =
         compositor_y5_surface_draw_scene::scene::scene(state, renderer, size);
 
+    // Compute layout once; backing lifecycle uses the pane views, and scene()
+    // reuses the same Computed to avoid a redundant layout::compute() call.
+    let (panes, computed_layout) = iced_panes(state, size);
+
     // Iced backing lifecycle: release the dmabuf of any World surface not
     // actually visible in some pane (fully off-screen or fully obstructed), and
     // re-allocate on reveal. Uses the SAME per-pane cameras the content band
     // composites through — not render_all's single camera — so split / floating
     // panes resolve visibility correctly.
     if dealloc {
-        let panes = iced_panes(state, size);
         let gpu = state.inner.environment.GPU.clone();
         // Real compositing z-order (topmost-first) so occlusion follows the
         // DrawOrder authority, not the registry's `items` Vec. World iced ids map
@@ -328,6 +334,7 @@ pub fn prepare(
         background_two,
         background_three,
         overview_world,
+        layout: computed_layout,
     }
 }
 
@@ -356,6 +363,9 @@ where
     // (fallback: the primary). Because the kernel now calls scene() once PER
     // physical output, gate them so they aren't duplicated + mispositioned on every
     // monitor. `render_output == None` = a non-loop pass (winit / single) → draw all.
+    // Extract fields before partial moves consume other parts of `prepared`.
+    let computed_layout = prepared.layout;
+    let background_two = prepared.background_two;
     let surfaces_screen = prepared.surfaces_screen;
     let render_key = state.inner.render_output.clone();
     let draw_screen = match &render_key {
@@ -409,7 +419,7 @@ where
     ) {
         Some(windows) => {
             // Overview overlay owns the content band; keep the background full-screen.
-            if let Some(bg) = prepared.background_two.clone() {
+            if let Some(bg) = background_two.clone() {
                 plan.push(layer::BACKGROUND, DrawNode::Background2D(bg));
             }
             windows
@@ -421,10 +431,7 @@ where
             // being drawn; the canvas/window scene then projects + crops into it.
             // A single default slot yields one full-output region (unchanged path).
             let scale = state.size_ctx_all().scale;
-            let computed = compositor_y5_viewport_layout_base::layout::compute(
-                state.inner.viewports(),
-                smithay::utils::Rectangle::new(Point::from((0, 0)), size),
-            );
+            let computed = &computed_layout;
             let mut cw = Vec::new();
             state.inner.viewports_mut().visible.clear();
             // Back-to-front: regions are root-first then floating; within a layer
@@ -448,7 +455,7 @@ where
                 } else {
                     (layer::BACKGROUND, layer::CANVAS)
                 };
-                if let Some(base) = prepared.background_two.as_ref() {
+                if let Some(base) = background_two.as_ref() {
                     let (pan_x, pan_y, zoom) = {
                         let t = &state.inner.camera().transform;
                         (t.position.x as f32, t.position.y as f32, t.zoom as f32)

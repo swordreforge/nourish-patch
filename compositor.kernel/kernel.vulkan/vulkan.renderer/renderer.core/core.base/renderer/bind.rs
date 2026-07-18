@@ -133,6 +133,15 @@ impl Renderer for VulkanRenderer {
         // Synchronous foundation; nothing to wait on.
         Ok(())
     }
+
+    /// Prune stale dmabuf cache entries whose underlying `Dmabuf` has been
+    /// released by the client (strong refcount dropped to zero). Analogous to
+    /// the GLES renderer's per-frame cleanup — without this, imported VkImages
+    /// and their DeviceMemory leak for the renderer's entire lifetime.
+    fn cleanup_texture_cache(&mut self) -> Result<(), VulkanError> {
+        self.dmabuf_cache.retain(|k, _v| !k.is_gone());
+        Ok(())
+    }
 }
 
 impl Bind<Dmabuf> for VulkanRenderer {

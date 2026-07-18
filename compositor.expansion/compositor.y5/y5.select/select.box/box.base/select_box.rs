@@ -242,7 +242,6 @@ where
                         || (selected_initial && !selected_updated);
                     if selected_updated != selected_current {
                         selection = state.inner.select()
-                            
                             .exact(window.clone(), selected_updated);
                         selection_set = true;
                     }

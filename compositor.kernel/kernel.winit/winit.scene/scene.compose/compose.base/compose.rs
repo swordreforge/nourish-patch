@@ -119,6 +119,9 @@ fn compose(
         if context.vulkan_mode {
             use smithay::backend::renderer::Renderer;
             let _ = gles_renderer.cleanup_texture_cache();
+            if let Some(vk) = context.vulkan.as_mut() {
+                let _ = vk.cleanup_texture_cache();
+            }
         }
 
         // The VulkanRenderer + target are created at wire time. Only reallocate

@@ -62,9 +62,22 @@ pub struct RenderTarget {
 /// key the per-output render loop, coordinate contexts, settings and teleport all
 /// resolve against.
 pub fn output_key(output: &smithay::output::Output) -> compositor_orchestration_driver_output_base::base::OutputKey {
-    let p = output.physical_properties();
-    format!("{} {} {}", p.make, p.model, p.serial_number)
+    // Cache the key in the Output's UserDataMap so subsequent calls avoid
+    // re-allocating a String and re-acquiring the Mutex lock on physical_properties().
+    // Threadsafe so it works from any thread sharing the Output handle.
+    output
+        .user_data()
+        .get_or_insert_threadsafe(|| {
+            let p = output.physical_properties();
+            CachedOutputKey(format!("{} {} {}", p.make, p.model, p.serial_number))
+        })
+        .0
+        .clone()
 }
+
+/// Cached EDID-based output key stored in the `Output`'s `UserDataMap`.
+/// Wrapper type so it's a unique key in the type-map.
+struct CachedOutputKey(compositor_orchestration_driver_output_base::base::OutputKey);
 
 pub struct Orchestrator {
     pub start_time: std::time::Instant,

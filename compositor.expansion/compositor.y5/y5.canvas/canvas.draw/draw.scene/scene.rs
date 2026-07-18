@@ -38,7 +38,11 @@ where
     // Interleave windows + world iced by the DrawOrder authority (topmost-first).
     let order = state.inner.drawable_order();
     let by_uuid: HashMap<Uuid, Window> = state.inner.space_state().state
-        .elements().filter_map(|w| w.uuid().map(|u| (u, w.clone()))).collect();
+        .elements().filter_map(|w| {
+            w.user_data()
+                .get::<compositor_y5_window_interface_record::data::WindowData>()
+                .map(|d| (d.UUID, w.clone()))
+        }).collect();
     let ordered: HashSet<Uuid> = order.iter().copied().collect();
     // iced camera transform (mirrors the surface scene): world items pan/zoom.
     let scale = state.viewport_context().scale;
@@ -61,7 +65,11 @@ where
         }
     }
     // Defensive: any placed window not in the order draws at the bottom.
-    let leftovers: Vec<Window> = by_uuid.values().filter(|w| w.uuid().map(|u| !ordered.contains(&u)).unwrap_or(true)).cloned().collect();
+    let leftovers: Vec<Window> = by_uuid.into_values().filter(|w| {
+        w.user_data()
+            .get::<compositor_y5_window_interface_record::data::WindowData>()
+            .map_or(true, |d| !ordered.contains(&d.UUID))
+    }).collect();
     for window in leftovers {
         draw_window(state, renderer, &window, &mut content, &mut visible_windows);
     }

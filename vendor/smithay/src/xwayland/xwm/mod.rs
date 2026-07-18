@@ -588,6 +588,8 @@ pub struct X11Wm {
     dnd: XWmDnd,
 
     pub(crate) windows: Vec<X11Surface>,
+    /// O(1) index: window_id → position in `windows`. Maintained on push/remove.
+    pub(crate) window_index: HashMap<X11Window, usize>,
     // oldest mapped -> newest
     client_list: Vec<X11Window>,
     // bottom -> top
@@ -605,6 +607,7 @@ impl Drop for X11Wm {
         xwm_id::remove(self.id.0);
 
         // Break reference cycle caused by deferred_sync hook
+        self.window_index.clear();
         for window in std::mem::take(&mut self.windows) {
             window.handle_destroyed();
         }
@@ -1018,6 +1021,7 @@ impl X11Wm {
             sequences_to_ignore: Default::default(),
             colormaps: Default::default(),
             windows: Vec::new(),
+            window_index: HashMap::new(),
             client_list: Vec::new(),
             client_list_stacking: Vec::new(),
             is_showing_desktop: false,
@@ -1050,6 +1054,33 @@ impl X11Wm {
     /// This can be used to tell if the `_NET_WM_SYNC_REQUEST` protocol can be used.
     pub fn sync_supported(&self) -> bool {
         self.servertime_counter.is_some()
+    }
+
+    /// Find a window by its X11 window id. O(1) via the index.
+    pub(crate) fn find_window(&self, id: X11Window) -> Option<&X11Surface> {
+        self.window_index.get(&id).and_then(|&idx| self.windows.get(idx))
+    }
+
+    /// Find a window mutably by its X11 window id. O(1) via the index.
+    pub(crate) fn find_window_mut(&mut self, id: X11Window) -> Option<&mut X11Surface> {
+        self.window_index.get(&id).copied().and_then(|idx| self.windows.get_mut(idx))
+    }
+
+    /// Push a window and update the index.
+    fn push_window(&mut self, surface: X11Surface) {
+        let idx = self.windows.len();
+        self.window_index.insert(surface.window_id(), idx);
+        self.windows.push(surface);
+    }
+
+    /// Remove a window by position and rebuild the index.
+    fn remove_window_at(&mut self, pos: usize) -> X11Surface {
+        let surface = self.windows.remove(pos);
+        self.window_index.clear();
+        for (i, w) in self.windows.iter().enumerate() {
+            self.window_index.insert(w.window_id(), i);
+        }
+        surface
     }
 
     /// Raises a window in the internal X11 state
@@ -1102,7 +1133,7 @@ impl X11Wm {
             let stacking_ordered_elems: Vec<&X11Surface> = self
                 .client_list_stacking
                 .iter()
-                .filter_map(|w| self.windows.iter().find(|s| s.window_id() == *w))
+                .filter_map(|w| self.find_window(*w))
                 .collect();
             let pos = stacking_ordered_elems.iter().position(|w| relatable.is_window(w));
             if let (Some(pos), Some(last_pos)) = (pos, last_pos) {
@@ -1567,7 +1598,7 @@ where
                 xwm.dnd.xdnd_active.clone(),
             );
             surface.update_properties()?;
-            xwm.windows.push(surface.clone());
+            xwm.push_window(surface.clone());
 
             drop(_guard);
             if n.override_redirect {
@@ -1577,7 +1608,7 @@ where
             }
         }
         Event::MapRequest(r) => {
-            if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == r.window).cloned() {
+            if let Some(surface) = xwm.find_window(r.window).cloned() {
                 if surface.state.lock().unwrap().mapped_onto.is_none() {
                     // we reparent windows, because a lot of stuff expects, that we do
                     let geo_cookie = conn.get_geometry(r.window)?;
@@ -1699,7 +1730,7 @@ where
             }
         }
         Event::ConfigureRequest(r) => {
-            if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == r.window).cloned() {
+            if let Some(surface) = xwm.find_window(r.window).cloned() {
                 drop(_guard);
 
                 let client_scale = xwm.client_scale.load(Ordering::Acquire);
@@ -1786,7 +1817,7 @@ where
                         Some(n.above_sibling)
                     },
                 );
-            } else if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == n.window).cloned() {
+            } else if let Some(surface) = xwm.find_window(n.window).cloned() {
                 if surface.is_override_redirect() {
                     surface.state.lock().unwrap().geometry = geometry;
                     drop(_guard);
@@ -1804,7 +1835,7 @@ where
             }
         }
         Event::UnmapNotify(n) => {
-            if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == n.window).cloned() {
+            if let Some(surface) = xwm.find_window(n.window).cloned() {
                 xwm.client_list.retain(|w| *w != surface.window_id());
                 xwm.client_list_stacking.retain(|w| *w != surface.window_id());
                 {
@@ -1851,8 +1882,8 @@ where
             xwm.primary.window_destroyed(&n.window, loop_handle);
             xwm.dnd.window_destroyed(&n.window, loop_handle);
 
-            if let Some(pos) = xwm.windows.iter().position(|x| x.window_id() == n.window) {
-                let surface = xwm.windows.remove(pos);
+            if let Some(pos) = xwm.window_index.get(&n.window).copied() {
+                let surface = xwm.remove_window_at(pos);
                 surface.handle_destroyed();
                 drop(_guard);
                 state.destroyed_window(xwm_id, surface);
@@ -2282,7 +2313,7 @@ where
                     }
                 }
             } else if n.atom == xwm.atoms._NET_WM_SYNC_REQUEST_COUNTER {
-                if let Some(surface) = xwm.windows.iter().find(|w| w.window_id() == n.window).cloned() {
+                if let Some(surface) = xwm.find_window(n.window).cloned() {
                     surface.init_net_wm_sync_request()?;
                 }
             }
@@ -2337,7 +2368,7 @@ where
                 }
             }
 
-            if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == n.window).cloned() {
+            if let Some(surface) = xwm.find_window(n.window).cloned() {
                 if let Some(property) = surface.update_property(n.atom)? {
                     drop(_guard);
                     state.property_notify(xwm_id, surface, property);
@@ -2345,7 +2376,7 @@ where
             }
         }
         Event::FocusIn(n) => {
-            if xwm.windows.iter().any(|x| x.window_id() == n.event) {
+            if xwm.find_window(n.event).is_some() {
                 conn.change_property32(
                     PropMode::REPLACE,
                     xwm.screen.root,
@@ -2356,7 +2387,7 @@ where
             }
         }
         Event::FocusOut(n) if n.detail == NotifyDetail::NONE => {
-            if xwm.windows.iter().any(|x| x.window_id() == n.event) {
+            if xwm.find_window(n.event).is_some() {
                 conn.change_property32(
                     PropMode::REPLACE,
                     xwm.screen.root,
@@ -2445,7 +2476,7 @@ where
                 }
                 x if x == xwm.atoms.WM_CHANGE_STATE => {
                     let data = msg.data.as_data32();
-                    if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == msg.window).cloned() {
+                    if let Some(surface) = xwm.find_window(msg.window).cloned() {
                         drop(_guard);
                         match data[0] {
                             1 => state.unminimize_request(xwm_id, surface),
@@ -2471,7 +2502,7 @@ where
                             .reply_unchecked()?
                             .map(|reply| String::from_utf8(reply.name)),
                     );
-                    if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == msg.window).cloned() {
+                    if let Some(surface) = xwm.find_window(msg.window).cloned() {
                         drop(_guard);
                         match &data[1..=2] {
                             &[x, y]
@@ -2582,7 +2613,7 @@ where
                     }
                 }
                 x if x == xwm.atoms._NET_WM_MOVERESIZE => {
-                    if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == msg.window).cloned() {
+                    if let Some(surface) = xwm.find_window(msg.window).cloned() {
                         drop(_guard);
                         let data = msg.data.as_data32();
                         match data[2] {
@@ -2609,8 +2640,8 @@ where
                     let data = msg.data.as_data32();
                     let timestamp = data[1];
                     let currently_active_window =
-                        xwm.windows.iter().find(|x| x.window_id() == data[2]).cloned();
-                    if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == msg.window).cloned() {
+                        xwm.find_window(data[2]).cloned();
+                    if let Some(surface) = xwm.find_window(msg.window).cloned() {
                         drop(_guard);
                         state.active_window_request(xwm_id, surface, timestamp, currently_active_window);
                     }
@@ -2626,7 +2657,7 @@ where
                             let window_id = data[2];
 
                             let surface = (window_id != x11rb::NONE)
-                                .then(|| xwm.windows.iter().find(|x| x.window_id() == window_id))
+                                .then(|| xwm.find_window(window_id))
                                 .flatten()
                                 .filter(|surface| {
                                     surface.state.lock().unwrap().pending_ping_timestamp == Some(timestamp)
@@ -2670,7 +2701,7 @@ where
                 // Dnd events incoming
                 x if x == xwm.atoms.XdndStatus => {
                     let window_id = msg.data.as_data32()[0];
-                    if let Some(surface) = xwm.windows.iter().find(|x| x.window_id() == window_id) {
+                    if let Some(surface) = xwm.find_window(window_id) {
                         xwm.dnd
                             .handle_status(surface, msg.data, &xwm.atoms, xwm.client_scale.clone());
                     }

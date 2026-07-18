@@ -23,11 +23,30 @@ pub struct UploadedImage {
 
 /// A host-visible staging buffer reused across uploads. Grows on demand; never
 /// shrinks. Freed via [`StagingBuffer::destroy`] in the renderer's `Drop`.
-#[derive(Default)]
+///
+/// The backing memory is persistently mapped after creation — `stage()` writes
+/// through the stored pointer instead of calling map/unmap on every upload.
 pub struct StagingBuffer {
     buffer: vk::Buffer,
     memory: vk::DeviceMemory,
+    /// Persistently mapped host-visible pointer. Valid from first allocation
+    /// until `destroy()`. Never unmap/re-map mid-lifetime.
+    ptr: *mut u8,
     capacity: u64,
+}
+
+// SAFETY: StagingBuffer is only accessed from the render thread.
+unsafe impl Send for StagingBuffer {}
+
+impl Default for StagingBuffer {
+    fn default() -> Self {
+        Self {
+            buffer: vk::Buffer::null(),
+            memory: vk::DeviceMemory::null(),
+            ptr: std::ptr::null_mut(),
+            capacity: 0,
+        }
+    }
 }
 
 impl StagingBuffer {
@@ -85,21 +104,30 @@ impl StagingBuffer {
                     .inspect_err(|_| device.destroy_buffer(buffer, None))?
             };
             unsafe { device.bind_buffer_memory(buffer, memory, 0)? };
+            // Persistently map the entire allocation. HOST_COHERENT guarantees
+            // writes are visible to the GPU without explicit flush.
+            let ptr = unsafe {
+                device.map_memory(memory, 0, new_cap, vk::MemoryMapFlags::empty())?
+                    as *mut u8
+            };
             self.buffer = buffer;
             self.memory = memory;
+            self.ptr = ptr;
             self.capacity = new_cap;
         }
+        // Write through the persistent mapping — no map/unmap per upload.
         unsafe {
-            let ptr = device.map_memory(self.memory, 0, needed, vk::MemoryMapFlags::empty())?
-                as *mut u8;
-            std::ptr::copy_nonoverlapping(data.as_ptr(), ptr, data.len());
-            device.unmap_memory(self.memory);
+            std::ptr::copy_nonoverlapping(data.as_ptr(), self.ptr, data.len());
         }
         Ok(self.buffer)
     }
 
-    pub fn destroy(&self, dev: &VulkanDevice) {
+    pub fn destroy(&mut self, dev: &VulkanDevice) {
         unsafe {
+            if !self.ptr.is_null() {
+                dev.device.unmap_memory(self.memory);
+                self.ptr = std::ptr::null_mut();
+            }
             if self.buffer != vk::Buffer::null() {
                 dev.device.destroy_buffer(self.buffer, None);
             }
@@ -107,6 +135,9 @@ impl StagingBuffer {
                 dev.device.free_memory(self.memory, None);
             }
         }
+        self.buffer = vk::Buffer::null();
+        self.memory = vk::DeviceMemory::null();
+        self.capacity = 0;
     }
 }
 

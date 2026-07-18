@@ -7,6 +7,7 @@ use smithay::utils::{Physical, Point, Rectangle, Size};
 /// Width of the bar drawn between adjacent split slots (physical px).
 pub const SEPARATOR: i32 = 8;
 
+#[derive(Clone)]
 pub struct Region {
     pub slot: SlotId,
     pub rect: Rectangle<i32, Physical>,
@@ -15,6 +16,7 @@ pub struct Region {
 /// A bar between two adjacent slots in a `Slots` array. `a`/`b` are those slots'
 /// ids (each carries a `weight`); dragging the bar shifts weight between them.
 /// `a_len`/`b_len` are their physical lengths along `axis` (for the drag math).
+#[derive(Clone)]
 pub struct Separator {
     pub rect: Rectangle<i32, Physical>,
     pub axis: Axis,
@@ -24,7 +26,7 @@ pub struct Separator {
     pub b_len: i32,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct Computed {
     /// Leaf regions, root-first then floating (floating drawn on top). Reverse-
     /// iterate for topmost-first hit testing.
