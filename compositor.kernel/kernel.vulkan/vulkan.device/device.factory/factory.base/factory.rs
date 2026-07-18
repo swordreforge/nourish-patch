@@ -33,6 +33,60 @@ pub struct VulkanDevice {
     /// (`ash::khr/ext::*::Device::new`) can be constructed — they need the
     /// instance to resolve `vkGetDeviceProcAddr`.
     pub instance: ash::Instance,
+    /// Driver limit on concurrent `vkAllocateMemory` calls. Tracked to
+    /// prevent exceeding the limit (Intel: 4096, NVIDIA: 4096, AMD: 4294967295).
+    pub max_allocations: u32,
+    /// Current number of live `VkDeviceMemory` allocations.
+    pub allocation_count: std::cell::Cell<u32>,
+}
+
+impl VulkanDevice {
+    /// Check whether a new allocation would exceed the driver limit. Returns
+    /// `Ok(())` if safe, or `Err` with a descriptive message. Call before
+    /// every `vkAllocateMemory`.
+    pub fn check_allocatable(&self, label: &str) -> Result<(), String> {
+        let count = self.allocation_count.get();
+        if count >= self.max_allocations {
+            return Err(format!(
+                "VkDeviceMemory limit reached ({count}/{max}): {label}",
+                max = self.max_allocations,
+            ));
+        }
+        Ok(())
+    }
+
+    /// Record a successful allocation.
+    pub fn track_alloc(&self) {
+        self.allocation_count.set(self.allocation_count.get() + 1);
+    }
+
+    /// Record a freed allocation.
+    pub fn track_free(&self) {
+        let c = self.allocation_count.get();
+        self.allocation_count.set(c.saturating_sub(1));
+    }
+
+    /// Allocate device memory with budget checking. Wraps `vkAllocateMemory`
+    /// and automatically tracks the allocation count.
+    pub fn allocate_memory(
+        &self,
+        create_info: &vk::MemoryAllocateInfo,
+        label: &str,
+    ) -> Result<vk::DeviceMemory, vk::Result> {
+        self.check_allocatable(label).map_err(|e| {
+            error!("vulkan: {e}");
+            vk::Result::ERROR_OUT_OF_DEVICE_MEMORY
+        })?;
+        let mem = unsafe { self.device.allocate_memory(create_info, None) }?;
+        self.track_alloc();
+        Ok(mem)
+    }
+
+    /// Free device memory and update the budget counter.
+    pub fn free_memory(&self, memory: vk::DeviceMemory) {
+        unsafe { self.device.free_memory(memory, None) };
+        self.track_free();
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -98,9 +152,44 @@ pub fn create(phd: &PhysicalDevice) -> Result<VulkanDevice, DeviceError> {
     };
 
     info!("vulkan logical device created (queue family {queue_family_index})");
+    let max_allocations = unsafe {
+        instance
+            .get_physical_device_properties(phd.handle())
+            .limits
+            .max_memory_allocation_count
+    };
     Ok(VulkanDevice {
         device,
         queue_family_index,
         instance: instance.clone(),
+        max_allocations,
+        allocation_count: std::cell::Cell::new(0),
     })
+}
+
+/// Find a memory type index that satisfies both the resource's `type_bits`
+/// bitmask and the required property flags. Returns `None` if no type matches.
+pub fn find_memory_type(
+    instance: &ash::Instance,
+    phd: vk::PhysicalDevice,
+    type_bits: u32,
+    props: vk::MemoryPropertyFlags,
+) -> Option<u32> {
+    let mem = unsafe { instance.get_physical_device_memory_properties(phd) };
+    (0..mem.memory_type_count).find(|&i| {
+        (type_bits & (1 << i)) != 0
+            && mem.memory_types[i as usize]
+                .property_flags
+                .contains(props)
+    })
+}
+
+/// Convenience wrapper: accepts a [`VulkanDevice`] + smithay [`PhysicalDevice`].
+pub fn find_memory_type_for(
+    dev: &VulkanDevice,
+    phd: &PhysicalDevice,
+    type_bits: u32,
+    props: vk::MemoryPropertyFlags,
+) -> Option<u32> {
+    find_memory_type(&dev.instance, phd.handle(), type_bits, props)
 }

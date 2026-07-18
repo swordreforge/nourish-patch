@@ -8,7 +8,7 @@
 //! frame. Push constants (64 B) carry per-draw geometry + the per-surface flag.
 
 use ash::vk;
-use compositor_kernel_vulkan_device_factory_base::factory::VulkanDevice;
+use compositor_kernel_vulkan_device_factory_base::factory::{VulkanDevice, find_memory_type};
 
 const SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/composite_hdr.spv"));
 
@@ -229,16 +229,12 @@ impl HdrComposite {
             .map_err(|e| HdrError::Vk(format!("ubo buffer: {e}")))?
         };
         let req = unsafe { dev.get_buffer_memory_requirements(ubo) };
-        let mem_props = unsafe { device.instance.get_physical_device_memory_properties(phd) };
-        let mem_type = (0..mem_props.memory_type_count)
-            .find(|&i| {
-                req.memory_type_bits & (1 << i) != 0
-                    && mem_props.memory_types[i as usize].property_flags.contains(
-                        vk::MemoryPropertyFlags::HOST_VISIBLE
-                            | vk::MemoryPropertyFlags::HOST_COHERENT,
-                    )
-            })
-            .ok_or(HdrError::NoMemoryType)?;
+        let mem_type = find_memory_type(
+            &device.instance, phd,
+            req.memory_type_bits,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )
+        .ok_or(HdrError::NoMemoryType)?;
         let ubo_mem = unsafe {
             dev.allocate_memory(
                 &vk::MemoryAllocateInfo::default()

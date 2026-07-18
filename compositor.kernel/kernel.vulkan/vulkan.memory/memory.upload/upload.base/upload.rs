@@ -1,7 +1,7 @@
 //! CPU → VkImage staging upload (create + in-place region update).
 
 use ash::vk;
-use compositor_kernel_vulkan_device_factory_base::factory::VulkanDevice;
+use compositor_kernel_vulkan_device_factory_base::factory::{VulkanDevice, find_memory_type_for as find_memory_type};
 use compositor_kernel_vulkan_renderer_error_base::VulkanError;
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::vulkan::PhysicalDevice;
@@ -139,18 +139,6 @@ impl StagingBuffer {
         self.memory = vk::DeviceMemory::null();
         self.capacity = 0;
     }
-}
-
-fn find_memory_type(
-    dev: &VulkanDevice,
-    phd: &PhysicalDevice,
-    type_bits: u32,
-    props: vk::MemoryPropertyFlags,
-) -> Option<u32> {
-    let mem = unsafe { dev.instance.get_physical_device_memory_properties(phd.handle()) };
-    (0..mem.memory_type_count).find(|&i| {
-        (type_bits & (1 << i)) != 0 && mem.memory_types[i as usize].property_flags.contains(props)
-    })
 }
 
 const COLOR_RANGE: vk::ImageSubresourceRange = vk::ImageSubresourceRange {
