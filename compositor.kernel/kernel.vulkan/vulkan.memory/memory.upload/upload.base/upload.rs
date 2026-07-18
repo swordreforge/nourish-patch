@@ -183,62 +183,45 @@ fn one_time<F: FnOnce(vk::CommandBuffer)>(
     Ok(())
 }
 
-/// Allocate a device-local SAMPLED image and upload `data` (tightly packed
-/// `width*height*4`, no row padding) in full. Memory is suballocated from the
-/// provided slab — the caller must NOT free the returned `memory` individually.
-#[allow(clippy::too_many_arguments)]
-pub fn create_and_upload(
+/// Create a device-local SAMPLED + TRANSFER_DST VkImage, suballocate its
+/// memory from the slab, and create an ImageView. Pure CPU — no GPU commands.
+///
+/// The returned `UploadedImage` must be filled via [`record_upload`] +
+/// [`submit_batch`] (or the convenience [`create_and_upload`]).
+pub fn create_image(
     dev: &VulkanDevice,
-    phd: &PhysicalDevice,
-    command_pool: vk::CommandPool,
-    queue: vk::Queue,
-    staging: &mut StagingBuffer,
     slab: &mut SlabAllocator,
-    data: &[u8],
     format: Fourcc,
     size: Size<i32, BufferCoord>,
 ) -> Result<UploadedImage, VulkanError> {
     let vk_format = compositor_kernel_vulkan_format_query_base::query::vk_format(format)
         .ok_or(VulkanError::UnsupportedFormat(format))?;
     let (width, height) = (size.w.max(1) as u32, size.h.max(1) as u32);
-    let expected = width as usize * height as usize * BPP;
-    if data.len() < expected {
-        return Err(VulkanError::Import(format!(
-            "shm buffer too small: {} < {expected} ({width}x{height})",
-            data.len()
-        )));
-    }
-
     let device = &dev.device;
 
-    // Device-local sampled image (TRANSFER_DST for the upload).
-    let image_info = vk::ImageCreateInfo::default()
-        .image_type(vk::ImageType::TYPE_2D)
-        .format(vk_format)
-        .extent(vk::Extent3D {
-            width,
-            height,
-            depth: 1,
-        })
-        .mip_levels(1)
-        .array_layers(1)
-        .samples(vk::SampleCountFlags::TYPE_1)
-        .tiling(vk::ImageTiling::OPTIMAL)
-        .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE)
-        .initial_layout(vk::ImageLayout::UNDEFINED);
-    let image = unsafe { device.create_image(&image_info, None)? };
+    let image = unsafe {
+        device.create_image(
+            &vk::ImageCreateInfo::default()
+                .image_type(vk::ImageType::TYPE_2D)
+                .format(vk_format)
+                .extent(vk::Extent3D { width, height, depth: 1 })
+                .mip_levels(1)
+                .array_layers(1)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                .initial_layout(vk::ImageLayout::UNDEFINED),
+            None,
+        )?
+    };
     let req = unsafe { device.get_image_memory_requirements(image) };
-    let handle = slab.allocate(&req, vk::MemoryPropertyFlags::DEVICE_LOCAL)
-        .map_err(|_| {
-            unsafe { device.destroy_image(image, None); }
-            VulkanError::Import("no device-local memory type".into())
-        })?;
-    let memory = handle.memory;
-    unsafe { device.bind_image_memory(image, memory, handle.offset)? };
+    let handle = slab.allocate(&req, vk::MemoryPropertyFlags::DEVICE_LOCAL).map_err(|_| {
+        unsafe { device.destroy_image(image, None); }
+        VulkanError::Import("no device-local memory type".into())
+    })?;
+    unsafe { device.bind_image_memory(image, handle.memory, handle.offset)? };
 
-    // X-formats are opaque (no real alpha) — force alpha to 1 so the window
-    // doesn't blend out transparent (see the dmabuf import path).
     let opaque = matches!(
         format,
         Fourcc::Xrgb8888 | Fourcc::Xbgr8888 | Fourcc::Xrgb2101010 | Fourcc::Xbgr2101010
@@ -247,11 +230,7 @@ pub fn create_and_upload(
         r: vk::ComponentSwizzle::IDENTITY,
         g: vk::ComponentSwizzle::IDENTITY,
         b: vk::ComponentSwizzle::IDENTITY,
-        a: if opaque {
-            vk::ComponentSwizzle::ONE
-        } else {
-            vk::ComponentSwizzle::IDENTITY
-        },
+        a: if opaque { vk::ComponentSwizzle::ONE } else { vk::ComponentSwizzle::IDENTITY },
     };
     let view = unsafe {
         device.create_image_view(
@@ -265,9 +244,40 @@ pub fn create_and_upload(
         )?
     };
 
-    let buffer = staging.stage(dev, phd, &data[..expected])?;
+    Ok(UploadedImage {
+        image,
+        memory: handle.memory,
+        view,
+        format: vk_format,
+        width,
+        height,
+        slab: Some(handle),
+    })
+}
 
-    one_time(dev, command_pool, queue, |cmd| unsafe {
+/// Record the buffer→image copy for a freshly created image into an existing
+/// command buffer. The cmd must already be in the ONE_TIME_SUBMIT + began
+/// state. After calling this for all pending images, call [`submit_batch`].
+pub fn record_upload(
+    dev: &VulkanDevice,
+    phd: &PhysicalDevice,
+    staging: &mut StagingBuffer,
+    cmd: vk::CommandBuffer,
+    image: vk::Image,
+    width: u32,
+    height: u32,
+    data: &[u8],
+) -> Result<(), VulkanError> {
+    let expected = width as usize * height as usize * BPP;
+    if data.len() < expected {
+        return Err(VulkanError::Import(format!(
+            "record_upload: buffer too small: {} < {expected}",
+            data.len()
+        )));
+    }
+    let buffer = staging.stage(dev, phd, &data[..expected])?;
+    let device = &dev.device;
+    unsafe {
         let to_dst = [vk::ImageMemoryBarrier2::default()
             .src_stage_mask(vk::PipelineStageFlags2::TOP_OF_PIPE)
             .dst_stage_mask(vk::PipelineStageFlags2::COPY)
@@ -289,11 +299,7 @@ pub fn create_and_upload(
                 layer_count: 1,
             })
             .image_offset(vk::Offset3D { x: 0, y: 0, z: 0 })
-            .image_extent(vk::Extent3D {
-                width,
-                height,
-                depth: 1,
-            })];
+            .image_extent(vk::Extent3D { width, height, depth: 1 })];
         device.cmd_copy_buffer_to_image(cmd, buffer, image, vk::ImageLayout::TRANSFER_DST_OPTIMAL, &region);
 
         let to_read = [vk::ImageMemoryBarrier2::default()
@@ -306,22 +312,70 @@ pub fn create_and_upload(
             .image(image)
             .subresource_range(COLOR_RANGE)];
         device.cmd_pipeline_barrier2(cmd, &vk::DependencyInfo::default().image_memory_barriers(&to_read));
-    })
-    .inspect_err(|_| unsafe {
-        device.destroy_image_view(view, None);
-        device.destroy_image(image, None);
-        // Slab memory is not freed individually — reclaimed when slab drops.
-    })?;
+    }
+    Ok(())
+}
 
-    Ok(UploadedImage {
-        image,
-        memory,
-        view,
-        format: vk_format,
-        width,
-        height,
-        slab: Some(handle),
-    })
+/// End a command buffer, submit it, wait for completion, and free it. Pairs
+/// with [`record_upload`] — call once after all pending uploads are recorded.
+pub fn submit_batch(
+    dev: &VulkanDevice,
+    command_pool: vk::CommandPool,
+    queue: vk::Queue,
+    cmd: vk::CommandBuffer,
+) -> Result<(), VulkanError> {
+    let device = &dev.device;
+    unsafe {
+        device.end_command_buffer(cmd)?;
+        let cmds = [cmd];
+        let submit = vk::SubmitInfo::default().command_buffers(&cmds);
+        device.queue_submit(queue, &[submit], vk::Fence::null())?;
+        device.device_wait_idle()?;
+        device.free_command_buffers(command_pool, &cmds);
+    }
+    Ok(())
+}
+
+/// Allocate a device-local SAMPLED image and upload `data` (tightly packed
+/// `width*height*4`, no row padding) in full. Convenience wrapper around
+/// [`create_image`] + [`record_upload`] + [`submit_batch`].
+#[allow(clippy::too_many_arguments)]
+pub fn create_and_upload(
+    dev: &VulkanDevice,
+    phd: &PhysicalDevice,
+    command_pool: vk::CommandPool,
+    queue: vk::Queue,
+    staging: &mut StagingBuffer,
+    slab: &mut SlabAllocator,
+    data: &[u8],
+    format: Fourcc,
+    size: Size<i32, BufferCoord>,
+) -> Result<UploadedImage, VulkanError> {
+    let mut img = create_image(dev, slab, format, size)?;
+    let device = &dev.device;
+    let info = vk::CommandBufferAllocateInfo::default()
+        .command_pool(command_pool)
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_buffer_count(1);
+    let cmd = unsafe { device.allocate_command_buffers(&info)? }[0];
+    unsafe {
+        device.begin_command_buffer(
+            cmd,
+            &vk::CommandBufferBeginInfo::default()
+                .flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT),
+        )?;
+    }
+    record_upload(dev, phd, staging, cmd, img.image, img.width, img.height, data)
+        .inspect_err(|_| unsafe {
+            device.free_command_buffers(command_pool, &[cmd]);
+            device.destroy_image_view(img.view, None);
+            device.destroy_image(img.image, None);
+        })?;
+    submit_batch(dev, command_pool, queue, cmd).inspect_err(|_| unsafe {
+        device.destroy_image_view(img.view, None);
+        device.destroy_image(img.image, None);
+    })?;
+    Ok(img)
 }
 
 /// Re-upload a sub-`region` into an EXISTING sampled image (currently in
