@@ -62,6 +62,10 @@ impl VulkanRenderer {
         // VkDeviceMemory blocks. Must be created before `dev` is moved.
         let shm_slab = SlabAllocator::new(dev.clone(), phd.handle());
 
+        // Persistent command buffer for batched SHM uploads. Recorded across
+        // multiple `import_memory` calls, submitted once in `flush_batch`.
+        let pending_cmd = Self::alloc_command_buffer(&dev, command_pool)?;
+
         Ok(Self {
             dev,
             phd,
@@ -88,6 +92,8 @@ impl VulkanRenderer {
             dmabuf_cache: HashMap::new(),
             shm_staging: StagingBuffer::new(),
             shm_slab,
+            pending_cmd,
+            pending_uploads: 0,
             frame_counter: 0,
             debug_flags: DebugFlags::empty(),
             downscale: TextureFilter::Linear,

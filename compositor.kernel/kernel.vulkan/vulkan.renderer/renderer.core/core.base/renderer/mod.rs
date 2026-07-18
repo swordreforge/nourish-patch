@@ -105,6 +105,11 @@ pub struct VulkanRenderer {
     /// DEVICE_LOCAL slab allocator for SHM upload images — co-allocates multiple
     /// images into shared VkDeviceMemory blocks.
     pub(super) shm_slab: SlabAllocator,
+    /// Persistent command buffer for batched SHM uploads. Recorded across
+    /// multiple `import_memory` calls, submitted once in `flush_batch`.
+    pub(super) pending_cmd: vk::CommandBuffer,
+    /// Number of uploads recorded into `pending_cmd` since last flush.
+    pub(super) pending_uploads: u32,
     pub(super) frame_counter: u64,
     pub(super) debug_flags: DebugFlags,
     pub(super) downscale: TextureFilter,
@@ -175,6 +180,8 @@ impl Drop for VulkanRenderer {
             self.capture_cache.destroy(&self.dev);
             self.shm_staging.destroy(&self.dev);
             self.shm_slab.destroy();
+            self.dev.device
+                .free_command_buffers(self.command_pool, &[self.pending_cmd]);
             let passes: Vec<_> = self.shader_passes.drain().collect();
             for (_, p) in passes {
                 p.destroy(&self.dev);

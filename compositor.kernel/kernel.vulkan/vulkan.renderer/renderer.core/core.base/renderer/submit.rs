@@ -21,6 +21,8 @@ impl VulkanRenderer {
         clear: [f32; 4],
         ops: Vec<DrawOp>,
     ) -> Result<SyncPoint, VulkanError> {
+        // Flush any batched SHM uploads recorded since the last frame.
+        self.flush_batch()?;
         self.ensure_pipelines(format)?;
         if self.use_hdr() {
             self.ensure_hdr_pipeline(format)?;

@@ -14,6 +14,24 @@ use crate::texture::{TextureInner, VulkanTexture};
 use super::VulkanRenderer;
 
 impl VulkanRenderer {
+    /// Submit any pending batch-uploaded SHM images. Called once at the start
+    /// of `submit_frame` to flush all uploads recorded since the last frame.
+    pub(super) fn flush_batch(&mut self) -> Result<(), VulkanError> {
+        if self.pending_uploads == 0 {
+            return Ok(());
+        }
+        compositor_kernel_vulkan_memory_upload_base::upload::submit_batch(
+            &self.dev,
+            self.command_pool,
+            self.queue.queue,
+            self.pending_cmd,
+        )?;
+        self.pending_uploads = 0;
+        // Re-allocate for the next batch (the old cmd was freed by submit_batch).
+        self.pending_cmd = Self::alloc_command_buffer(&self.dev, self.command_pool)?;
+        Ok(())
+    }
+
     /// One-shot layout transition for a freshly imported sampled image
     /// (`UNDEFINED → SHADER_READ_ONLY_OPTIMAL`).
     pub(super) fn transition_to_sampled(&self, image: vk::Image) -> Result<(), VulkanError> {
@@ -143,17 +161,22 @@ impl ImportMem for VulkanRenderer {
         size: Size<i32, BufferCoord>,
         _flipped: bool,
     ) -> Result<VulkanTexture, VulkanError> {
-        let up = compositor_kernel_vulkan_memory_upload_base::upload::create_and_upload(
+        use compositor_kernel_vulkan_memory_upload_base::upload;
+        let up = upload::create_image(&self.dev, &mut self.shm_slab, format, size)?;
+        // Record the GPU copy into the pending batch command buffer.
+        // The actual submit happens in flush_batch() at frame start.
+        let cmd = self.pending_cmd;
+        upload::record_upload(
             &self.dev,
             &self.phd,
-            self.command_pool,
-            self.queue.queue,
             &mut self.shm_staging,
-            &mut self.shm_slab,
+            cmd,
+            up.image,
+            up.width,
+            up.height,
             data,
-            format,
-            size,
         )?;
+        self.pending_uploads += 1;
         Ok(VulkanTexture {
             inner: Arc::new(TextureInner {
                 device: self.dev.device.clone(),
