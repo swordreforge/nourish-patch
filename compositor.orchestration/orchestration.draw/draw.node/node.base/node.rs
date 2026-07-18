@@ -28,8 +28,8 @@ type Bevy = compositor_support_bevy_core_compositor_base::BevyRenderElement;
 pub struct SurfaceNode {
     pub surface: WlSurface,
     pub location: Point<i32, Physical>,
-    pub scale: f64,
     pub alpha: f32,
+    pub scale: f64,
 }
 
 pub enum DrawNode<R: Renderer> {
@@ -68,7 +68,7 @@ pub struct Plan<R: Renderer> {
 
 impl<R: Renderer> Default for Plan<R> {
     fn default() -> Self {
-        Self { nodes: Vec::new() }
+        Self { nodes: Vec::with_capacity(32) }
     }
 }
 
@@ -103,8 +103,8 @@ where
     ) -> (Vec<SceneElement<R>>, Vec<compositor_orchestration_draw_dispatch_frame::ElementMeta>) {
         use compositor_orchestration_draw_dispatch_frame::ElementMeta;
         self.nodes.sort_by(|a, b| b.0.cmp(&a.0));
-        let mut elements = Vec::new();
-        let mut meta = Vec::new();
+        let mut elements = Vec::with_capacity(self.nodes.len() * 2);
+        let mut meta = Vec::with_capacity(self.nodes.len() * 2);
         for (_, node) in self.nodes {
             // World content is exactly windows + iced-world panels; everything
             // else (bevy, parallax, screen iced, layershell, pointer, solids) is
