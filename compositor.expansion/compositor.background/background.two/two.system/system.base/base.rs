@@ -402,8 +402,11 @@ impl TwoSystem {
                     let px = tx >> d;
                     let py = ty >> d;
                     // Wrap to valid tile range for cache key.
-                    let wx = wrap_x(px, level.cols);
-                    let wy = wrap_y(py, level.rows);
+                    // Use the FALLBACK level's column/row count, not tile_z's,
+                    // because different zoom levels have different tile grid dimensions.
+                    let fb_level = &info.levels[fallback_z as usize];
+                    let wx = wrap_x(px, fb_level.cols);
+                    let wy = wrap_y(py, fb_level.rows);
                     let key = (fallback_z, wy as i32, wx as i32);
                     if self.tile_cache.contains(&key)
                         && (!use_dmabuf || self.dmabufs.contains_key(&key))
@@ -424,8 +427,10 @@ impl TwoSystem {
                         let base_y = (ty << d) as i32;
                         for dy in 0..(1i32 << d) {
                             for dx in 0..(1i32 << d) {
-                                let cx = wrap_x(base_x + dx, level.cols);
-                                let cy = wrap_y(base_y + dy, level.rows);
+                                // Use higher_z level's grid dimensions for correct wrap.
+                                let hi_level = &info.levels[higher_z as usize];
+                                let cx = wrap_x(base_x + dx, hi_level.cols);
+                                let cy = wrap_y(base_y + dy, hi_level.rows);
                                 let key = (higher_z, cy as i32, cx as i32);
                                 if self.tile_cache.contains(&key)
                                     && (!use_dmabuf || self.dmabufs.contains_key(&key))
@@ -494,8 +499,11 @@ impl TwoSystem {
                 let sx = (tile_world_x - pan.0) * zoom + output_size.0 / 2.0;
                 let sy = (tile_world_y - pan.1) * zoom + output_size.1 / 2.0;
                 // Size uses actual tile dimensions — no stretching.
-                let sw = (actual_w * tile_sf * zoom).ceil();
-                let sh = (actual_h * tile_sf * zoom).ceil();
+                // Add 0.5px overlap to prevent seam gaps from integer rounding
+                // when adjacent tiles at different fallback zoom levels coexist.
+                const OVERLAP: f32 = 0.5;
+                let sw = (actual_w * tile_sf * zoom + OVERLAP).ceil();
+                let sh = (actual_h * tile_sf * zoom + OVERLAP).ceil();
 
                 if sx + sw <= 0.0 || sx >= output_size.0 || sy + sh <= 0.0 || sy >= output_size.1 {
                     continue;
