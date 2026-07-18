@@ -38,10 +38,39 @@ impl CursorThemeCache {
             theme_name, test_1, test_2, test_3
         );
 
-        Self {
+        let cache = Self {
             theme,
             fallback_size: size,
             cache: Mutex::new(HashMap::new()),
+        };
+
+        // Preload the most commonly used cursors at startup so the first
+        // render frame (and subsequent pointer icon changes) hit the cache
+        // instead of doing synchronous disk I/O.
+        cache.preload(&[
+            "default", "pointer", "text", "grab", "grabbing",
+            "crosshair", "move", "not-allowed", "wait", "progress",
+            "n-resize", "s-resize", "e-resize", "w-resize",
+            "ne-resize", "nw-resize", "se-resize", "sw-resize",
+        ]);
+
+        cache
+    }
+
+    /// Eagerly load a set of cursor names into the cache. Cursors that fail
+    /// to load (missing from the theme) are cached as `None` so subsequent
+    /// `get()` calls fall back without re-opening files.
+    fn preload(&self, names: &[&str]) {
+        let mut cache = self.cache.lock().unwrap();
+        for &name in names {
+            if cache.contains_key(name) {
+                continue;
+            }
+            let loaded = self
+                .load_shape(name)
+                .or_else(|| self.load_shape("default"))
+                .or_else(|| self.load_shape("left_ptr"));
+            cache.insert(name.to_string(), loaded);
         }
     }
 
