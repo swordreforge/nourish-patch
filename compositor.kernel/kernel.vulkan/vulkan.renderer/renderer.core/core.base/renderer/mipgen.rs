@@ -8,54 +8,82 @@
 //! pipeline) into an owned mip-0, then the chain is generated with blits, and
 //! the AA composite samples that mipped copy with the trilinear/aniso sampler.
 //!
-//! Damage is handled upstream by smithay: undamaged elements aren't redrawn, so
-//! they never reach `render_texture_from_to` and their mips aren't regenerated
-//! (on the partial-damage path). The round-robin scratch images are reused
-//! across frames; `MAX_SURFACES` bounds mip VRAM (excess surfaces fall back to
-//! the plain path for the frame).
+//! **Memory optimization:** All scratch images share VkDeviceMemory slabs via
+//! sub-allocation, reducing `vkAllocateMemory` calls from up to 32 to ~2-4.
 
 use ash::vk;
 use compositor_kernel_vulkan_device_factory_base::factory::VulkanDevice;
-use compositor_kernel_vulkan_pipeline_composite_base::composite::{AaComposite, AaPush};
 
 /// One owned, mipped copy of a source surface.
-pub struct MipImage {
+struct MipImage {
     image: vk::Image,
-    memory: vk::DeviceMemory,
+    /// Index into `MipGen::slabs` — the slab backing this image.
+    slab_idx: usize,
+    /// Byte offset within the slab's VkDeviceMemory.
+    offset: u64,
     /// View over all mip levels — sampled by the composite.
-    pub view: vk::ImageView,
+    view: vk::ImageView,
     /// Level-0-only view — the color attachment we render the source into.
     mip0_view: vk::ImageView,
     width: u32,
     height: u32,
     mip_levels: u32,
     format: vk::Format,
+    /// Memory requirements for this image (needed for sub-offset binding).
+    mem_req: vk::MemoryRequirements,
 }
 
-impl MipImage {
-    fn destroy(&self, dev: &VulkanDevice) {
-        unsafe {
-            dev.device.destroy_image_view(self.view, None);
-            dev.device.destroy_image_view(self.mip0_view, None);
-            dev.device.destroy_image(self.image, None);
-            dev.device.free_memory(self.memory, None);
+/// A shared VkDeviceMemory slab. Multiple MipImages bind into the same
+/// allocation at different offsets, reducing `vkAllocateMemory` calls.
+struct MipSlab {
+    memory: vk::DeviceMemory,
+    size: u64,
+    used: u64,
+    mem_type_index: u32,
+}
+
+impl MipSlab {
+    /// Try to allocate `req` bytes within this slab. Returns the offset if
+    /// there's room (aligned to the requirement), or `None` if full.
+    fn alloc(&mut self, req: &vk::MemoryRequirements) -> Option<u64> {
+        let align = req.alignment.max(1) as u64;
+        let aligned = (self.used + align - 1) & !(align - 1);
+        let end = aligned + req.size;
+        if end > self.size {
+            return None;
         }
+        self.used = end;
+        Some(aligned)
     }
 }
 
 /// A pool of reusable mipped images, indexed round-robin per frame.
-#[derive(Default)]
 pub struct MipGen {
     images: Vec<MipImage>,
+    slabs: Vec<MipSlab>,
     next: usize,
 }
 
+impl Default for MipGen {
+    fn default() -> Self {
+        Self {
+            images: Vec::new(),
+            slabs: Vec::new(),
+            next: 0,
+        }
+    }
+}
+
 fn mip_count(w: u32, h: u32) -> u32 {
-    // floor(log2(max(w,h))) + 1
     32 - w.max(h).max(1).leading_zeros()
 }
 
-fn device_local(mem: &vk::PhysicalDeviceMemoryProperties, bits: u32) -> Option<u32> {
+fn device_local(
+    instance: &ash::Instance,
+    phd: vk::PhysicalDevice,
+    bits: u32,
+) -> Option<u32> {
+    let mem = unsafe { instance.get_physical_device_memory_properties(phd) };
     (0..mem.memory_type_count).find(|&i| {
         bits & (1 << i) != 0
             && mem.memory_types[i as usize]
@@ -106,28 +134,23 @@ fn barrier(
 
 impl MipGen {
     /// Cap on per-frame mipped surfaces — bounds mip VRAM. Surfaces beyond this
-    /// fall back to the plain composite path (no AA) for the frame.
+    /// fall back to the plain composite path for the frame.
     const MAX_SURFACES: usize = 32;
+    /// Initial slab size: 64 MiB. Covers ~16 surfaces at 1920×1080×4B.
+    const SLAB_SIZE: u64 = 64 * 1024 * 1024;
 
-    /// Reset the round-robin index — call once per frame before `acquire`.
     pub fn begin_frame(&mut self) {
         self.next = 0;
     }
 
-    /// No mip images currently allocated.
     pub fn is_empty(&self) -> bool {
         self.images.is_empty()
     }
 
-    /// Get (creating/reusing) the next mipped image sized to `(w,h)` in `format`.
-    /// Returns its index for `record`/`view_of`, or `None` when the per-frame
-    /// surface cap is hit (the caller then falls back to the plain path for that
-    /// surface — a bound on mip VRAM regardless of how many world surfaces are
-    /// on screen).
     pub fn acquire(
         &mut self,
         dev: &VulkanDevice,
-        mem: &vk::PhysicalDeviceMemoryProperties,
+        phd: vk::PhysicalDevice,
         format: vk::Format,
         w: u32,
         h: u32,
@@ -143,10 +166,18 @@ impl MipGen {
             None => true,
         };
         if stale {
-            let fresh = Self::create(dev, mem, format, w, h)?;
             if idx < self.images.len() {
-                let old = std::mem::replace(&mut self.images[idx], fresh);
-                old.destroy(dev);
+                // Old image at this slot — destroy its views (memory stays in slab).
+                let old = &self.images[idx];
+                unsafe {
+                    dev.device.destroy_image_view(old.view, None);
+                    dev.device.destroy_image_view(old.mip0_view, None);
+                    dev.device.destroy_image(old.image, None);
+                }
+            }
+            let fresh = self.create_image(dev, phd, format, w, h)?;
+            if idx < self.images.len() {
+                self.images[idx] = fresh;
             } else {
                 self.images.push(fresh);
             }
@@ -158,9 +189,11 @@ impl MipGen {
         self.images[idx].view
     }
 
-    fn create(
+    /// Create a new VkImage and bind it into an existing or new slab.
+    fn create_image(
+        &mut self,
         dev: &VulkanDevice,
-        mem: &vk::PhysicalDeviceMemoryProperties,
+        phd: vk::PhysicalDevice,
         format: vk::Format,
         w: u32,
         h: u32,
@@ -172,11 +205,7 @@ impl MipGen {
                 &vk::ImageCreateInfo::default()
                     .image_type(vk::ImageType::TYPE_2D)
                     .format(format)
-                    .extent(vk::Extent3D {
-                        width: w,
-                        height: h,
-                        depth: 1,
-                    })
+                    .extent(vk::Extent3D { width: w, height: h, depth: 1 })
                     .mip_levels(levels)
                     .array_layers(1)
                     .samples(vk::SampleCountFlags::TYPE_1)
@@ -192,17 +221,47 @@ impl MipGen {
                 None,
             )?
         };
-        let req = unsafe { device.get_image_memory_requirements(image) };
-        let mem_idx = device_local(mem, req.memory_type_bits).ok_or(vk::Result::ERROR_OUT_OF_DEVICE_MEMORY)?;
-        let memory = unsafe {
-            device.allocate_memory(
-                &vk::MemoryAllocateInfo::default()
-                    .allocation_size(req.size)
-                    .memory_type_index(mem_idx),
-                None,
-            )?
+        let mem_req = unsafe { device.get_image_memory_requirements(image) };
+        let mem_type = device_local(&dev.instance, phd, mem_req.memory_type_bits)
+            .ok_or(vk::Result::ERROR_OUT_OF_DEVICE_MEMORY)?;
+
+        // Try to find an existing slab with matching memory type and room.
+        let mut slab_idx = None;
+        for (i, slab) in self.slabs.iter_mut().enumerate() {
+            if slab.mem_type_index == mem_type {
+                if let Some(offset) = slab.alloc(&mem_req) {
+                    slab_idx = Some((i, offset));
+                    break;
+                }
+            }
+        }
+
+        // No room — allocate a new slab.
+        let (slab_idx, offset) = match slab_idx {
+            Some(v) => v,
+            None => {
+                let slab_size = Self::SLAB_SIZE.max(mem_req.size * 4);
+                let memory = dev.allocate_memory(
+                    &vk::MemoryAllocateInfo::default()
+                        .allocation_size(slab_size)
+                        .memory_type_index(mem_type),
+                    "mipgen slab",
+                )?;
+                let idx = self.slabs.len();
+                self.slabs.push(MipSlab {
+                    memory,
+                    size: slab_size,
+                    used: mem_req.size,
+                    mem_type_index: mem_type,
+                });
+                (idx, 0u64)
+            }
         };
-        unsafe { device.bind_image_memory(image, memory, 0)? };
+
+        unsafe {
+            device.bind_image_memory(image, self.slabs[slab_idx].memory, offset)?;
+        }
+
         let mk_view = |base, count| unsafe {
             device.create_image_view(
                 &vk::ImageViewCreateInfo::default()
@@ -215,33 +274,33 @@ impl MipGen {
         };
         let view = mk_view(0, levels)?;
         let mip0_view = mk_view(0, 1)?;
+
         Ok(MipImage {
             image,
-            memory,
+            slab_idx,
+            offset,
             view,
             mip0_view,
             width: w,
             height: h,
             mip_levels: levels,
             format,
+            mem_req,
         })
     }
 
-    /// Record (into `cmd`, OUTSIDE any render pass): fill mip-0 by drawing the
-    /// source (bound in `fill_set`) through the AA pipeline, then blit the chain
-    /// down. Leaves every level in SHADER_READ_ONLY_OPTIMAL for the composite.
     pub fn record(
         &self,
         dev: &VulkanDevice,
         cmd: vk::CommandBuffer,
-        aa: &AaComposite,
+        aa: &compositor_kernel_vulkan_pipeline_composite_base::composite::AaComposite,
         fill_set: vk::DescriptorSet,
         idx: usize,
     ) {
+        use compositor_kernel_vulkan_pipeline_composite_base::composite::AaPush;
         let m = &self.images[idx];
         let device = &dev.device;
 
-        // mip0 → COLOR_ATTACHMENT, then render the (full) source into it.
         barrier(
             dev, cmd, m.image, subrange(0, 1),
             vk::ImageLayout::UNDEFINED, vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL,
@@ -272,8 +331,6 @@ impl MipGen {
             }]);
             device.cmd_set_scissor(cmd, 0, &[area]);
         }
-        // Full-screen copy: dst = whole NDC quad, src = whole texture, taps=1,
-        // classic mode (params2.x = 0) — a plain bilinear blit into mip 0.
         aa.draw(dev, cmd, fill_set, AaPush {
             dst: [-1.0, -1.0, 2.0, 2.0],
             src: [0.0, 0.0, 1.0, 1.0],
@@ -283,7 +340,6 @@ impl MipGen {
         });
         unsafe { device.cmd_end_rendering(cmd) };
 
-        // mip0 → TRANSFER_SRC; mips 1.. → TRANSFER_DST.
         barrier(
             dev, cmd, m.image, subrange(0, 1),
             vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
@@ -299,7 +355,6 @@ impl MipGen {
             );
         }
 
-        // Blit each level from the one above, halving the extent (min 1).
         let (mut sw, mut sh) = (m.width as i32, m.height as i32);
         for level in 1..m.mip_levels {
             let (dw, dh) = ((sw / 2).max(1), (sh / 2).max(1));
@@ -330,7 +385,6 @@ impl MipGen {
                     vk::Filter::LINEAR,
                 );
             }
-            // This level becomes the source for the next blit.
             barrier(
                 dev, cmd, m.image, subrange(level, 1),
                 vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
@@ -341,7 +395,6 @@ impl MipGen {
             sh = dh;
         }
 
-        // All levels are TRANSFER_SRC now → hand them to the fragment shader.
         barrier(
             dev, cmd, m.image, subrange(0, m.mip_levels),
             vk::ImageLayout::TRANSFER_SRC_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -351,8 +404,17 @@ impl MipGen {
     }
 
     pub fn destroy(&mut self, dev: &VulkanDevice) {
+        // Destroy images first (they reference the slabs).
         for m in self.images.drain(..) {
-            m.destroy(dev);
+            unsafe {
+                dev.device.destroy_image_view(m.view, None);
+                dev.device.destroy_image_view(m.mip0_view, None);
+                dev.device.destroy_image(m.image, None);
+            }
+        }
+        // Then free the slabs.
+        for slab in self.slabs.drain(..) {
+            dev.free_memory(slab.memory);
         }
     }
 }

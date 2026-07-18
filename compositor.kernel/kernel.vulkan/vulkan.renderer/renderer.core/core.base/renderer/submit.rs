@@ -177,16 +177,6 @@ impl VulkanRenderer {
             // need a per-surface mip chain (render-to-mip0 + blit-down) before
             // the composite pass — skipped when an FSR filter overrides sampling.
             let method_mips = aa_active && eff.method.needs_mips() && !fsr;
-            let mem_props = if method_mips {
-                Some(unsafe {
-                    self.phd
-                        .instance()
-                        .handle()
-                        .get_physical_device_memory_properties(self.phd.handle())
-                })
-            } else {
-                None
-            };
             if let Some(aa) = aa {
                 aa.begin_frame(dev);
             }
@@ -214,9 +204,8 @@ impl VulkanRenderer {
                             let mut mip_idx = None;
                             let use_aa = if aa_active && meta.is_world() {
                                 if method_mips {
-                                    let mp = mem_props.as_ref().unwrap();
                                     mip_idx = mg
-                                        .acquire(dev, mp, format, *tex_w, *tex_h)
+                                        .acquire(dev, self.phd.handle(), format, *tex_w, *tex_h)
                                         .map_err(|e| VulkanError::Vk(format!("mip acquire: {e}")))?;
                                     mip_idx.is_some()
                                 } else {
