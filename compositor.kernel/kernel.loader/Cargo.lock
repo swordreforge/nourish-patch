@@ -4578,6 +4578,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "compositor_kernel_vulkan_memory_slab_base"
+version = "0.0.1"
+dependencies = [
+ "ash",
+ "compositor_developer_debug_instance_record",
+ "compositor_kernel_vulkan_device_factory_base",
+]
+
+[[package]]
 name = "compositor_kernel_vulkan_memory_target_base"
 version = "0.0.1"
 dependencies = [
@@ -4595,6 +4604,7 @@ dependencies = [
  "ash",
  "compositor_kernel_vulkan_device_factory_base",
  "compositor_kernel_vulkan_format_query_base",
+ "compositor_kernel_vulkan_memory_slab_base",
  "compositor_kernel_vulkan_renderer_error_base",
  "smithay",
 ]
@@ -4666,6 +4676,7 @@ dependencies = [
  "compositor_kernel_vulkan_instance_physical_base",
  "compositor_kernel_vulkan_memory_export_base",
  "compositor_kernel_vulkan_memory_import_base",
+ "compositor_kernel_vulkan_memory_slab_base",
  "compositor_kernel_vulkan_memory_target_base",
  "compositor_kernel_vulkan_memory_upload_base",
  "compositor_kernel_vulkan_pipeline_cache_base",
@@ -4678,6 +4689,7 @@ dependencies = [
  "compositor_kernel_vulkan_texture_cache_base",
  "compositor_kernel_vulkan_texture_image_base",
  "compositor_orchestration_draw_dispatch_frame",
+ "compositor_support_system_persist_path_base",
  "smithay",
 ]
 
@@ -4768,6 +4780,7 @@ name = "compositor_kernel_vulkan_texture_image_inner"
 version = "0.0.1"
 dependencies = [
  "ash",
+ "compositor_kernel_vulkan_memory_slab_base",
  "smithay",
 ]
 

@@ -307,6 +307,7 @@ compositor_kernel_vulkan_instance_physical_base = { path = "../../compositor.ker
 compositor_kernel_vulkan_memory_alloc_base = { path = "../../compositor.kernel/kernel.vulkan/vulkan.memory/memory.alloc/alloc.base" }
 compositor_kernel_vulkan_memory_export_base = { path = "../../compositor.kernel/kernel.vulkan/vulkan.memory/memory.export/export.base" }
 compositor_kernel_vulkan_memory_import_base = { path = "../../compositor.kernel/kernel.vulkan/vulkan.memory/memory.import/import.base" }
+compositor_kernel_vulkan_memory_slab_base = { path = "../../compositor.kernel/kernel.vulkan/vulkan.memory/memory.slab/slab.base" }
 compositor_kernel_vulkan_memory_target_base = { path = "../../compositor.kernel/kernel.vulkan/vulkan.memory/memory.target/target.base" }
 compositor_kernel_vulkan_memory_upload_base = { path = "../../compositor.kernel/kernel.vulkan/vulkan.memory/memory.upload/upload.base" }
 compositor_kernel_vulkan_pipeline_cache_base = { path = "../../compositor.kernel/kernel.vulkan/vulkan.pipeline/pipeline.cache/cache.base" }

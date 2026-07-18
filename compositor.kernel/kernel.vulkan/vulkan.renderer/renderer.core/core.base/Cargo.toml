@@ -16,6 +16,7 @@ compositor_kernel_vulkan_texture_image_base.workspace = true
 compositor_kernel_vulkan_texture_cache_base.workspace = true
 compositor_kernel_vulkan_memory_target_base.workspace = true
 compositor_kernel_vulkan_memory_upload_base.workspace = true
+compositor_kernel_vulkan_memory_slab_base.workspace = true
 compositor_kernel_vulkan_capture_blit_base.workspace = true
 compositor_kernel_vulkan_device_factory_base.workspace = true
 compositor_kernel_vulkan_device_queue_base.workspace = true

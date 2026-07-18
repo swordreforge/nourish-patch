@@ -2,6 +2,7 @@
 
 use ash::vk;
 use compositor_kernel_vulkan_device_factory_base::factory::{VulkanDevice, find_memory_type_for as find_memory_type};
+use compositor_kernel_vulkan_memory_slab_base::slab::{SlabAllocator, SlabHandle};
 use compositor_kernel_vulkan_renderer_error_base::VulkanError;
 use smithay::backend::allocator::Fourcc;
 use smithay::backend::vulkan::PhysicalDevice;
@@ -19,6 +20,8 @@ pub struct UploadedImage {
     pub format: vk::Format,
     pub width: u32,
     pub height: u32,
+    /// Slab handle when memory is suballocated; `None` for standalone allocs.
+    pub slab: Option<SlabHandle>,
 }
 
 /// A host-visible staging buffer reused across uploads. Grows on demand; never
@@ -181,7 +184,8 @@ fn one_time<F: FnOnce(vk::CommandBuffer)>(
 }
 
 /// Allocate a device-local SAMPLED image and upload `data` (tightly packed
-/// `width*height*4`, no row padding) in full.
+/// `width*height*4`, no row padding) in full. Memory is suballocated from the
+/// provided slab — the caller must NOT free the returned `memory` individually.
 #[allow(clippy::too_many_arguments)]
 pub fn create_and_upload(
     dev: &VulkanDevice,
@@ -189,6 +193,7 @@ pub fn create_and_upload(
     command_pool: vk::CommandPool,
     queue: vk::Queue,
     staging: &mut StagingBuffer,
+    slab: &mut SlabAllocator,
     data: &[u8],
     format: Fourcc,
     size: Size<i32, BufferCoord>,
@@ -224,21 +229,13 @@ pub fn create_and_upload(
         .initial_layout(vk::ImageLayout::UNDEFINED);
     let image = unsafe { device.create_image(&image_info, None)? };
     let req = unsafe { device.get_image_memory_requirements(image) };
-    let mem_idx = find_memory_type(dev, phd, req.memory_type_bits, vk::MemoryPropertyFlags::DEVICE_LOCAL)
-        .ok_or(VulkanError::Import("no device-local memory type".into()))?;
-    let memory = unsafe {
-        device
-            .allocate_memory(
-                &vk::MemoryAllocateInfo::default()
-                    .allocation_size(req.size)
-                    .memory_type_index(mem_idx),
-                None,
-            )
-            .inspect_err(|_| {
-                device.destroy_image(image, None);
-            })?
-    };
-    unsafe { device.bind_image_memory(image, memory, 0)? };
+    let handle = slab.allocate(&req, vk::MemoryPropertyFlags::DEVICE_LOCAL)
+        .map_err(|_| {
+            unsafe { device.destroy_image(image, None); }
+            VulkanError::Import("no device-local memory type".into())
+        })?;
+    let memory = handle.memory;
+    unsafe { device.bind_image_memory(image, memory, handle.offset)? };
 
     // X-formats are opaque (no real alpha) — force alpha to 1 so the window
     // doesn't blend out transparent (see the dmabuf import path).
@@ -313,7 +310,7 @@ pub fn create_and_upload(
     .inspect_err(|_| unsafe {
         device.destroy_image_view(view, None);
         device.destroy_image(image, None);
-        device.free_memory(memory, None);
+        // Slab memory is not freed individually — reclaimed when slab drops.
     })?;
 
     Ok(UploadedImage {
@@ -323,6 +320,7 @@ pub fn create_and_upload(
         format: vk_format,
         width,
         height,
+        slab: Some(handle),
     })
 }
 

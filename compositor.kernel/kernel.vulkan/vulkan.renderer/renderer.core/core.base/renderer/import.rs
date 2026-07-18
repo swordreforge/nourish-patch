@@ -103,6 +103,7 @@ impl ImportDma for VulkanRenderer {
                 width: imported.size.0,
                 height: imported.size.1,
                 owns_memory: true,
+                slab: None,
             }),
             surf: [0.0; 4],
         };
@@ -148,6 +149,7 @@ impl ImportMem for VulkanRenderer {
             self.command_pool,
             self.queue.queue,
             &mut self.shm_staging,
+            &mut self.shm_slab,
             data,
             format,
             size,
@@ -163,7 +165,8 @@ impl ImportMem for VulkanRenderer {
                 fourcc: Some(format),
                 width: up.width,
                 height: up.height,
-                owns_memory: true,
+                owns_memory: false,
+                slab: up.slab,
             }),
             surf: [0.0; 4],
         })

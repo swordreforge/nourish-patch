@@ -17,6 +17,9 @@ pub struct TextureInner {
     pub width: u32,
     pub height: u32,
     pub owns_memory: bool,
+    /// Slab handle for suballocated SHM images. When set, `memory` is part of
+    /// a shared slab and must NOT be freed individually.
+    pub slab: Option<compositor_kernel_vulkan_memory_slab_base::slab::SlabHandle>,
 }
 
 impl fmt::Debug for TextureInner {
@@ -38,7 +41,8 @@ impl Drop for TextureInner {
             if self.image != vk::Image::null() {
                 self.device.destroy_image(self.image, None);
             }
-            if self.owns_memory && self.memory != vk::DeviceMemory::null() {
+            // Suballocated memory (slab) is freed when the slab drops, not here.
+            if self.owns_memory && self.memory != vk::DeviceMemory::null() && self.slab.is_none() {
                 self.device.free_memory(self.memory, None);
                 for m in &self.extra_memory {
                     self.device.free_memory(*m, None);

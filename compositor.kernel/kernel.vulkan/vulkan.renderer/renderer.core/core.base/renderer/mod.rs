@@ -23,6 +23,7 @@ use ash::vk;
 use compositor_kernel_vulkan_capture_blit_base::blit::CaptureCache;
 use compositor_kernel_vulkan_device_factory_base::factory::VulkanDevice;
 use compositor_kernel_vulkan_device_queue_base::queue::RenderQueue;
+use compositor_kernel_vulkan_memory_slab_base::slab::SlabAllocator;
 use compositor_kernel_vulkan_memory_upload_base::upload::StagingBuffer;
 use compositor_kernel_vulkan_pipeline_composite_base::composite::{AaComposite, CompositePipelines};
 use compositor_kernel_vulkan_pipeline_fullscreen_base::fullscreen::FullscreenPass;
@@ -101,6 +102,9 @@ pub struct VulkanRenderer {
     /// Reusable host-visible staging buffer for SHM uploads (grows on demand),
     /// so steady-state SHM updates allocate no new host memory.
     pub(super) shm_staging: StagingBuffer,
+    /// DEVICE_LOCAL slab allocator for SHM upload images — co-allocates multiple
+    /// images into shared VkDeviceMemory blocks.
+    pub(super) shm_slab: SlabAllocator,
     pub(super) frame_counter: u64,
     pub(super) debug_flags: DebugFlags,
     pub(super) downscale: TextureFilter,
@@ -170,6 +174,7 @@ impl Drop for VulkanRenderer {
             // Capture-target imports + the reusable SHM staging buffer.
             self.capture_cache.destroy(&self.dev);
             self.shm_staging.destroy(&self.dev);
+            self.shm_slab.destroy();
             let passes: Vec<_> = self.shader_passes.drain().collect();
             for (_, p) in passes {
                 p.destroy(&self.dev);

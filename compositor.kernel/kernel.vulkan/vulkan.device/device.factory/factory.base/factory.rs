@@ -26,6 +26,7 @@ pub fn required_extensions() -> Vec<&'static CStr> {
     ext
 }
 
+#[derive(Clone)]
 pub struct VulkanDevice {
     pub device: ash::Device,
     pub queue_family_index: u32,

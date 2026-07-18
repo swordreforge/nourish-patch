@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 ash = { workspace = true }
 smithay = { workspace = true }
+compositor_kernel_vulkan_memory_slab_base.workspace = true
 
 [lib]
 path = "lib.rs"

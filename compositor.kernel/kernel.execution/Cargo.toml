@@ -311,6 +311,7 @@ compositor_kernel_vulkan_instance_physical_base = { path = "../kernel.vulkan/vul
 compositor_kernel_vulkan_memory_alloc_base = { path = "../kernel.vulkan/vulkan.memory/memory.alloc/alloc.base" }
 compositor_kernel_vulkan_memory_export_base = { path = "../kernel.vulkan/vulkan.memory/memory.export/export.base" }
 compositor_kernel_vulkan_memory_import_base = { path = "../kernel.vulkan/vulkan.memory/memory.import/import.base" }
+compositor_kernel_vulkan_memory_slab_base = { path = "../kernel.vulkan/vulkan.memory/memory.slab/slab.base" }
 compositor_kernel_vulkan_memory_target_base = { path = "../kernel.vulkan/vulkan.memory/memory.target/target.base" }
 compositor_kernel_vulkan_memory_upload_base = { path = "../kernel.vulkan/vulkan.memory/memory.upload/upload.base" }
 compositor_kernel_vulkan_pipeline_cache_base = { path = "../kernel.vulkan/vulkan.pipeline/pipeline.cache/cache.base" }
@@ -613,6 +614,9 @@ compositor_support_world_kind_build_base = { path = "../../compositor.support/su
 compositor_support_world_order_track_base = { path = "../../compositor.support/support.world/world.order/order.track/track.base" }
 compositor_y5_action_canvas_layout = { path = "../../compositor.expansion/compositor.y5/y5.action/action.canvas/canvas.layout" }
 compositor_y5_audio_controller_interface = { path = "../../compositor.expansion/compositor.y5/y5.audio/audio.controller/controller.interface" }
+compositor_y5_bar_interface_base = { path = "../../compositor.expansion/compositor.y5/y5.bar/bar.interface/interface.base" }
+compositor_y5_bar_interface_update = { path = "../../compositor.expansion/compositor.y5/y5.bar/bar.interface/interface.update" }
+compositor_y5_bar_ui_base = { path = "../../compositor.expansion/compositor.y5/y5.bar/bar.ui/ui.base" }
 compositor_y5_camera_draw_interface = { path = "../../compositor.expansion/compositor.y5/y5.camera/camera.draw/draw.interface" }
 compositor_y5_camera_state_base = { path = "../../compositor.expansion/compositor.y5/y5.camera/camera.state/state.base" }
 compositor_y5_camera_system_base = { path = "../../compositor.expansion/compositor.y5/y5.camera/camera.system/system.base" }

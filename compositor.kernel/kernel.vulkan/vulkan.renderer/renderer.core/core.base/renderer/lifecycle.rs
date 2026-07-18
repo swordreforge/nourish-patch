@@ -4,6 +4,7 @@
 use ash::vk;
 use compositor_kernel_vulkan_capture_blit_base::blit::CaptureCache;
 use compositor_kernel_vulkan_device_factory_base::factory::VulkanDevice;
+use compositor_kernel_vulkan_memory_slab_base::slab::SlabAllocator;
 use compositor_kernel_vulkan_memory_upload_base::upload::StagingBuffer;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::allocator::Fourcc;
@@ -57,6 +58,10 @@ impl VulkanRenderer {
         stats::set_renderer("vulkan", true);
         stats::set_sync_mode("synchronous (device_wait_idle)");
 
+        // SHM upload slab: co-allocates device-local images into shared
+        // VkDeviceMemory blocks. Must be created before `dev` is moved.
+        let shm_slab = SlabAllocator::new(dev.clone(), phd.handle());
+
         Ok(Self {
             dev,
             phd,
@@ -82,6 +87,7 @@ impl VulkanRenderer {
             capture_cache: CaptureCache::new(),
             dmabuf_cache: HashMap::new(),
             shm_staging: StagingBuffer::new(),
+            shm_slab,
             frame_counter: 0,
             debug_flags: DebugFlags::empty(),
             downscale: TextureFilter::Linear,

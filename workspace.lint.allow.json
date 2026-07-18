@@ -419,5 +419,8 @@
   ],
   "compositor.support/support.smithay/smithay.state/state.seat/seat.factory": [
     "size"
+  ],
+  "compositor.kernel/kernel.vulkan/vulkan.memory/memory.slab/slab.base": [
+    "size"
   ]
 }
