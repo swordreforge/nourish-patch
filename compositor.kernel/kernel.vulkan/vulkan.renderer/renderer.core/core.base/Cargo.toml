@@ -47,6 +47,8 @@ compositor_developer_stats_registry_base = { workspace = true }
 # Per-surface HDR color tag (shared with the color-management protocol). Leaf
 # type crate; direct path dep (minimal blast, no support-layer coupling).
 compositor_kernel_graphic_color_surface_base = { workspace = true }
+# Pipeline cache persistence: state_dir() for cache file location.
+compositor_support_system_persist_path_base = { workspace = true }
 
 [lib]
 path = "lib.rs"

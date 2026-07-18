@@ -196,6 +196,21 @@ impl Drop for VulkanRenderer {
             self.dev.device.destroy_semaphore(self.timeline, None);
             self.dev.device.destroy_semaphore(self.render_semaphore, None);
             self.dev.device.destroy_fence(self.frame_fence, None);
+            // Persist the pipeline cache to disk before destroying it.
+            // The blob is driver-specific but version-tolerant: a stale cache
+            // from a different driver version is silently ignored by the next
+            // `vkCreatePipelineCache` call, so we don't need to version-check.
+            if let Some(data) = compositor_kernel_vulkan_pipeline_cache_base::cache::get_data(
+                &self.dev,
+                self.pipeline_cache,
+            ) {
+                let cache_path = lifecycle::pipeline_cache_path(&self.phd);
+                let _ = std::fs::create_dir_all(cache_path.parent().unwrap_or(std::path::Path::new(".")));
+                let temp = cache_path.with_extension("bin.tmp");
+                if std::fs::write(&temp, &data).is_ok() {
+                    let _ = std::fs::rename(&temp, &cache_path);
+                }
+            }
             self.dev
                 .device
                 .destroy_pipeline_cache(self.pipeline_cache, None);

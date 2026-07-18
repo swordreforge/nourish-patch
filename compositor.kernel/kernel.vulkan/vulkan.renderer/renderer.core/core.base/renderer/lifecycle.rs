@@ -26,8 +26,15 @@ impl VulkanRenderer {
         let command_pool = compositor_kernel_vulkan_command_pool_base::pool::create(&dev)
             .map_err(|e| VulkanError::Vk(format!("command pool: {e}")))?;
         let cmd = Self::alloc_command_buffer(&dev, command_pool)?;
-        let pipeline_cache = compositor_kernel_vulkan_pipeline_cache_base::cache::create(&dev)
-            .map_err(|e| VulkanError::Vk(format!("pipeline cache: {e}")))?;
+        let pipeline_cache = {
+            let cache_path = pipeline_cache_path(&phd);
+            let initial = std::fs::read(&cache_path).ok();
+            compositor_kernel_vulkan_pipeline_cache_base::cache::create(
+                &dev,
+                initial.as_deref(),
+            )
+            .map_err(|e| VulkanError::Vk(format!("pipeline cache: {e}")))?
+        };
         let descriptor_pool = Self::create_descriptor_pool(&dev)?;
         let timeline = Self::create_timeline(&dev)?;
         let render_semaphore = Self::create_render_semaphore(&dev)?;
@@ -213,4 +220,16 @@ impl VulkanRenderer {
         let info = vk::SemaphoreCreateInfo::default().push_next(&mut export);
         Ok(unsafe { dev.device.create_semaphore(&info, None)? })
     }
+}
+
+/// Derive a cache file path from the physical device's vendor/device IDs.
+/// The path is `$XDG_STATE_HOME/y5/pipeline_cache/{vendor}_{device}.bin`.
+pub(crate) fn pipeline_cache_path(phd: &PhysicalDevice) -> std::path::PathBuf {
+    let props = phd.properties();
+    let vendor = props.vendor_id;
+    let device = props.device_id;
+    let dir = compositor_support_system_persist_path_base::base::state_dir()
+        .join("pipeline_cache");
+    let _ = std::fs::create_dir_all(&dir);
+    dir.join(format!("{vendor}_{device}.bin"))
 }
