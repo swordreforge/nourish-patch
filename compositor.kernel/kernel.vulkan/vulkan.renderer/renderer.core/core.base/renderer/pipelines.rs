@@ -98,6 +98,7 @@ impl VulkanRenderer {
         }
         let pass = FullscreenPass::create(
             &self.dev,
+            self.pipeline_cache,
             format,
             &v.spv,
             v.vert_spv.as_deref(),

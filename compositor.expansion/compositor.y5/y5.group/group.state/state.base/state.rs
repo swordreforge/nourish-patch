@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::IndexMut, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use compositor_y5_group_surface_base::ui::GroupUi;
 use uuid::Uuid;
@@ -13,7 +13,7 @@ pub static GROUP_MUT: TokenMut<GroupState> = TokenMut::new(&GROUP);
 pub struct GroupState {
     // Mapping between a window UUID to its corresponding group.
     pub window: HashMap<uuid::Uuid, Arc<uuid::Uuid>>,
-    pub group: Vec<Group>,
+    pub group: HashMap<uuid::Uuid, Group>,
 }
 
 pub enum IcedInvalidation {
@@ -47,25 +47,6 @@ impl GroupVisibility {
         }
     }
 
-    // pub fn retain(&mut self, visibility: GroupVisibility) -> GroupVisibility {
-    //     if visibility.id().is_some() {
-    //         panic!("pass visibility with handle");
-    //     };
-
-    //     match self {
-    //         GroupVisibility::Collapse(iced_handle) => iced_handle,
-    //         GroupVisibility::Visible(iced_handle) => iced_handle,
-    //     }
-
-    //     let handle = self.handle();
-
-    //     if let Some(handle) = handle {
-    //         return visibility.with_handle(handle);
-    //     }
-
-    //     return visibility;
-    // }
-
     pub fn with_handle(&self, handle: IcedHandle<GroupUi>) -> GroupVisibility {
         match self {
             GroupVisibility::Collapse(None) => GroupVisibility::Collapse(Some(handle)),
@@ -89,14 +70,11 @@ impl GroupState {
     pub fn new() -> Self {
         return Self {
             window: HashMap::new(),
-            group: vec![],
+            group: HashMap::new(),
         };
     }
     pub fn get_mut(&mut self, group_uuid: uuid::Uuid) -> Option<&mut Group> {
-        let group = 'group: { self.group.iter().position(|w| w.id == group_uuid) };
-
-        let Some(group) = group else { return None };
-        self.group.get_mut(group)
+        self.group.get_mut(&group_uuid)
     }
 
     pub fn set(
@@ -128,8 +106,8 @@ impl GroupState {
                 w.push(window);
             }
 
-            self.group.retain_mut(|group| {
-                let Some(w) = group_removals.get(&group.id) else {
+            self.group.retain(|group_id, group| {
+                let Some(w) = group_removals.get(group_id) else {
                     return true;
                 };
 
@@ -163,22 +141,17 @@ impl GroupState {
             return iced_invalidation;
         };
 
-        let (idx, mut target_group, existing) = 'target_group: {
+        let (target_id, mut target_group, existing) = 'target_group: {
             if let Some(group_uuid) = target_group {
                 iced_invalidation.insert(
                     group_uuid.clone(),
                     IcedInvalidation::BBOX,
-                    // IcedInvalidation::Create(GroupUi::new(
-                    //     compositor_y5_group_surface_base::mode::Mode::Show,
-                    // )),
                 );
 
                 // Expect the group to exist
                 break 'target_group 'group: {
-                    for (idx, group) in self.group.iter().enumerate() {
-                        if group.id == group_uuid {
-                            break 'group Some((idx, group.clone(), true));
-                        }
+                    if let Some(group) = self.group.get(&group_uuid) {
+                        break 'group Some((group_uuid, group.clone(), true));
                     }
 
                     None
@@ -186,15 +159,13 @@ impl GroupState {
                 .expect("Group to exist");
             } else {
                 let group = Group::default();
-                self.group.push(group.clone());
+                let id = group.id;
+                self.group.insert(id, group.clone());
                 iced_invalidation.insert(
-                    group.id.clone(),
+                    id,
                     IcedInvalidation::New,
-                    // IcedInvalidation::Create(GroupUi::new(
-                    //     compositor_y5_group_surface_base::mode::Mode::Show,
-                    // )),
                 );
-                break 'target_group (self.group.len() - 1, group, false);
+                break 'target_group (id, group, false);
             };
         };
 
@@ -207,7 +178,7 @@ impl GroupState {
             target_group.window.push(window_uuid.clone());
         }
 
-        self.group[idx] = target_group;
+        self.group.insert(target_id, target_group);
 
         iced_invalidation
     }

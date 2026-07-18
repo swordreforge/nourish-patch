@@ -57,16 +57,6 @@ impl System for SelectSystem {
         *cx.storage.get_mut(&SELECT_MUT) = next;
 
         let size = cx.storage.get(&SELECT).Selection.len() as i32;
-        // RPC Notify of the new selection size (driver data; broadcast.send is &self).
-        let notify = compositor_remote_message_server_base::bind::canvas::selection::Notify { size };
-        cx.kernel
-            .get(&compositor_orchestration_driver_remote_base::base::RPC)
-            .broadcast
-            .send(compositor_remote_message_server_base::message::Message {
-                Value: compositor_remote_message_server_base::message::ServerEvent::Canvas(
-                    compositor_remote_message_server_base::message::canvas_events::CanvasMessage::Notify(notify),
-                ),
-            });
         cx.channels.send(&SELECTION_CHANGED_TX, SelectionChanged { size });
     }
 }

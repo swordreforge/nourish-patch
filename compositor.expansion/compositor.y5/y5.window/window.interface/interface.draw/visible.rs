@@ -18,20 +18,11 @@ impl DrawWindow for Window {
             return true;
         };
 
-        let visible = 'visible: {
-            for ref group in &_loop.inner.group().group {
-                if &group.id != group_uuid.as_ref() {
-                    continue;
-                }
-
-                break 'visible matches!(
-                    group.Visibility,
-                    compositor_y5_group_state_base::state::GroupVisibility::Visible(_)
-                );
-            }
-
-            break 'visible false;
-        };
+        let visible = _loop.inner.group().group.get(group_uuid.as_ref())
+            .map_or(false, |g| matches!(
+                g.Visibility,
+                compositor_y5_group_state_base::state::GroupVisibility::Visible(_)
+            ));
 
         visible
     }

@@ -134,10 +134,8 @@ fn fullscreen_target(
     };
 
     let Some(group) = _loop.inner.group_mut()
-        
         .group
-        .iter()
-        .find(|g| g.id == group_uuid)
+        .get(&group_uuid)
         .cloned()
     else {
         return (current_loc, current_size);

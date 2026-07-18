@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::sync::Mutex;
 
 use smithay::backend::renderer::element::memory::{
@@ -25,7 +26,7 @@ pub struct PointerElement {
     pub status: CursorImageStatus,
     /// Tracks the currently selected named cursor and when it was selected,
     /// for animation frame timing. Reset whenever the effective name changes.
-    anim_state: Mutex<AnimState>,
+    anim_state: RefCell<AnimState>,
 }
 
 struct AnimState {
@@ -38,7 +39,7 @@ impl PointerElement {
         Self {
             theme,
             status: CursorImageStatus::default_named(),
-            anim_state: Mutex::new(AnimState {
+            anim_state: RefCell::new(AnimState {
                 current_name: None,
                 started_at: Instant::now(),
             }),
@@ -52,7 +53,7 @@ impl PointerElement {
             return 0;
         }
 
-        let mut state = self.anim_state.lock().unwrap();
+        let mut state = self.anim_state.borrow_mut();
         let now = Instant::now();
 
         // Reset the animation clock whenever the effective cursor changes,

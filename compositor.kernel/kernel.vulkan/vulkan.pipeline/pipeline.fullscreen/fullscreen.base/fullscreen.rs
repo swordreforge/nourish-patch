@@ -28,6 +28,7 @@ impl FullscreenPass {
     /// `push_size` is the push-constant range in bytes (visible to vert+frag).
     pub fn create(
         device: &VulkanDevice,
+        pipeline_cache: vk::PipelineCache,
         color_format: vk::Format,
         spv: &[u8],
         vert_spv: Option<&[u8]>,
@@ -113,7 +114,7 @@ impl FullscreenPass {
             .layout(layout)
             .push_next(&mut rendering_info);
         let pipeline = unsafe {
-            dev.create_graphics_pipelines(vk::PipelineCache::null(), std::slice::from_ref(&info), None)
+            dev.create_graphics_pipelines(pipeline_cache, std::slice::from_ref(&info), None)
                 .map_err(|(_, e)| VulkanError::Vk(format!("fullscreen graphics pipeline: {e}")))?[0]
         };
 

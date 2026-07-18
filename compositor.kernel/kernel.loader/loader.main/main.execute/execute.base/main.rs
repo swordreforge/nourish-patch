@@ -160,7 +160,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Set up the rpc transport
     let rpc_transport = compositor_remote_transport_server_base::transport::create(event_loop.handle());
-    let rpc_transport_tx_base = rpc_transport.broadcast_transmit.clone();
 
     info!("Initializing loop state");
 
@@ -276,7 +275,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         environment.clone(),
         nested,
         state_loader,
-        rpc_transport.broadcast_transmit,
         kernel_data,
         worlds,
     );

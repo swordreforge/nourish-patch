@@ -13,8 +13,6 @@ use compositor_orchestration_core_state_base::Loop;
 const SOCKET_PATH: &str = "/tmp/y5-compositor-rpc.sock";
 
 pub struct Transport {
-    pub broadcast_transmit:
-        tokio::sync::broadcast::Sender<compositor_remote_message_server_base::message::Message>,
     /// Nudge the gRPC thread to re-check its socket and rebind if a second
     /// compositor (another TTY) replaced the file. Pinged on session activate
     /// via non-blocking `try_send` (capacity 1 — extra pings just drop).
@@ -24,10 +22,6 @@ pub struct Transport {
 pub fn create(loop_handle: LoopHandle<Loop>) -> Transport {
     let (calloop_tx, calloop_rx) =
         calloop::channel::channel::<compositor_remote_message_client_base::message::Message>();
-    // Seems that broadcast is never handled (Calloop -> gRPC, capacity 100)
-    let (broadcast_tx, _broadcast_rx) = tokio::sync::broadcast::channel::<
-        compositor_remote_message_server_base::message::Message,
-    >(100);
     // "Please re-check the socket" nudges (Calloop -> gRPC, capacity 1).
     let (rebind_tx, rebind_rx) = tokio::sync::mpsc::channel::<()>(1);
 
@@ -41,7 +35,7 @@ pub fn create(loop_handle: LoopHandle<Loop>) -> Transport {
         .unwrap();
 
     background(calloop_tx, rebind_rx);
-    return Transport { broadcast_transmit: broadcast_tx, rebind_signal: rebind_tx };
+    return Transport { rebind_signal: rebind_tx };
 }
 
 fn background(

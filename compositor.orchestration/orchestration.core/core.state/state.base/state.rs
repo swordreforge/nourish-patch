@@ -209,10 +209,6 @@ impl Orchestrator {
         environment: Environment,
         nested: bool,
         loader: Loader,
-
-        rpc_broadcast: tokio::sync::broadcast::Sender<
-            compositor_remote_message_server_base::message::Message,
-        >,
         mut kernel_data: compositor_support_system_storage_slot_base::base::Storage,
         worlds: compositor_orchestration_world_manager_base::manager::WorldManager,
     ) -> Self {
@@ -235,8 +231,8 @@ impl Orchestrator {
         kernel_data.insert(&compositor_orchestration_driver_audio_base::base::MEDIA, Some(MediaController::new()));
         // Introspection driver: sampler slot, populated by the loader post-init.
         kernel_data.insert(&compositor_orchestration_driver_introspection_base::base::SAMPLER, None);
-        // Remote driver: RPC state (broadcast + incoming buffer).
-        kernel_data.insert(&compositor_orchestration_driver_remote_base::base::RPC, compositor_remote_message_state_base::state::State::new(rpc_broadcast));
+        // Remote driver: RPC state (incoming buffer).
+        kernel_data.insert(&compositor_orchestration_driver_remote_base::base::RPC, compositor_remote_message_state_base::state::State::new());
         // GPU driver: DRM binding slot, populated post-init by the backend.
         kernel_data.insert(&GPU_BINDING, None);
         // Resume driver: vblank-seen flag + resume watchdog.

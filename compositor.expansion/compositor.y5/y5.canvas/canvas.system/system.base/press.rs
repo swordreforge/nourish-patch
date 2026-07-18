@@ -671,7 +671,7 @@ fn local_type(storage: &Storage, handle_id: HandleId) -> Option<HandleIdLocalTyp
     if is_placeholder {
         return Some(HandleIdLocalType::Placeholder);
     }
-    for item in &storage.get(&GROUP).group {
+    for item in storage.get(&GROUP).group.values() {
         if item.Visibility.id() == Some(handle_id) {
             return Some(HandleIdLocalType::Group(item.clone()));
         }
@@ -685,11 +685,6 @@ fn window_visible(storage: &Storage, window: &Window) -> bool {
     let Some(window_uuid) = window.uuid() else { return true };
     let group_state = storage.get(&GROUP);
     let Some(group_uuid) = group_state.window.get(&window_uuid) else { return true };
-    for group in &group_state.group {
-        if &group.id != group_uuid.as_ref() {
-            continue;
-        }
-        return matches!(group.Visibility, GroupVisibility::Visible(_));
-    }
-    false
+    group_state.group.get(group_uuid.as_ref())
+        .map_or(false, |g| matches!(g.Visibility, GroupVisibility::Visible(_)))
 }
