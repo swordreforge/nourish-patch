@@ -4,15 +4,16 @@
 //! compiled to SPIR-V by naga at build time (`OUT_DIR/composite_hdr.spv`).
 //!
 //! Bindings (WGSL → SPIR-V): set 0 = {sampled image (0), sampler (1)} per
-//! textured draw; set 1 = {uniform (0)} the `Tuning` buffer, bound once per
-//! frame. Push constants (64 B) carry per-draw geometry + the per-surface flag.
+//! textured draw. Push constants (112 B) carry per-draw geometry, per-surface
+//! flags, AND the live tuning parameters (no UBO).
 
 use ash::vk;
-use compositor_kernel_vulkan_device_factory_base::factory::{VulkanDevice, find_memory_type};
+use compositor_kernel_vulkan_device_factory_base::factory::VulkanDevice;
 
 const SPV: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/composite_hdr.spv"));
 
-/// Per-draw push constants — matches the WGSL `Push` (64 bytes).
+/// Per-draw push constants — geometry + tuning merged (112 bytes).
+/// Matches the WGSL `Push` struct exactly.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct HdrPush {
@@ -21,12 +22,7 @@ pub struct HdrPush {
     pub color: [f32; 4],
     /// x = source transfer (0 sRGB, 1 PQ, 2 HLG, 3 linear), y = is_hdr (0/1).
     pub surf: [f32; 4],
-}
-
-/// Tuning uniform — matches the WGSL `Tuning` (12 f32, 48 bytes).
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct HdrTuningUbo {
+    // -- tuning (formerly a separate UBO, now in push constants) --
     pub enabled: f32,
     pub sdr_white_nits: f32,
     pub max_nits: f32,
@@ -45,22 +41,14 @@ pub struct HdrTuningUbo {
 pub enum HdrError {
     #[error("vulkan call failed: {0}")]
     Vk(String),
-    #[error("no host-visible memory type for the tuning UBO")]
-    NoMemoryType,
 }
 
 pub struct HdrComposite {
     set0_layout: vk::DescriptorSetLayout,
-    set1_layout: vk::DescriptorSetLayout,
     layout: vk::PipelineLayout,
     textured: vk::Pipeline,
     solid: vk::Pipeline,
     sampler: vk::Sampler,
-    ubo: vk::Buffer,
-    ubo_mem: vk::DeviceMemory,
-    ubo_mapped: *mut u8,
-    ubo_pool: vk::DescriptorPool,
-    ubo_set: vk::DescriptorSet,
     tex_pool: vk::DescriptorPool,
     pub color_format: vk::Format,
 }
@@ -80,7 +68,7 @@ fn shader_module(dev: &ash::Device, spv: &[u8]) -> Result<vk::ShaderModule, HdrE
 impl HdrComposite {
     pub fn create(
         device: &VulkanDevice,
-        phd: vk::PhysicalDevice,
+        _phd: vk::PhysicalDevice,
         cache: vk::PipelineCache,
         color_format: vk::Format,
     ) -> Result<Self, HdrError> {
@@ -120,30 +108,16 @@ impl HdrComposite {
             .map_err(|e| HdrError::Vk(format!("set0 layout: {e}")))?
         };
 
-        // set 1: tuning uniform (bound once per frame).
-        let set1_binding = vk::DescriptorSetLayoutBinding::default()
-            .binding(0)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-            .descriptor_count(1)
-            .stage_flags(vk::ShaderStageFlags::FRAGMENT);
-        let set1_layout = unsafe {
-            dev.create_descriptor_set_layout(
-                &vk::DescriptorSetLayoutCreateInfo::default()
-                    .bindings(std::slice::from_ref(&set1_binding)),
-                None,
-            )
-            .map_err(|e| HdrError::Vk(format!("set1 layout: {e}")))?
-        };
-
+        // Push constants: 112 bytes (64 geometry + 48 tuning). Vulkan guarantees
+        // at least 128 bytes, so this is safe on all implementations.
         let push_range = vk::PushConstantRange::default()
             .stage_flags(vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT)
             .offset(0)
             .size(std::mem::size_of::<HdrPush>() as u32);
-        let set_layouts = [set0_layout, set1_layout];
         let layout = unsafe {
             dev.create_pipeline_layout(
                 &vk::PipelineLayoutCreateInfo::default()
-                    .set_layouts(&set_layouts)
+                    .set_layouts(std::slice::from_ref(&set0_layout))
                     .push_constant_ranges(std::slice::from_ref(&push_range)),
                 None,
             )
@@ -216,78 +190,6 @@ impl HdrComposite {
         let solid = build(fs_solid)?;
         unsafe { dev.destroy_shader_module(module, None) };
 
-        // Tuning UBO: host-visible, persistently mapped, coherent.
-        let ubo_size = std::mem::size_of::<HdrTuningUbo>() as vk::DeviceSize;
-        let ubo = unsafe {
-            dev.create_buffer(
-                &vk::BufferCreateInfo::default()
-                    .size(ubo_size)
-                    .usage(vk::BufferUsageFlags::UNIFORM_BUFFER)
-                    .sharing_mode(vk::SharingMode::EXCLUSIVE),
-                None,
-            )
-            .map_err(|e| HdrError::Vk(format!("ubo buffer: {e}")))?
-        };
-        let req = unsafe { dev.get_buffer_memory_requirements(ubo) };
-        let mem_type = find_memory_type(
-            &device.instance, phd,
-            req.memory_type_bits,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        )
-        .ok_or(HdrError::NoMemoryType)?;
-        let ubo_mem = unsafe {
-            dev.allocate_memory(
-                &vk::MemoryAllocateInfo::default()
-                    .allocation_size(req.size)
-                    .memory_type_index(mem_type),
-                None,
-            )
-            .map_err(|e| HdrError::Vk(format!("ubo memory: {e}")))?
-        };
-        unsafe {
-            dev.bind_buffer_memory(ubo, ubo_mem, 0)
-                .map_err(|e| HdrError::Vk(format!("ubo bind: {e}")))?;
-        }
-        let ubo_mapped = unsafe {
-            dev.map_memory(ubo_mem, 0, ubo_size, vk::MemoryMapFlags::empty())
-                .map_err(|e| HdrError::Vk(format!("ubo map: {e}")))? as *mut u8
-        };
-
-        // set 1 pool + set (persistent — the UBO never moves).
-        let ubo_pool = unsafe {
-            dev.create_descriptor_pool(
-                &vk::DescriptorPoolCreateInfo::default().max_sets(1).pool_sizes(&[
-                    vk::DescriptorPoolSize::default()
-                        .ty(vk::DescriptorType::UNIFORM_BUFFER)
-                        .descriptor_count(1),
-                ]),
-                None,
-            )
-            .map_err(|e| HdrError::Vk(format!("ubo pool: {e}")))?
-        };
-        let ubo_set = unsafe {
-            dev.allocate_descriptor_sets(
-                &vk::DescriptorSetAllocateInfo::default()
-                    .descriptor_pool(ubo_pool)
-                    .set_layouts(std::slice::from_ref(&set1_layout)),
-            )
-            .map_err(|e| HdrError::Vk(format!("ubo set: {e}")))?[0]
-        };
-        let buf_info = vk::DescriptorBufferInfo::default()
-            .buffer(ubo)
-            .offset(0)
-            .range(ubo_size);
-        unsafe {
-            dev.update_descriptor_sets(
-                &[vk::WriteDescriptorSet::default()
-                    .dst_set(ubo_set)
-                    .dst_binding(0)
-                    .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                    .buffer_info(std::slice::from_ref(&buf_info))],
-                &[],
-            );
-        }
-
         // set 0 pool: reset + re-allocated each frame (one set per textured op).
         const MAX_TEX: u32 = 1024;
         let tex_pool = unsafe {
@@ -307,47 +209,22 @@ impl HdrComposite {
 
         Ok(Self {
             set0_layout,
-            set1_layout,
             layout,
             textured,
             solid,
             sampler,
-            ubo,
-            ubo_mem,
-            ubo_mapped,
-            ubo_pool,
-            ubo_set,
             tex_pool,
             color_format,
         })
     }
 
-    /// Upload the latest tuning into the mapped UBO (coherent — no flush).
-    pub fn update_tuning(&self, t: &HdrTuningUbo) {
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                t as *const HdrTuningUbo as *const u8,
-                self.ubo_mapped,
-                std::mem::size_of::<HdrTuningUbo>(),
-            );
-        }
-    }
-
-    /// Start a frame's HDR draws: reset the per-frame texture-set pool and bind
-    /// the tuning set (set 1) once. Call after `composite::begin`.
+    /// Start a frame's HDR draws: reset the per-frame texture-set pool.
+    /// Tuning data is now passed via push constants per draw — no set 1 binding.
     pub fn begin_frame(&self, device: &VulkanDevice, cmd: vk::CommandBuffer) {
         unsafe {
             let _ = device
                 .device
                 .reset_descriptor_pool(self.tex_pool, vk::DescriptorPoolResetFlags::empty());
-            device.device.cmd_bind_descriptor_sets(
-                cmd,
-                vk::PipelineBindPoint::GRAPHICS,
-                self.layout,
-                1,
-                &[self.ubo_set],
-                &[],
-            );
         }
     }
 
@@ -438,16 +315,11 @@ impl HdrComposite {
         let dev = &device.device;
         unsafe {
             dev.destroy_descriptor_pool(self.tex_pool, None);
-            dev.destroy_descriptor_pool(self.ubo_pool, None);
-            dev.unmap_memory(self.ubo_mem);
-            dev.destroy_buffer(self.ubo, None);
-            dev.free_memory(self.ubo_mem, None);
             dev.destroy_sampler(self.sampler, None);
             dev.destroy_pipeline(self.textured, None);
             dev.destroy_pipeline(self.solid, None);
             dev.destroy_pipeline_layout(self.layout, None);
             dev.destroy_descriptor_set_layout(self.set0_layout, None);
-            dev.destroy_descriptor_set_layout(self.set1_layout, None);
         }
     }
 }

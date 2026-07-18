@@ -83,25 +83,12 @@ impl VulkanRenderer {
 
         if self.use_hdr() {
             // HDR path (M5 1a): composite via the WGSL HDR pipeline.
+            // Tuning data flows through push constants (no UBO).
             let hdr = self
                 .hdr_pipelines
                 .get(&format)
                 .expect("hdr pipeline ensured above");
             let t = compositor_developer_stats_registry_base::base::hdr_tuning();
-            hdr.update_tuning(&crate::hdr_composite::HdrTuningUbo {
-                enabled: t.enabled,
-                sdr_white_nits: t.sdr_white_nits,
-                max_nits: t.max_nits,
-                brightness: t.brightness,
-                contrast: t.contrast,
-                saturation: t.saturation,
-                gamut: t.gamut,
-                tone_map: t.tone_map,
-                transfer: t.transfer,
-                gamma: t.gamma,
-                exposure: t.exposure,
-                _pad: 0.0,
-            });
             let to_push = |q: &compositor_kernel_vulkan_pipeline_composite_base::composite::PushQuad,
                            surf: [f32; 4]| {
                 crate::hdr_composite::HdrPush {
@@ -109,6 +96,18 @@ impl VulkanRenderer {
                     src: q.src,
                     color: q.color,
                     surf,
+                    enabled: t.enabled,
+                    sdr_white_nits: t.sdr_white_nits,
+                    max_nits: t.max_nits,
+                    brightness: t.brightness,
+                    contrast: t.contrast,
+                    saturation: t.saturation,
+                    gamut: t.gamut,
+                    tone_map: t.tone_map,
+                    transfer: t.transfer,
+                    gamma: t.gamma,
+                    exposure: t.exposure,
+                    _pad: 0.0,
                 }
             };
             let sdr = [0.0_f32; 4];
