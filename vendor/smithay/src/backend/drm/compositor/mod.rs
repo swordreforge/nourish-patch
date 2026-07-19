@@ -2525,6 +2525,16 @@ where
     pub fn reset_state(&mut self) -> Result<(), DrmError> {
         self.surface.reset_state()?;
         self.reset_pending = true;
+        // Reset cursor state so the first frame after resume
+        // forces a full cursor plane re-initialization. Without
+        // this, if output transform and scale haven't changed,
+        // try_assign_cursor_plane() reuses the old cursor plane
+        // state with skip=true, but the kernel side was disabled
+        // by DrmDevice::reset_state() during activate().
+        if let Some(cursor_state) = self.cursor_state.as_mut() {
+            cursor_state.previous_output_scale = None;
+            cursor_state.previous_output_transform = None;
+        }
         Ok(())
     }
 
