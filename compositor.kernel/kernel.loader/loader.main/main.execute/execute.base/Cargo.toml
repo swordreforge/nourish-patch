@@ -72,6 +72,7 @@ compositor_developer_debug_instance_record = { workspace = true }
 compositor_developer_environment_config_base = { workspace = true }
 # Opt-in experimental gpu_* flags — read once right after config (before logging).
 compositor_developer_environment_experimental_base = { workspace = true }
+rustix = { workspace = true }
 compositor_y5_picker_world_restore = { workspace = true }
 # App-launch executor wiring (kernel.execution driver) — main() calls
 # block_sigchld() + install() and nothing else from the launch subsystem.

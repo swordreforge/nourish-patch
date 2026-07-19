@@ -111,6 +111,7 @@ wayland-server = { version = "0.31.13"}
 wayland-scanner = "0.31.10"
 wayland-backend = "0.3.15"
 uuid = {version = "1.23.1", features = ["v7"]}
+rustix = { version = "1", features = ["fs", "net", "process"] }
 
 # pam-sys patched to ship prebuilt bindings (upstream bindgen 0.69 fails under
 # clang 22: "libclang not loaded on this thread"). See vendor/pam-sys/build.rs.

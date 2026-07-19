@@ -3,6 +3,7 @@ pub mod activation_env;
 mod event_loop;
 mod wayland;
 pub mod wgpu;
+mod xwayland;
 
 use compositor_developer_debug_instance_record::{info, trace, warn};
 
@@ -468,6 +469,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // correct for both. Children spawn below (announce_session), after this.
     unsafe { std::env::set_var("WAYLAND_DISPLAY", &wayland_socket_name_for_children) };
     info!("WAYLAND_DISPLAY set to {:?} for child processes", wayland_socket_name_for_children);
+
+    // Start xwayland-satellite integration (X11 app compatibility).
+    // Must be after WAYLAND_DISPLAY is set so satellite can connect.
+    xwayland::setup();
 
     // Push user-configured env vars (preferences.json `env`) into our own
     // process so child processes inherit them.  These are also pushed to
