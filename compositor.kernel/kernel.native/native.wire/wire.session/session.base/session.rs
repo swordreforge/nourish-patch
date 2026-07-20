@@ -64,6 +64,11 @@ pub fn register(
                 smithay::backend::session::Event::ActivateSession => {
                     info!("Session activated");
                     state.inner.status_session = StatusSession::Active;
+                    // [CURSOR-DEBUG] Record cursor output state right at activation.
+                    info!(
+                        "[CURSOR-DEBUG] ActivateSession: cursor_output={:?}, render_output={:?}",
+                        state.inner.cursor_output, state.inner.render_output,
+                    );
 
                     // Resume protocol (seat.lifecycle): input, activate
                     // (forced reclaiming modeset), surface reset, buffer

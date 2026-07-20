@@ -2525,6 +2525,11 @@ where
     pub fn reset_state(&mut self) -> Result<(), DrmError> {
         self.surface.reset_state()?;
         self.reset_pending = true;
+        // [CURSOR-DEBUG] Log whether a hardware cursor plane was ever configured.
+        eprintln!(
+            "[CURSOR-DEBUG] DrmCompositor::reset_state — cursor_state={}",
+            self.cursor_state.is_some()
+        );
         // Reset cursor state so the first frame after resume
         // forces a full cursor plane re-initialization. Without
         // this, if output transform and scale haven't changed,
@@ -3038,7 +3043,7 @@ where
         }
 
         let Some(cursor_state) = self.cursor_state.as_mut() else {
-            trace!("no cursor state, skipping cursor rendering");
+            eprintln!("[CURSOR-DEBUG] try_assign_cursor_plane: cursor_state is None — no hardware cursor plane configured");
             return None;
         };
 
@@ -3185,6 +3190,9 @@ where
 
         // ok, nothing changed, try to keep the previous state
         if !render && !reposition {
+            eprintln!(
+                "[CURSOR-DEBUG] try_assign_cursor_plane: nothing changed (render=false, reposition=false) — skipping cursor plane (skip=true, needs_test=false). Kernel cursor plane may be disabled after reset!"
+            );
             let mut plane_state = previous_state.plane_state(plane_info.handle).unwrap().clone();
             plane_state.skip = true;
             // Note: we know that we had a cursor plane in the
@@ -3197,7 +3205,7 @@ where
 
         // we no not have to re-render but update the planes location
         if !render && reposition {
-            trace!("repositioning cursor plane");
+            eprintln!("[CURSOR-DEBUG] try_assign_cursor_plane: reposition only (render=false, reposition=true)");
             let mut plane_state = previous_state.plane_state(plane_info.handle).unwrap().clone();
             plane_state.skip = false;
             // Note: we know that we had a cursor plane in the

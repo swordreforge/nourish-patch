@@ -51,6 +51,14 @@ where
         Some(icon) => smithay::input::pointer::CursorImageStatus::Named(icon),
         None => state.state.seat.pointer_status.clone(),
     };
+    // [CURSOR-DEBUG] Log the cursor image status driving this frame.
+    eprintln!(
+        "[CURSOR-DEBUG] pointer_draw: status={:?}, force_cursor={:?}, render_at=({},{}), scale={}",
+        state.state.seat.pointer_status,
+        state.state.seat.force_cursor,
+        render_at.x, render_at.y,
+        size_context.scale,
+    );
     let pointer_elements: Vec<PointerRenderElement<_>> =
         state.inner.pointer_mut().element.render_elements(
             renderer,
@@ -58,6 +66,10 @@ where
             Scale::from(size_context.scale), // not .round() — exact fractional
             1.0,
         );
+    eprintln!(
+        "[CURSOR-DEBUG] pointer_draw: produced {} cursor element(s)",
+        pointer_elements.len(),
+    );
 
     if let Some(icon_surface) = &state.state.dnd.icon {
         let dnd_element = render_elements_from_surface_tree::<_, PointerRenderElement<R>>(

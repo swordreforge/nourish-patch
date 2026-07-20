@@ -383,6 +383,17 @@ where
             active.as_deref() == Some(key.as_str())
         }
     };
+    // [CURSOR-DEBUG] Log why the cursor/pointer layer is or isn't drawn.
+    if !draw_screen {
+        let active = state.inner.cursor_output.clone().or_else(|| {
+            state.inner.space_state().state.outputs().next()
+                .map(compositor_orchestration_core_state_base::state::output_key)
+        });
+        warn!(
+            "[CURSOR-DEBUG] draw_screen=false — cursor_output={:?}, render_key={:?}, active_fallback={:?}",
+            state.inner.cursor_output, render_key, active
+        );
+    }
     // Per-element gate for screen-space iced. An UNBOUND surface (launcher,
     // dialogs, cursor) belongs to the one active output → `draw_screen`. An
     // OUTPUT-BOUND surface (per-monitor capture overlays) draws only on ITS
