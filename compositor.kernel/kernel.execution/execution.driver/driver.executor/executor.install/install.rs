@@ -73,7 +73,6 @@ fn base_env(state: &Loop) -> Vec<(String, String)> {
     let desktop = compositor_orchestration_environment_type_base::base::Get().DesktopName;
     vec![
         ("WAYLAND_DISPLAY".into(), wayland_display),
-        ("DISPLAY".into(), String::new()),
         ("XDG_SESSION_TYPE".into(), "wayland".into()),
         ("XDG_CURRENT_DESKTOP".into(), desktop.clone()),
         ("XDG_SESSION_DESKTOP".into(), desktop),
