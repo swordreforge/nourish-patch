@@ -1,0 +1,12 @@
+[package]
+name = "compositor_y5_surface_draw_tray_ui"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+iced_core = { workspace = true }
+iced_widget = { workspace = true }
+compositor_support_iced_core_engine_base = { workspace = true }
+
+[lib]
+path = "lib.rs"

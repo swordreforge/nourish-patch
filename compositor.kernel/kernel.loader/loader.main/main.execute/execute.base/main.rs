@@ -474,6 +474,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // DISPLAY from the process env, set by the service through
     // dbus-update-activation-environment or preferences.json `env`.
 
+    compositor_y5_surface_draw_tray::setup();
+
     // Push user-configured env vars (preferences.json `env`) into our own
     // process so child processes inherit them.  These are also pushed to
     // dbus/systemd in announce_session below.

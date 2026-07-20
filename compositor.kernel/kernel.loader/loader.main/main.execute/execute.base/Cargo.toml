@@ -38,6 +38,7 @@ compositor_orchestration_smithay_data_base = { workspace = true }
 compositor_y5_lock_system_base = { workspace = true }
 compositor_y5_picker_system_base = { workspace = true }
 compositor_y5_surface_system_base = { workspace = true }
+compositor_y5_surface_draw_tray = { workspace = true }
 compositor_y5_group_interface_base = { workspace = true }
 compositor_y5_select_interface_base = { workspace = true }
 compositor_background_two_system_base = { workspace = true }
