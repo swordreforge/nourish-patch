@@ -38,6 +38,28 @@ impl CursorThemeCache {
             theme_name, test_1, test_2, test_3
         );
 
+        // If the configured theme can't load any icons (missing xcursor
+        // files, e.g. theme not installed or XCURSOR_PATH not propagated
+        // by the display manager), fall back to "Adwaita" which is always
+        // installed as part of xcursor-themes.
+        let theme = if test_1.is_none() && test_2.is_none() && test_3.is_none() {
+            warn!(
+                "cursor theme {:?} has no icons, falling back to Adwaita",
+                theme_name
+            );
+            let fallback = CursorTheme::load("Adwaita");
+            let fb1 = fallback.load_icon("default");
+            let fb2 = fallback.load_icon("text");
+            let fb3 = fallback.load_icon("pointer");
+            info!(
+                "fallback theme Adwaita: load_icon('default')={:?} load_icon('text')={:?} load_icon('pointer')={:?}",
+                fb1, fb2, fb3
+            );
+            fallback
+        } else {
+            theme
+        };
+
         let cache = Self {
             theme,
             fallback_size: size,
