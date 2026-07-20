@@ -3719,6 +3719,7 @@ dependencies = [
  "compositor_y5_select_interface_base",
  "compositor_y5_select_overlay_system",
  "compositor_y5_select_system_base",
+ "compositor_y5_surface_draw_tray",
  "compositor_y5_surface_system_base",
  "compositor_y5_window_system_base",
  "rustix 1.1.4",
@@ -5149,6 +5150,7 @@ dependencies = [
  "compositor_y5_surface_draw_fps",
  "compositor_y5_surface_draw_hook",
  "compositor_y5_surface_draw_scene",
+ "compositor_y5_surface_draw_tray",
  "compositor_y5_surface_interface_base",
  "compositor_y5_surface_system_base",
  "compositor_y5_viewport_layout_base",
@@ -9866,6 +9868,30 @@ dependencies = [
  "smithay",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "compositor_y5_surface_draw_tray"
+version = "0.0.1"
+dependencies = [
+ "compositor_developer_debug_instance_record",
+ "compositor_monitor_compositor_iced_base",
+ "compositor_orchestration_core_state_base",
+ "compositor_orchestration_draw_layer_base",
+ "compositor_y5_surface_draw_handle",
+ "compositor_y5_surface_draw_tray_ui",
+ "iced_core",
+ "smithay",
+ "zbus",
+]
+
+[[package]]
+name = "compositor_y5_surface_draw_tray_ui"
+version = "0.0.1"
+dependencies = [
+ "compositor_support_iced_core_engine_base",
+ "iced_core",
+ "iced_widget",
 ]
 
 [[package]]

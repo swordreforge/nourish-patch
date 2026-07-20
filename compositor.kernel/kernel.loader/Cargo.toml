@@ -830,6 +830,8 @@ compositor_y5_surface_draw_fps = { path = "../../compositor.expansion/compositor
 compositor_y5_surface_draw_handle = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.draw/draw.handle" }
 compositor_y5_surface_draw_hook = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.draw/draw.hook" }
 compositor_y5_surface_draw_scene = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.draw/draw.scene" }
+compositor_y5_surface_draw_tray = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.draw/draw.tray" }
+compositor_y5_surface_draw_tray_ui = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.draw/draw.tray.ui" }
 compositor_y5_surface_interface_base = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.interface/interface.base" }
 compositor_y5_surface_interface_core = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.interface/interface.core" }
 compositor_y5_surface_protocol_base = { path = "../../compositor.expansion/compositor.y5/y5.surface/surface.protocol/protocol.base" }
