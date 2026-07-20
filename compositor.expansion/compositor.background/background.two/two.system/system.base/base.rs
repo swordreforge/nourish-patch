@@ -466,28 +466,24 @@ impl TwoSystem {
                 let render_ty = if d > 0 { ty >> d } else { ty };
 
                 // Calculate cumulative position from actual tile sizes.
-                // For standard tiles: position = index * tile_w.
-                // For the last column/row: position = (count-1) * tile_w, size = actual.
+                // The cycle width/height is the ACTUAL image size, which equals
+                // (cols-1)*tile_w + last_col_w.  Both in-bounds and tiled tiles
+                // use this same cycle dimension so that the first tile of the
+                // next image repetition lands exactly where the last tile of
+                // the previous repetition ends — no black seam.
                 let level = &info.levels[found_z as usize];
-                // X position: cumulative width of all tiles before this one.
-                let tile_img_x = if render_tx >= 0 && (render_tx as u32) < level.cols {
-                    let base = render_tx as u32 * info.tile_w as u32;
-                    base as f32 * tile_sf
-                } else {
-                    // For tiling: calculate based on cumulative image width.
-                    let img_cumulative_w = (level.cols - 1) as f32 * info.tile_w
-                        + info.tile_pixel_size(found_z, level.cols - 1, 0).0;
+                let img_cumulative_w = (level.cols - 1) as f32 * info.tile_w
+                    + info.tile_pixel_size(found_z, level.cols - 1, 0).0;
+                let img_cumulative_h = (level.rows - 1) as f32 * info.tile_h
+                    + info.tile_pixel_size(found_z, 0, level.rows - 1).1;
+                // X position: cumulative across image repetitions.
+                let tile_img_x = {
                     let cycles = render_tx.div_euclid(level.cols as i32);
                     let remainder = render_tx.rem_euclid(level.cols as i32);
                     (cycles as f32 * img_cumulative_w + remainder as f32 * info.tile_w) * tile_sf
                 };
-                // Y position: cumulative height of all tiles before this one.
-                let tile_img_y = if render_ty >= 0 && (render_ty as u32) < level.rows {
-                    let base = render_ty as u32 * info.tile_h as u32;
-                    base as f32 * tile_sf
-                } else {
-                    let img_cumulative_h = (level.rows - 1) as f32 * info.tile_h
-                        + info.tile_pixel_size(found_z, 0, level.rows - 1).1;
+                // Y position: cumulative across image repetitions.
+                let tile_img_y = {
                     let cycles = render_ty.div_euclid(level.rows as i32);
                     let remainder = render_ty.rem_euclid(level.rows as i32);
                     (cycles as f32 * img_cumulative_h + remainder as f32 * info.tile_h) * tile_sf
@@ -516,7 +512,7 @@ impl TwoSystem {
                 } else { None };
 
                 result.push(WallpaperTile {
-                    x: sx as i32, y: sy as i32,
+                    x: sx.round() as i32, y: sy.round() as i32,
                     w: sw as i32, h: sh as i32,
                     tex_w, tex_h, texture, dmabuf,
                 });
