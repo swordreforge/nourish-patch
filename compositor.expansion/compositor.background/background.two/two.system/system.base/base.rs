@@ -338,8 +338,10 @@ impl TwoSystem {
                 else if z_dir.join("0").join("0.webp").exists() { "webp" }
                 else { "jpg" };
             // Read edge tiles to get actual image dimensions.
-            let last_col_w = image::open(z_dir.join("0").join(format!("0.{actual_ext}"))).ok()
+            // last_col_w: tile at column (max_cols-1), row 0 — the last column's actual width.
+            let last_col_w = image::open(z_dir.join("0").join(format!("{}.{actual_ext}", max_cols - 1))).ok()
                 .map(|img| img.width() as f32).unwrap_or(tile_w);
+            // last_row_h: tile at column 0, row (rows-1) — the last row's actual height.
             let last_row_h = image::open(z_dir.join((rows - 1).to_string()).join(format!("0.{actual_ext}"))).ok()
                 .map(|img| img.height() as f32).unwrap_or(tile_h);
             let pixel_w = (max_cols - 1) as f32 * tile_w + last_col_w;
