@@ -5,9 +5,11 @@
 //! recycled and a same-user process could take it + `setpgid(0,0)` to forge the group — but the
 //! recycled pid has a different start-time, so it is rejected.
 use std::io::BufRead;
+use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use smithay::reexports::wayland_server::{Client, DisplayHandle};
 
@@ -26,6 +28,27 @@ pub fn launch(configured: Option<Ime>) {
         info!("ime: none configured (preferences.json `ime`) — not launching");
         return;
     };
+
+    // Wait for Xwayland to be ready before spawning the IME, so its XIM
+    // frontend and classicui X11 connection succeed.  Without this the IME
+    // starts before xwayland-satellite finishes setting up and the X11
+    // components silently fail → no candidate window for X11 apps.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let socket = std::env::var("DISPLAY").unwrap_or_default();
+        if !socket.is_empty() {
+            let num = socket.strip_prefix(':').unwrap_or("");
+            let path = format!("/tmp/.X11-unix/X{num}");
+            if std::fs::metadata(&path).is_ok() || UnixStream::connect(&path).is_ok() {
+                break;
+            }
+        }
+        if Instant::now() > deadline {
+            warn!("xwayland not ready after 15s; launching IME anyway");
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
 
     // `process_group(0)` → new group with pgid == child pid (covers the IME + any helper it forks).
     // The IME must NOT daemonize (`-d`), or the connecting process is a reparented grandchild.
